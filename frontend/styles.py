@@ -28,6 +28,9 @@ QFrame#MetricCard,
 QFrame#PanelCard,
 QFrame#UserBubble,
 QFrame#AgentBubble,
+QFrame#AgentResultCard,
+QFrame#ResultSubCard,
+QFrame#MiniConflictCard,
 QFrame#ConflictCard,
 QFrame#TraceItemDone,
 QFrame#TraceItemRunning,
@@ -63,6 +66,21 @@ QFrame#HomeBannerCard {
 QFrame#FeaturePill {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+QFrame#AgentResultCard {
+    background: rgba(23, 33, 58, 0.82);
+    border: 1px solid rgba(121, 158, 255, 0.20);
+}
+
+QFrame#ResultSubCard {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+QFrame#MiniConflictCard {
+    background: rgba(255, 121, 121, 0.10);
+    border: 1px solid rgba(255, 160, 160, 0.20);
 }
 
 QFrame#SidebarFrame {
@@ -182,6 +200,15 @@ QLabel#WorkspaceName {
     color: #ffffff;
 }
 
+QLabel#ResultQueryLabel {
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(90, 124, 255, 0.14);
+    border: 1px solid rgba(121, 156, 255, 0.20);
+    color: #eef3ff;
+    font-size: 13px;
+}
+
 QLabel#BodyText,
 QLabel#MutedText {
     color: #dce4fb;
@@ -209,6 +236,17 @@ QLabel#WorkspaceStat {
     color: #f4f7ff;
     font-size: 12px;
     font-weight: 600;
+}
+
+QLabel#MessageTypeChip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(115, 193, 255, 0.12);
+    border: 1px solid rgba(115, 193, 255, 0.22);
+    color: #cfe8ff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
 }
 
 QLabel#SkillIcon {
@@ -266,6 +304,72 @@ QLineEdit#AuthInput {
     background: rgba(255, 255, 255, 0.09);
     border: 1px solid rgba(255, 255, 255, 0.14);
     min-height: 42px;
+}
+
+QPushButton#ModeDropdownButton {
+    min-height: 38px;
+    min-width: 150px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #eef3ff;
+    font-weight: 600;
+    text-align: left;
+}
+
+QPushButton#ModeDropdownButton:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+QMenu#ModeDropdownMenu {
+    background: rgba(13, 22, 42, 0.98);
+    border: 1px solid rgba(121, 156, 255, 0.20);
+    border-radius: 12px;
+    padding: 6px;
+    color: #eef3ff;
+}
+
+QMenu#ModeDropdownMenu::item {
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin: 2px 4px;
+}
+
+QMenu#ModeDropdownMenu::item:selected {
+    background: rgba(90, 124, 255, 0.24);
+}
+
+QMenu#ModeDropdownMenu::item:checked {
+    background: rgba(90, 124, 255, 0.18);
+}
+
+QMenu#ModeDropdownMenu::indicator {
+    width: 12px;
+    height: 12px;
+}
+
+QMenu#ModeDropdownMenu::indicator:checked {
+    image: none;
+    background: rgba(115, 193, 255, 0.90);
+    border-radius: 6px;
+}
+
+QMenu#ModeDropdownMenu::indicator:non-exclusive:unchecked,
+QMenu#ModeDropdownMenu::indicator:exclusive:unchecked {
+    image: none;
+    background: transparent;
+}
+
+QMenu#ModeDropdownMenu::indicator:exclusive:checked,
+QMenu#ModeDropdownMenu::indicator:non-exclusive:checked {
+    image: none;
+    background: rgba(115, 193, 255, 0.90);
+    border-radius: 6px;
+}
+
+QMenu#ModeDropdownMenu {
+    color: #eef3ff;
 }
 
 QTextEdit {
@@ -361,6 +465,13 @@ QFrame#UserBubble {
 QFrame#AgentBubble {
     background: rgba(110, 82, 235, 0.20);
     border: 1px solid rgba(162, 145, 255, 0.24);
+}
+
+QTextBrowser#ResultMarkdown {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 10px;
 }
 
 QFrame#ConflictCard {

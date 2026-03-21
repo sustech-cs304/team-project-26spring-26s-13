@@ -6,7 +6,7 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QPoint, QSize, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -123,7 +124,7 @@ class InfoCard(QFrame):
 
 
 class BubbleWidget(QWidget):
-    def __init__(self, sender: str, sender_label: str, text: str) -> None:
+    def __init__(self, sender: str, sender_label: str, text: str, message_type_label: str) -> None:
         super().__init__()
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 10)
@@ -135,14 +136,21 @@ class BubbleWidget(QWidget):
         bubble_layout.setContentsMargins(14, 12, 14, 12)
         bubble_layout.setSpacing(6)
 
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
         sender_title = QLabel(sender_label)
         sender_title.setObjectName("CardTitle")
+        type_chip = QLabel(message_type_label)
+        type_chip.setObjectName("MessageTypeChip")
         text_label = QLabel(text)
         text_label.setObjectName("BodyText")
         text_label.setWordWrap(True)
         text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
-        bubble_layout.addWidget(sender_title)
+        header_row.addWidget(sender_title)
+        header_row.addWidget(type_chip)
+        header_row.addStretch(1)
+        bubble_layout.addLayout(header_row)
         bubble_layout.addWidget(text_label)
 
         if sender == "user":
@@ -151,6 +159,164 @@ class BubbleWidget(QWidget):
         else:
             outer.addWidget(bubble, 0)
             outer.addStretch(1)
+
+
+class ScheduleResultWidget(QWidget):
+    def __init__(
+        self,
+        sender_label: str,
+        title: str,
+        intro: str,
+        events: list[dict[str, str]],
+        conflicts: list[dict[str, str]],
+        texts: dict[str, str],
+    ) -> None:
+        super().__init__()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 10)
+
+        card = QFrame()
+        card.setObjectName("AgentResultCard")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        sender_title = QLabel(sender_label)
+        sender_title.setObjectName("CardTitle")
+        type_chip = QLabel(texts["message_type_schedule"])
+        type_chip.setObjectName("MessageTypeChip")
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        intro_label = QLabel(intro)
+        intro_label.setObjectName("BodyText")
+        intro_label.setWordWrap(True)
+
+        header_row.addWidget(sender_title)
+        header_row.addWidget(type_chip)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+        layout.addWidget(title_label)
+        if intro.strip():
+            layout.addWidget(intro_label)
+
+        if events:
+            events_title = QLabel(texts["chat_schedule_events_section"])
+            events_title.setObjectName("CardTitle")
+            layout.addWidget(events_title)
+            for event in events[:3]:
+                event_card = QFrame()
+                event_card.setObjectName("ResultSubCard")
+                event_layout = QVBoxLayout(event_card)
+                event_layout.setContentsMargins(12, 10, 12, 10)
+                event_layout.setSpacing(4)
+                event_title = QLabel(event["title"])
+                event_title.setObjectName("SectionTitle")
+                event_meta = QLabel(f"{event['time']}  |  {event['source']}")
+                event_meta.setObjectName("MutedText")
+                event_detail = QLabel(event["detail"])
+                event_detail.setObjectName("BodyText")
+                event_detail.setWordWrap(True)
+                event_layout.addWidget(event_title)
+                event_layout.addWidget(event_meta)
+                event_layout.addWidget(event_detail)
+                layout.addWidget(event_card)
+
+        if conflicts:
+            conflicts_title = QLabel(texts["chat_schedule_conflicts_section"])
+            conflicts_title.setObjectName("CardTitle")
+            layout.addWidget(conflicts_title)
+            for conflict in conflicts[:3]:
+                conflict_card = QFrame()
+                conflict_card.setObjectName("MiniConflictCard")
+                conflict_layout = QVBoxLayout(conflict_card)
+                conflict_layout.setContentsMargins(12, 10, 12, 10)
+                conflict_layout.setSpacing(4)
+                conflict_title = QLabel(conflict["title"])
+                conflict_title.setObjectName("SectionTitle")
+                conflict_detail = QLabel(conflict["detail"])
+                conflict_detail.setObjectName("BodyText")
+                conflict_detail.setWordWrap(True)
+                conflict_layout.addWidget(conflict_title)
+                conflict_layout.addWidget(conflict_detail)
+                layout.addWidget(conflict_card)
+
+        outer.addWidget(card, 0)
+        outer.addStretch(1)
+
+
+class EncyclopediaResultWidget(QWidget):
+    def __init__(
+        self,
+        sender_label: str,
+        title: str,
+        intro: str,
+        query: str,
+        answer_markdown: str,
+        citations: list[str],
+        texts: dict[str, str],
+    ) -> None:
+        super().__init__()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 10)
+
+        card = QFrame()
+        card.setObjectName("AgentResultCard")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        sender_title = QLabel(sender_label)
+        sender_title.setObjectName("CardTitle")
+        type_chip = QLabel(texts["message_type_encyclopedia"])
+        type_chip.setObjectName("MessageTypeChip")
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        intro_label = QLabel(intro)
+        intro_label.setObjectName("BodyText")
+        intro_label.setWordWrap(True)
+        query_label = QLabel(query)
+        query_label.setObjectName("ResultQueryLabel")
+        query_label.setWordWrap(True)
+
+        answer_title = QLabel(texts["chat_encyclopedia_answer_section"])
+        answer_title.setObjectName("CardTitle")
+        answer_browser = QTextBrowser()
+        answer_browser.setObjectName("ResultMarkdown")
+        answer_browser.setOpenExternalLinks(False)
+        answer_browser.setMarkdown(answer_markdown)
+        answer_browser.setMinimumHeight(150)
+        answer_browser.setMaximumHeight(240)
+
+        header_row.addWidget(sender_title)
+        header_row.addWidget(type_chip)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+        layout.addWidget(title_label)
+        if intro.strip():
+            layout.addWidget(intro_label)
+        if query.strip():
+            layout.addWidget(query_label)
+        layout.addWidget(answer_title)
+        layout.addWidget(answer_browser)
+
+        if citations:
+            citations_title = QLabel(texts["chat_encyclopedia_sources_section"])
+            citations_title.setObjectName("CardTitle")
+            layout.addWidget(citations_title)
+            for citation in citations[:4]:
+                citation_label = QLabel(f"- {citation}")
+                citation_label.setObjectName("MutedText")
+                citation_label.setWordWrap(True)
+                layout.addWidget(citation_label)
+
+        outer.addWidget(card, 0)
+        outer.addStretch(1)
 
 
 class TraceItem(QFrame):
@@ -342,6 +508,7 @@ class SettingsDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
+        self._configure_platform_window_behavior()
         self.api_client = BackendApiClient.from_env()
         self.language = "en"
         self.current_username: str | None = None
@@ -364,11 +531,15 @@ class MainWindow(QMainWindow):
             "api_key": "",
             "saved": False,
         }
+        self.selected_mode = "agent_chat"
+        self.mode_button: QPushButton | None = None
+        self.mode_menu: QMenu | None = None
+        self.mode_actions: dict[str, Any] = {}
         self.resource_files = list(RESOURCE_FILES)
         self.conversations: list[dict[str, Any]] = []
         self.active_conversation_id: str | None = None
         self.session_id = self._new_session_id()
-        self.chat_messages: list[dict[str, str]] = []
+        self.chat_messages: list[dict[str, Any]] = []
         self.trace_events: list[dict[str, str]] = []
         self.schedule_events: list[dict[str, str]] = []
         self.conflicts: list[dict[str, str]] = []
@@ -376,6 +547,23 @@ class MainWindow(QMainWindow):
         self._reset_dynamic_state()
         self._build_root()
         self._show_home()
+
+    def _configure_platform_window_behavior(self) -> None:
+        if sys.platform != "darwin":
+            return
+
+        # Native macOS fullscreen has caused pointer hit-testing to drift on some
+        # Retina/scaled-display setups. Keep the standard title bar controls, but
+        # disable the dedicated fullscreen button so the app stays in regular window
+        # coordinates.
+        flags = self.windowFlags()
+        flags |= Qt.WindowType.CustomizeWindowHint
+        flags |= Qt.WindowType.WindowTitleHint
+        flags |= Qt.WindowType.WindowCloseButtonHint
+        flags |= Qt.WindowType.WindowMinimizeButtonHint
+        flags |= Qt.WindowType.WindowMaximizeButtonHint
+        flags &= ~Qt.WindowType.WindowFullscreenButtonHint
+        self.setWindowFlags(flags)
 
     def ui(self, key: str, **kwargs) -> str:
         text = UI_TEXTS[self.language][key]
@@ -417,17 +605,43 @@ class MainWindow(QMainWindow):
 
     def selected_feature_key(self, prompt: str = "") -> str:
         lowered = prompt.lower()
-        if any(keyword in lowered for keyword in ("schedule", "deadline", "日程", "冲突", "截止")):
-            return "scheduler"
-        if any(keyword in lowered for keyword in ("credit", "dorm", "handbook", "学分", "宿舍", "手册")):
-            return "encyclopedia"
         if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
             return "os_automation"
+        return self.selected_mode
+
+    def _message_placeholder_for_mode(self) -> str:
         return {
-            "chat": "agent_chat",
-            "schedule": "scheduler",
-            "encyclopedia": "encyclopedia",
-        }.get(self.active_tab_key(), "agent_chat")
+            "agent_chat": self.ui("message_placeholder_chat"),
+            "scheduler": self.ui("message_placeholder_schedule"),
+            "encyclopedia": self.ui("message_placeholder_encyclopedia"),
+        }.get(self.selected_mode, self.ui("message_placeholder_chat"))
+
+    def _mode_label(self, mode: str) -> str:
+        return {
+            "agent_chat": self.ui("mode_agent_chat"),
+            "scheduler": self.ui("mode_scheduler"),
+            "encyclopedia": self.ui("mode_encyclopedia"),
+        }.get(mode, self.ui("mode_agent_chat"))
+
+    def _set_selected_mode(self, mode: str) -> None:
+        if mode not in {"agent_chat", "scheduler", "encyclopedia"}:
+            mode = "agent_chat"
+        self.selected_mode = mode
+        self._refresh_mode_selector()
+
+    def _refresh_mode_selector(self) -> None:
+        if self.mode_button is not None:
+            self.mode_button.setText(f"{self._mode_label(self.selected_mode)}  v")
+        for mode, action in self.mode_actions.items():
+            action.setChecked(mode == self.selected_mode)
+        if hasattr(self, "message_input"):
+            self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
+
+    def _open_mode_menu(self) -> None:
+        if self.mode_menu is None or self.mode_button is None:
+            return
+        position = self.mode_button.mapToGlobal(QPoint(0, self.mode_button.height() + 6))
+        self.mode_menu.exec(position)
 
     def _default_user_profile(self) -> dict[str, str]:
         return {
@@ -436,26 +650,70 @@ class MainWindow(QMainWindow):
             "focus": self.local(PROFILE["focus"]),
         }
 
-    def _build_localized_chat_messages(self) -> list[dict[str, str]]:
+    def _build_localized_chat_messages(self) -> list[dict[str, Any]]:
         return [
             {
+                "kind": "text",
                 "sender": item["sender"],
                 "text": self.local(item["text"]),
             }
             for item in CHAT_MESSAGES
         ]
 
-    def _build_new_chat_messages(self) -> list[dict[str, str]]:
+    def _build_new_chat_messages(self) -> list[dict[str, Any]]:
         for item in CHAT_MESSAGES:
             if item["sender"] == "agent":
-                return [{"sender": "agent", "text": self.local(item["text"])}]
+                return [{"kind": "text", "sender": "agent", "text": self.local(item["text"])}]
         return []
+
+    def _create_text_message(self, sender: str, text: str) -> dict[str, Any]:
+        return {
+            "kind": "text",
+            "sender": sender,
+            "text": text,
+        }
+
+    def _create_schedule_message(
+        self,
+        *,
+        intro: str,
+        events: list[dict[str, str]],
+        conflicts: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            "kind": "schedule",
+            "sender": "agent",
+            "text": intro,
+            "payload": {
+                "events": [dict(item) for item in events],
+                "conflicts": [dict(item) for item in conflicts],
+            },
+        }
+
+    def _create_encyclopedia_message(
+        self,
+        *,
+        intro: str,
+        query: str,
+        answer_markdown: str,
+        citations: list[str],
+    ) -> dict[str, Any]:
+        return {
+            "kind": "encyclopedia",
+            "sender": "agent",
+            "text": intro,
+            "payload": {
+                "query": query,
+                "answer_markdown": answer_markdown,
+                "citations": list(citations),
+            },
+        }
 
     def _create_conversation(
         self,
         *,
         session_id: str | None = None,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         trace: list[dict[str, str]] | None = None,
         pending_hitl_request: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -468,8 +726,8 @@ class MainWindow(QMainWindow):
 
     def _derive_conversation_title(self, conversation: dict[str, Any]) -> str:
         for item in conversation["messages"]:
-            if item["sender"] == "user" and item["text"].strip():
-                title = item["text"].strip().replace("\n", " ")
+            if item.get("sender") == "user" and str(item.get("text", "")).strip():
+                title = str(item.get("text", "")).strip().replace("\n", " ")
                 return title[:32] + ("..." if len(title) > 32 else "")
         return self.ui("new_chat")
 
@@ -1255,19 +1513,37 @@ class MainWindow(QMainWindow):
         composer_title = QLabel(self.ui("send_task"))
         composer_title.setObjectName("SectionTitle")
         self.message_input = QTextEdit()
-        self.message_input.setPlaceholderText(self.ui("message_placeholder"))
+        self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
         self.message_input.setFixedHeight(110)
 
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
+        self.mode_button = QPushButton()
+        self.mode_button.setObjectName("ModeDropdownButton")
+        self.mode_button.clicked.connect(self._open_mode_menu)
+        self.mode_menu = QMenu(self)
+        self.mode_menu.setObjectName("ModeDropdownMenu")
+        self.mode_actions = {}
+        for mode, label_key in (
+            ("agent_chat", "mode_agent_chat"),
+            ("scheduler", "mode_scheduler"),
+            ("encyclopedia", "mode_encyclopedia"),
+        ):
+            action = self.mode_menu.addAction(self.ui(label_key))
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, value=mode: self._set_selected_mode(value))
+            self.mode_actions[mode] = action
+
         send_button = QPushButton(self.ui("send"))
         send_button.setObjectName("PrimaryButton")
         send_button.clicked.connect(self.handle_send_message)
         clear_button = QPushButton(self.ui("clear_draft"))
         clear_button.clicked.connect(self.message_input.clear)
+        button_row.addWidget(self.mode_button)
         button_row.addStretch(1)
         button_row.addWidget(clear_button)
         button_row.addWidget(send_button)
+        self._refresh_mode_selector()
 
         composer_layout.addWidget(composer_title)
         composer_layout.addWidget(self.message_input)
@@ -1442,7 +1718,7 @@ class MainWindow(QMainWindow):
     def _status_label(self, status: str) -> str:
         return self.ui(f"status_{status}")
 
-    def _load_chat_messages(self, messages: list[dict[str, str]]) -> None:
+    def _load_chat_messages(self, messages: list[dict[str, Any]]) -> None:
         while self.chat_layout.count() > 1:
             item = self.chat_layout.takeAt(0)
             widget = item.widget()
@@ -1450,10 +1726,37 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
 
         for message in messages:
-            self.chat_layout.insertWidget(
-                self.chat_layout.count() - 1,
-                BubbleWidget(message["sender"], self._sender_label(message["sender"]), message["text"]),
-            )
+            kind = str(message.get("kind", "text"))
+            sender = str(message.get("sender", "agent"))
+            if kind == "schedule":
+                payload = message.get("payload", {})
+                widget = ScheduleResultWidget(
+                    self._sender_label(sender),
+                    self.ui("chat_schedule_card_title"),
+                    str(message.get("text", "")),
+                    list(payload.get("events", [])) if isinstance(payload, dict) else [],
+                    list(payload.get("conflicts", [])) if isinstance(payload, dict) else [],
+                    UI_TEXTS[self.language],
+                )
+            elif kind == "encyclopedia":
+                payload = message.get("payload", {})
+                widget = EncyclopediaResultWidget(
+                    self._sender_label(sender),
+                    self.ui("chat_encyclopedia_card_title"),
+                    str(message.get("text", "")),
+                    str(payload.get("query", "")) if isinstance(payload, dict) else "",
+                    str(payload.get("answer_markdown", "")) if isinstance(payload, dict) else "",
+                    [str(item) for item in payload.get("citations", [])] if isinstance(payload, dict) else [],
+                    UI_TEXTS[self.language],
+                )
+            else:
+                widget = BubbleWidget(
+                    sender,
+                    self._sender_label(sender),
+                    str(message.get("text", "")),
+                    self.ui("message_type_chat"),
+                )
+            self.chat_layout.insertWidget(self.chat_layout.count() - 1, widget)
         self._refresh_conversation_list()
 
     def _load_trace_events(self, events: list[dict[str, str]]) -> None:
@@ -1650,6 +1953,7 @@ class MainWindow(QMainWindow):
         if isinstance(chat_history, list) and chat_history:
             self.chat_messages = [
                 {
+                    "kind": "text",
                     "sender": "user" if str(item.get("role", "")).lower() == "user" else "agent",
                     "text": str(item.get("content", "")),
                 }
@@ -1685,7 +1989,7 @@ class MainWindow(QMainWindow):
         assistant_message = response.get("assistant_message", {})
         assistant_text = str(assistant_message.get("content", "")).strip()
         if assistant_text:
-            self.chat_messages.append({"sender": "agent", "text": assistant_text})
+            self.chat_messages.append(self._create_text_message("agent", assistant_text))
             self._load_chat_messages(self.chat_messages)
 
         trace = response.get("trace", [])
@@ -1699,15 +2003,39 @@ class MainWindow(QMainWindow):
             if isinstance(schedule_payload, dict):
                 events = schedule_payload.get("events", [])
                 conflicts = schedule_payload.get("conflicts", [])
+                normalized_events: list[dict[str, str]] = []
+                normalized_conflicts: list[dict[str, str]] = []
                 if isinstance(events, list) and events:
-                    self.schedule_events = self._normalize_schedule_events(events)
+                    normalized_events = self._normalize_schedule_events(events)
+                    self.schedule_events = normalized_events
                 if isinstance(conflicts, list) and conflicts:
-                    self.conflicts = self._normalize_conflicts(conflicts)
+                    normalized_conflicts = self._normalize_conflicts(conflicts)
+                    self.conflicts = normalized_conflicts
                 self._load_schedule_content()
+                if normalized_events or normalized_conflicts:
+                    self.chat_messages.append(
+                        self._create_schedule_message(
+                            intro=self.ui("schedule_card_intro"),
+                            events=normalized_events or self.schedule_events,
+                            conflicts=normalized_conflicts or self.conflicts,
+                        )
+                    )
+                    self._load_chat_messages(self.chat_messages)
 
             encyclopedia_payload = ui_payload.get("encyclopedia")
             if isinstance(encyclopedia_payload, dict):
                 self._load_encyclopedia_payload(encyclopedia_payload)
+                answer_markdown = str(encyclopedia_payload.get("answer_markdown", "")).strip()
+                citations = encyclopedia_payload.get("citations", [])
+                self.chat_messages.append(
+                    self._create_encyclopedia_message(
+                        intro=self.ui("encyclopedia_card_intro"),
+                        query=str(encyclopedia_payload.get("query", "")).strip(),
+                        answer_markdown=answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
+                        citations=[str(item) for item in citations] if isinstance(citations, list) else [],
+                    )
+                )
+                self._load_chat_messages(self.chat_messages)
 
         hitl_request = response.get("hitl_request")
         self.pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
@@ -1853,15 +2181,18 @@ class MainWindow(QMainWindow):
         if not text:
             return
 
-        self.chat_messages.append({"sender": "user", "text": text})
+        self.chat_messages.append(self._create_text_message("user", text))
         self._move_active_conversation_to_top()
         self._load_chat_messages(self.chat_messages)
         if self._run_remote_agent(message=text, selected_feature=self.selected_feature_key(text)):
             self.message_input.clear()
             return
 
-        reply = self._generate_mock_reply(text)
-        self.chat_messages.append({"sender": "agent", "text": reply})
+        reply, result_card = self._generate_mock_reply(text)
+        if reply:
+            self.chat_messages.append(self._create_text_message("agent", reply))
+        if result_card:
+            self.chat_messages.append(result_card)
         self._load_chat_messages(self.chat_messages)
         self.message_input.clear()
 
@@ -1873,16 +2204,38 @@ class MainWindow(QMainWindow):
             "done",
         )
 
-    def _generate_mock_reply(self, prompt: str) -> str:
+    def _generate_mock_reply(self, prompt: str) -> tuple[str, dict[str, Any] | None]:
         lowered = prompt.lower()
-        if any(keyword in lowered for keyword in ("schedule", "deadline", "日程", "冲突", "截止")):
-            return self.ui("reply_schedule")
-        if any(keyword in lowered for keyword in ("credit", "dorm", "handbook", "学分", "宿舍", "手册")):
-            return self.ui("reply_encyclopedia")
         if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
             self.open_hitl_dialog()
-            return self.ui("reply_hitl")
-        return self.ui("reply_generic")
+            return self.ui("reply_hitl"), None
+        if self.selected_mode == "scheduler":
+            return (
+                self.ui("reply_schedule"),
+                self._create_schedule_message(
+                    intro=self.ui("schedule_card_intro"),
+                    events=self.schedule_events,
+                    conflicts=self.conflicts,
+                ),
+            )
+        if self.selected_mode == "encyclopedia":
+            if "dorm" in lowered or "宿舍" in lowered:
+                key = "dorm"
+            elif "credit" in lowered or "学分" in lowered:
+                key = "credit"
+            else:
+                key = "default"
+            payload = ENCYCLOPEDIA_RESULTS.get(key, ENCYCLOPEDIA_RESULTS["default"])
+            return (
+                self.ui("reply_encyclopedia"),
+                self._create_encyclopedia_message(
+                    intro=self.ui("encyclopedia_card_intro"),
+                    query=self.local(payload["query"]),
+                    answer_markdown=self.local(payload["answer"]),
+                    citations=self.local(payload["citations"]),
+                ),
+            )
+        return self.ui("reply_generic"), None
 
     def _append_trace(self, phase: str, title: str, detail: str, status: str) -> None:
         event = {

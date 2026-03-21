@@ -199,8 +199,8 @@ CHAT_MESSAGES = [
     {
         "sender": "agent",
         "text": {
-            "en": "I found a conflict on Thursday 16:00. Open the Schedule tab to review the suggested adjustment.",
-            "zh": "我发现周四 16:00 有冲突。你可以打开日程页面查看建议调整。",
+            "en": "I found a conflict on Thursday 16:00. The chat flow can render the schedule summary directly below.",
+            "zh": "我发现周四 16:00 有冲突。聊天区会直接在下方渲染日程摘要。",
         },
     },
 ]

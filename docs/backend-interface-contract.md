@@ -12,8 +12,8 @@ This is enough for the current frontend prototype:
 - main chat
 - thought trace panel
 - HITL authorization dialog
-- schedule dashboard
-- campus encyclopedia result rendering
+- schedule result rendering inside chat
+- campus encyclopedia result rendering inside chat
 - profile and chat history initialization
 
 ## Interface 1: AI Loop
@@ -69,7 +69,8 @@ To keep the total number of interfaces at two, HITL approval can also reuse this
 
 - `message` is the natural language input from the main chat box.
 - `attachments` is optional and is used for uploaded files or selected materials.
-- `context.active_tab` helps the backend understand whether the user is currently asking about chat, schedule, or encyclopedia.
+- `context.active_tab` is currently fixed to `chat` in the frontend.
+- `context.selected_feature` is the important routing hint. It is chosen by the mode selector under the chat composer (`agent_chat`, `scheduler`, `encyclopedia`) unless the request becomes a high-risk `os_automation` action.
 - `hitl_reply` is used only when the user is responding to a previously blocked high-risk action.
 - `connection_settings` is optional. The frontend can store CAS / API configuration locally and forward it to the backend with the request.
 
@@ -109,7 +110,7 @@ To keep the total number of interfaces at two, HITL approval can also reuse this
   "session_id": "sess_20260321_01",
   "assistant_message": {
     "role": "assistant",
-    "content": "I found a conflict on Thursday 16:00. Please review the suggested adjustment in the schedule panel.",
+    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary rendered in chat.",
     "timestamp": "2026-03-21T20:00:00+08:00"
   },
   "trace": [
@@ -229,8 +230,8 @@ Set `hitl_request` instead of directly executing the risky action.
 
 - Chat panel uses `assistant_message`
 - Thought Trace panel uses `trace`
-- Schedule tab uses `ui_payload.schedule`
-- Encyclopedia tab uses `ui_payload.encyclopedia`
+- The main chat flow renders `ui_payload.schedule` as a schedule result card
+- The main chat flow renders `ui_payload.encyclopedia` as a campus QA result card
 - HITL modal uses `hitl_request`
 
 ## Interface 2: Database Bootstrap

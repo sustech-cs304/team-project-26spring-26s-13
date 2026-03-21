@@ -18,8 +18,8 @@
 - 主页后的登录与主界面进入流程
 - 主聊天区
 - `Thought Trace` 面板
-- `Schedule Dashboard`
-- `Campus Encyclopedia`
+- 聊天中的 `Schedule` 结果卡片
+- 聊天中的 `Campus QA` 结果卡片
 - `HITL` 授权弹窗
 - 左侧用户资料与材料列表
 
@@ -33,9 +33,19 @@
 
 其中 `DashboardPage` 由三部分组成：
 
-- 左侧：用户信息、资料列表、快捷入口
-- 中间：指标卡 + `Agent Chat / Schedule / Campus Encyclopedia`
+- 左侧：历史对话、资料列表、工作区概览
+- 中间：主聊天区
 - 右侧：`Thought Trace` + `HITL` 授权入口
+
+补充说明：
+
+- 当前中间聊天区只有一个输入入口
+- 输入框下方有模式选择入口
+- 用户可显式选择：
+  - `Chat`
+  - `Schedule`
+  - `Campus QA`
+- `Schedule` 和 `Campus QA` 的结果会直接插入聊天流里，而不是依赖独立页签
 
 也就是说，后端返回的数据不是给某一个小组件用的，而是要同时驱动聊天、思维追踪、日程、百科和授权弹窗。
 
@@ -323,8 +333,8 @@ GET /api/dashboard/bootstrap?user_id=u_001
 - 左侧资料卡：`user_profile`
 - 左侧材料列表：`materials`
 - 中间聊天历史：`chat_history`
-- 日程页事件列表：`local_schedule.events`
-- 日程页冲突卡片：`local_schedule.conflicts`
+- 日程能力的本地缓存：`local_schedule.events`
+- 日程能力的冲突缓存：`local_schedule.conflicts`
 
 ## 4.7 推荐实现建议
 
@@ -445,13 +455,11 @@ POST /api/agent/run
 
 ### `context.active_tab`
 
-用于告诉后端，用户当前主要在哪个页面操作。
+当前前端固定传 `chat`，因为主工作区现在是聊天优先布局。
 
 可选值建议：
 
 - `chat`
-- `schedule`
-- `encyclopedia`
 
 ### `context.selected_feature`
 
@@ -463,6 +471,11 @@ POST /api/agent/run
 - `scheduler`
 - `encyclopedia`
 - `os_automation`
+
+说明：
+
+- `agent_chat / scheduler / encyclopedia` 来自输入框下方的模式选择
+- `os_automation` 主要用于高风险动作和 HITL 继续执行流程
 
 ### `hitl_reply`
 
@@ -514,7 +527,7 @@ POST /api/agent/run
   "session_id": "sess_20260321_01",
   "assistant_message": {
     "role": "assistant",
-    "content": "I found a conflict on Thursday 16:00. Please review the suggested adjustment in the schedule panel.",
+    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary rendered in chat.",
     "timestamp": "2026-03-21T20:00:00+08:00"
   },
   "trace": [
@@ -589,7 +602,7 @@ POST /api/agent/run
 
 ### `route`
 
-用于告诉前端，本次请求更应该把用户带到哪个页签。
+用于告诉前端，这次回复更偏向哪类能力结果。
 
 可选值：
 
@@ -599,9 +612,9 @@ POST /api/agent/run
 
 前端当前行为：
 
-- `scheduler`：自动切到日程页
-- `encyclopedia`：自动切到百科页
-- 其他：留在聊天页
+- `scheduler`：在主聊天区插入日程结果卡片
+- `encyclopedia`：在主聊天区插入校园问答结果卡片
+- 其他：作为普通聊天回复处理
 
 ### `ui_payload`
 
@@ -649,8 +662,8 @@ POST /api/agent/run
 
 说明：
 
-- `answer_markdown` 给前端的 markdown 渲染区域
-- `citations` 给右侧 / 下方的引用列表
+- `answer_markdown` 给聊天中的 markdown 结果卡片
+- `citations` 给同一张聊天结果卡片里的引用区域
 
 ### `hitl_request`
 
@@ -763,9 +776,9 @@ POST /api/agent/run
 
 - `assistant_message.content` -> 主聊天区
 - `trace[]` -> 右侧 Thought Trace
-- `route` -> 决定切到哪个 Tab
-- `ui_payload.schedule` -> 日程页
-- `ui_payload.encyclopedia` -> 百科页
+- `route` -> 标记本次结果更偏向哪种能力
+- `ui_payload.schedule` -> 聊天中的日程结果卡片
+- `ui_payload.encyclopedia` -> 聊天中的校园问答结果卡片
 - `hitl_request` -> 授权弹窗
 
 ## 6. 错误处理建议
@@ -822,7 +835,7 @@ python3 frontend/app.py
 2. 用户在聊天框发消息
    前端调用 `POST /api/agent/run`
 
-3. 用户在百科页发起查询
+3. 用户在聊天输入区切换到 `Schedule` 或 `Campus QA` 模式后发消息
    前端也调用 `POST /api/agent/run`
 
 4. 后端如果返回 `hitl_request`

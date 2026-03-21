@@ -47,6 +47,16 @@
 - 中栏：主聊天窗口
 - 右栏：`Thought Trace`
 
+中栏当前是“聊天优先”设计：
+
+- 用户所有请求都从一个聊天输入框进入
+- 输入框下方有一个模式选择入口，可选：
+  - `Chat`
+  - `Schedule`
+  - `Campus QA`
+- `Schedule` 和 `Campus QA` 的结果不会作为独立主页面强依赖展示
+- 它们会直接作为聊天结果卡片插入到主聊天流里
+
 另外，顶部还有：
 
 - 语言切换
@@ -173,7 +183,7 @@ POST /api/agent/run
 但是：
 
 - `context.selected_feature` 仍然有意义
-- 前端会根据用户输入关键词做轻量路由判断
+- 当前前端优先由用户在输入框下方显式选择模式来决定路由
 
 目前可能出现的 `selected_feature` 值包括：
 
@@ -186,6 +196,12 @@ POST /api/agent/run
 
 - 后端优先看 `selected_feature`
 - 不要过度依赖 `active_tab`
+
+补充说明：
+
+- 当前模式选择比关键词识别优先级更高
+- 也就是说，即使用户输入内容本身不明显，只要前端模式选的是 `scheduler`，后端就应该按日程能力来处理
+- 唯一保留的特殊分支是高风险动作：如果请求明显涉及删除、覆盖、修改等高风险操作，前端仍可能把它发送为 `os_automation`
 
 ### 5.4 当前前端支持多会话
 
@@ -445,6 +461,13 @@ GET /api/dashboard/bootstrap?user_id=student
 - HITL 拦截
 - HITL 批准 / 拒绝回执
 
+对于当前前端来说，这个接口的结果会优先驱动聊天流本身：
+
+- `assistant_message` 会变成普通聊天回复
+- `ui_payload.schedule` 会变成聊天中的日程结果卡片
+- `ui_payload.encyclopedia` 会变成聊天中的校园问答结果卡片
+- `trace` 会继续显示在右侧 `Thought Trace`
+
 ### 9.2 请求结构
 
 ```json
@@ -496,6 +519,7 @@ GET /api/dashboard/bootstrap?user_id=student
 #### `context.active_tab`
 
 - 当前前端固定为 `chat`
+- 当前这版前端没有让用户在主工作区里切换独立业务 tab
 
 #### `context.selected_feature`
 
@@ -505,6 +529,11 @@ GET /api/dashboard/bootstrap?user_id=student
 - `scheduler`
 - `encyclopedia`
 - `os_automation`
+
+来源说明：
+
+- `agent_chat / scheduler / encyclopedia` 来自聊天输入框下方的模式选择
+- `os_automation` 主要用于高风险动作和 HITL 继续执行流程
 
 #### `hitl_reply`
 
@@ -645,6 +674,12 @@ GET /api/dashboard/bootstrap?user_id=student
 
 当前前端不会强依赖这个字段做页面跳转，但它仍然是很好的调试语义。
 
+更准确地说：
+
+- 当前前端不会因为 `route` 去切换独立页面
+- 它会继续停留在主聊天流里
+- 但 `route` 仍然能帮助我们判断当前回复属于普通对话、日程能力还是校园问答能力
+
 #### `ui_payload`
 
 建议固定保留两个槽位：
@@ -653,6 +688,11 @@ GET /api/dashboard/bootstrap?user_id=student
 - `ui_payload.encyclopedia`
 
 即使其中一个为 `null` 也没关系。
+
+当前前端消费方式：
+
+- `ui_payload.schedule`：插入聊天里的日程摘要卡片
+- `ui_payload.encyclopedia`：插入聊天里的校园问答卡片
 
 #### `hitl_request`
 
