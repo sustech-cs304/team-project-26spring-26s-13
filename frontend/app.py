@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 from typing import Any
 from uuid import uuid4
@@ -11,6 +12,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -42,7 +44,6 @@ try:
         AUTH_FEATURES,
         CHAT_MESSAGES,
         CONFLICTS,
-        DASHBOARD_METRICS,
         ENCYCLOPEDIA_RESULTS,
         HITL_REQUEST,
         HOME_BANNER,
@@ -63,7 +64,6 @@ except ImportError:
         AUTH_FEATURES,
         CHAT_MESSAGES,
         CONFLICTS,
-        DASHBOARD_METRICS,
         ENCYCLOPEDIA_RESULTS,
         HITL_REQUEST,
         HOME_BANNER,
@@ -82,27 +82,6 @@ def localized(value, language: str):
     if isinstance(value, dict) and "en" in value and "zh" in value:
         return value[language]
     return value
-
-
-class MetricCard(QFrame):
-    def __init__(self, title: str, value: str, detail: str) -> None:
-        super().__init__()
-        self.setObjectName("MetricCard")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(6)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("CardTitle")
-        value_label = QLabel(value)
-        value_label.setObjectName("CardValue")
-        detail_label = QLabel(detail)
-        detail_label.setObjectName("MutedText")
-        detail_label.setWordWrap(True)
-
-        layout.addWidget(title_label)
-        layout.addWidget(value_label)
-        layout.addWidget(detail_label)
 
 
 class InfoCard(QFrame):
@@ -738,8 +717,12 @@ class MainWindow(QMainWindow):
             trace=len(conversation["trace"]),
         )
 
+    def _resource_display_name(self, resource_name: str) -> str:
+        return Path(resource_name).name or resource_name
+
     def _resource_meta(self, resource_name: str) -> str:
-        suffix = resource_name.rsplit(".", 1)[-1].upper() if "." in resource_name else "FILE"
+        display_name = self._resource_display_name(resource_name)
+        suffix = display_name.rsplit(".", 1)[-1].upper() if "." in display_name else "FILE"
         return f"{suffix}  |  {self.ui('resource_ready')}"
 
     def _active_conversation(self) -> dict[str, Any] | None:
@@ -907,8 +890,6 @@ class MainWindow(QMainWindow):
 
         self._load_chat_messages(self.chat_messages)
         self._load_trace_events(self.trace_events)
-        self._load_schedule_content()
-        self._load_encyclopedia_result("default")
         self._load_resource_files()
         self._refresh_profile_views()
 
@@ -933,7 +914,8 @@ class MainWindow(QMainWindow):
             return
         self.resource_list.clear()
         for resource in self.resource_files:
-            item = QListWidgetItem(f"{resource}\n{self._resource_meta(resource)}", self.resource_list)
+            display_name = self._resource_display_name(resource)
+            item = QListWidgetItem(f"{display_name}\n{self._resource_meta(resource)}", self.resource_list)
             item.setToolTip(resource)
             item.setSizeHint(QSize(0, 58))
         self._refresh_profile_views()
@@ -1452,7 +1434,7 @@ class MainWindow(QMainWindow):
         self._load_resource_files()
 
         add_button = QPushButton(self.ui("add_resource"))
-        add_button.clicked.connect(self._show_placeholder_message)
+        add_button.clicked.connect(self._add_resource_files)
 
         resources_layout.addWidget(resources_title)
         resources_layout.addWidget(resources_hint)
@@ -1550,129 +1532,6 @@ class MainWindow(QMainWindow):
         composer_layout.addLayout(button_row)
 
         layout.addWidget(composer_card)
-        return tab
-
-    def _build_schedule_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(14)
-
-        summary = InfoCard(self.ui("schedule_title"), self.ui("schedule_body"))
-        layout.addWidget(summary)
-
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(12)
-
-        events_card = QFrame()
-        events_card.setObjectName("PanelCard")
-        events_layout = QVBoxLayout(events_card)
-        events_layout.setContentsMargins(16, 16, 16, 16)
-        events_layout.setSpacing(10)
-        events_title = QLabel(self.ui("upcoming_events"))
-        events_title.setObjectName("SectionTitle")
-        self.events_list = QListWidget()
-        events_layout.addWidget(events_title)
-        events_layout.addWidget(self.events_list)
-
-        conflicts_card = QFrame()
-        conflicts_card.setObjectName("PanelCard")
-        conflicts_layout = QVBoxLayout(conflicts_card)
-        conflicts_layout.setContentsMargins(16, 16, 16, 16)
-        conflicts_layout.setSpacing(10)
-        conflicts_title = QLabel(self.ui("conflict_notifications"))
-        conflicts_title.setObjectName("SectionTitle")
-
-        self.conflict_container = QWidget()
-        self.conflict_layout = QVBoxLayout(self.conflict_container)
-        self.conflict_layout.setContentsMargins(0, 0, 0, 0)
-        self.conflict_layout.setSpacing(10)
-        self.conflict_layout.addStretch(1)
-
-        conflict_scroll = QScrollArea()
-        conflict_scroll.setWidgetResizable(True)
-        conflict_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        conflict_scroll.setWidget(self.conflict_container)
-
-        conflicts_layout.addWidget(conflicts_title)
-        conflicts_layout.addWidget(conflict_scroll)
-
-        grid.addWidget(events_card, 0, 0)
-        grid.addWidget(conflicts_card, 0, 1)
-        layout.addLayout(grid, 1)
-        return tab
-
-    def _build_encyclopedia_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(14)
-
-        intro = InfoCard(self.ui("encyclopedia_title"), self.ui("encyclopedia_body"))
-        layout.addWidget(intro)
-
-        search_card = QFrame()
-        search_card.setObjectName("PanelCard")
-        search_layout = QVBoxLayout(search_card)
-        search_layout.setContentsMargins(16, 16, 16, 16)
-        search_layout.setSpacing(10)
-
-        search_title = QLabel(self.ui("search_handbook"))
-        search_title.setObjectName("SectionTitle")
-        query_row = QHBoxLayout()
-        query_row.setSpacing(10)
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText(self.ui("search_placeholder"))
-        self.search_input.returnPressed.connect(self.handle_search)
-        search_button = QPushButton(self.ui("search"))
-        search_button.setObjectName("PrimaryButton")
-        search_button.clicked.connect(self.handle_search)
-        query_row.addWidget(self.search_input, 1)
-        query_row.addWidget(search_button)
-
-        suggestions = QHBoxLayout()
-        suggestions.setSpacing(8)
-        for key in ("suggestion_credit", "suggestion_dorm", "suggestion_graduation"):
-            text = self.ui(key)
-            button = QPushButton(text)
-            button.clicked.connect(lambda _checked=False, value=text: self.load_search_query(value))
-            suggestions.addWidget(button)
-
-        search_layout.addWidget(search_title)
-        search_layout.addLayout(query_row)
-        search_layout.addLayout(suggestions)
-        layout.addWidget(search_card)
-
-        result_grid = QGridLayout()
-        result_grid.setHorizontalSpacing(12)
-        result_grid.setVerticalSpacing(12)
-
-        answer_card = QFrame()
-        answer_card.setObjectName("PanelCard")
-        answer_layout = QVBoxLayout(answer_card)
-        answer_layout.setContentsMargins(16, 16, 16, 16)
-        answer_layout.setSpacing(10)
-        answer_title = QLabel(self.ui("answer_rendering"))
-        answer_title.setObjectName("SectionTitle")
-        self.answer_browser = QTextBrowser()
-        answer_layout.addWidget(answer_title)
-        answer_layout.addWidget(self.answer_browser)
-
-        citation_card = QFrame()
-        citation_card.setObjectName("PanelCard")
-        citation_layout = QVBoxLayout(citation_card)
-        citation_layout.setContentsMargins(16, 16, 16, 16)
-        citation_layout.setSpacing(10)
-        citation_title = QLabel(self.ui("retrieved_citations"))
-        citation_title.setObjectName("SectionTitle")
-        self.citation_list = QListWidget()
-        citation_layout.addWidget(citation_title)
-        citation_layout.addWidget(self.citation_list)
-
-        result_grid.addWidget(answer_card, 0, 0)
-        result_grid.addWidget(citation_card, 0, 1)
-        layout.addLayout(result_grid, 1)
         return tab
 
     def _build_trace_panel(self) -> QFrame:
@@ -1778,59 +1637,6 @@ class MainWindow(QMainWindow):
                 ),
             )
         self._sync_active_conversation()
-
-    def _load_schedule_content(self) -> None:
-        if not hasattr(self, "events_list") or not hasattr(self, "conflict_layout"):
-            return
-        self.events_list.clear()
-        for event in self.schedule_events:
-            item = QListWidgetItem(f"{event['title']}\n{event['time']}  |  {event['source']}\n{event['detail']}")
-            self.events_list.addItem(item)
-
-        while self.conflict_layout.count() > 1:
-            item = self.conflict_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-        for conflict in self.conflicts:
-            card = QFrame()
-            card.setObjectName("ConflictCard")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(14, 12, 14, 12)
-            card_layout.setSpacing(6)
-            title = QLabel(conflict["title"])
-            title.setObjectName("SectionTitle")
-            detail = QLabel(conflict["detail"])
-            detail.setObjectName("BodyText")
-            detail.setWordWrap(True)
-            card_layout.addWidget(title)
-            card_layout.addWidget(detail)
-            self.conflict_layout.insertWidget(self.conflict_layout.count() - 1, card)
-
-    def _load_encyclopedia_result(self, key: str) -> None:
-        if not hasattr(self, "answer_browser") or not hasattr(self, "citation_list"):
-            return
-        payload = ENCYCLOPEDIA_RESULTS.get(key, ENCYCLOPEDIA_RESULTS["default"])
-        self.answer_browser.setMarkdown(self.local(payload["answer"]))
-        self.citation_list.clear()
-        for citation in self.local(payload["citations"]):
-            QListWidgetItem(citation, self.citation_list)
-
-    def _load_encyclopedia_payload(self, payload: dict[str, Any]) -> None:
-        if not hasattr(self, "answer_browser") or not hasattr(self, "citation_list"):
-            return
-        answer_markdown = str(payload.get("answer_markdown", ""))
-        citations = payload.get("citations", [])
-        query = str(payload.get("query", "")).strip()
-
-        self.answer_browser.setMarkdown(answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]))
-        self.citation_list.clear()
-        if isinstance(citations, list):
-            for citation in citations:
-                QListWidgetItem(str(citation), self.citation_list)
-        if query and hasattr(self, "search_input"):
-            self.search_input.setText(query)
 
     def _refresh_profile_views(self) -> None:
         self.header_user_label.setText(self.ui("signed_in_as", name=self.current_user["name"]))
@@ -1968,7 +1774,13 @@ class MainWindow(QMainWindow):
         materials = payload.get("materials", [])
         if isinstance(materials, list) and materials:
             self.resource_files = [
-                str(item.get("file_name") or item.get("name") or item.get("file_id") or "resource")
+                str(
+                    item.get("local_path")
+                    or item.get("file_name")
+                    or item.get("name")
+                    or item.get("file_id")
+                    or "resource"
+                )
                 for item in materials
             ]
             self._load_resource_files()
@@ -1981,7 +1793,6 @@ class MainWindow(QMainWindow):
                 self.schedule_events = self._normalize_schedule_events(events)
             if isinstance(conflicts, list) and conflicts:
                 self.conflicts = self._normalize_conflicts(conflicts)
-            self._load_schedule_content()
 
         self._refresh_profile_views()
 
@@ -2011,7 +1822,6 @@ class MainWindow(QMainWindow):
                 if isinstance(conflicts, list) and conflicts:
                     normalized_conflicts = self._normalize_conflicts(conflicts)
                     self.conflicts = normalized_conflicts
-                self._load_schedule_content()
                 if normalized_events or normalized_conflicts:
                     self.chat_messages.append(
                         self._create_schedule_message(
@@ -2024,7 +1834,6 @@ class MainWindow(QMainWindow):
 
             encyclopedia_payload = ui_payload.get("encyclopedia")
             if isinstance(encyclopedia_payload, dict):
-                self._load_encyclopedia_payload(encyclopedia_payload)
                 answer_markdown = str(encyclopedia_payload.get("answer_markdown", "")).strip()
                 citations = encyclopedia_payload.get("citations", [])
                 self.chat_messages.append(
@@ -2146,36 +1955,6 @@ class MainWindow(QMainWindow):
         self._build_root()
         self._show_home()
 
-    def load_search_query(self, query: str) -> None:
-        if not hasattr(self, "search_input"):
-            return
-        self.search_input.setText(query)
-        self.handle_search()
-
-    def handle_search(self) -> None:
-        if not hasattr(self, "search_input"):
-            return
-        raw_query = self.search_input.text().strip()
-        if raw_query and self._run_remote_agent(message=raw_query, selected_feature="encyclopedia"):
-            return
-
-        query = raw_query.lower()
-        if "credit" in query or "学分" in query:
-            key = "credit"
-        elif "dorm" in query or "宿舍" in query:
-            key = "dorm"
-        else:
-            key = "default"
-
-        self._load_encyclopedia_result(key)
-        display_query = query or self.local(ENCYCLOPEDIA_RESULTS["default"]["query"])
-        self._append_trace(
-            self.local({"en": "Observation", "zh": "观察"}),
-            self.ui("trace_rendered_encyclopedia_title"),
-            self.ui("trace_rendered_encyclopedia_detail", query=display_query),
-            "running",
-        )
-
     def handle_send_message(self) -> None:
         text = self.message_input.toPlainText().strip()
         if not text:
@@ -2279,8 +2058,52 @@ class MainWindow(QMainWindow):
         self._build_root()
         self.stack.setCurrentWidget(self.dashboard_page if self.current_username else self.home_page)
 
-    def _show_placeholder_message(self) -> None:
-        QMessageBox.information(self, self.ui("upload_placeholder_title"), self.ui("upload_placeholder_body"))
+    def _add_resource_files(self) -> None:
+        selected_files, _selected_filter = QFileDialog.getOpenFileNames(
+            self,
+            self.ui("resource_dialog_title"),
+            "",
+            self.ui("resource_dialog_filter"),
+        )
+        if not selected_files:
+            return
+
+        existing_names = {self._resource_display_name(resource).lower() for resource in self.resource_files}
+        added_files: list[str] = []
+        skipped_count = 0
+
+        for file_path in selected_files:
+            display_name = self._resource_display_name(file_path)
+            if display_name.lower() in existing_names:
+                skipped_count += 1
+                continue
+            self.resource_files.insert(0, file_path)
+            existing_names.add(display_name.lower())
+            added_files.append(display_name)
+
+        if not added_files:
+            QMessageBox.information(
+                self,
+                self.ui("resource_already_loaded_title"),
+                self.ui("resource_already_loaded_body"),
+            )
+            return
+
+        self._load_resource_files()
+        preview = ", ".join(added_files[:2])
+        if len(added_files) > 2:
+            preview = f"{preview}, +{len(added_files) - 2}"
+        self._append_trace(
+            self.local({"en": "Observation", "zh": "观察"}),
+            self.ui("trace_loaded_materials_title"),
+            self.ui("trace_loaded_materials_detail", count=len(added_files), files=preview),
+            "done",
+        )
+        QMessageBox.information(
+            self,
+            self.ui("resource_added_title"),
+            self.ui("resource_added_body", count=len(added_files), skipped=skipped_count),
+        )
 
 
 def main() -> int:

@@ -139,41 +139,6 @@ PROFILE = {
     },
 }
 
-DASHBOARD_METRICS = [
-    {
-        "title": {"en": "Loop State", "zh": "循环状态"},
-        "value": {"en": "Observing", "zh": "观察中"},
-        "detail": {
-            "en": "Perception -> reasoning -> tool use",
-            "zh": "感知 -> 推理 -> 工具调用",
-        },
-    },
-    {
-        "title": {"en": "High-Risk Actions", "zh": "高风险操作"},
-        "value": {"en": "2 Pending", "zh": "2 项待审批"},
-        "detail": {
-            "en": "Delete file and calendar overwrite",
-            "zh": "文件删除与日程覆盖操作",
-        },
-    },
-    {
-        "title": {"en": "Knowledge Base", "zh": "知识库状态"},
-        "value": {"en": "Handbook Ready", "zh": "手册已就绪"},
-        "detail": {
-            "en": "RAG index synced for campus documents",
-            "zh": "校园文档的 RAG 索引已同步",
-        },
-    },
-    {
-        "title": {"en": "Schedule Sync", "zh": "日程同步"},
-        "value": {"en": "3 Conflicts", "zh": "3 个冲突"},
-        "detail": {
-            "en": "Blackboard and local TODO overlap found",
-            "zh": "检测到 Blackboard 与本地 TODO 重叠",
-        },
-    },
-]
-
 RESOURCE_FILES = [
     "cs304_project_proposal.pdf",
     "student_handbook_2026.pdf",
