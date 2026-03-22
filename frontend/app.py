@@ -7,7 +7,7 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QPoint, QSize, Qt
+from PyQt6.QtCore import QPoint, QSize, Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -522,6 +522,10 @@ class MainWindow(QMainWindow):
         self.trace_events: list[dict[str, str]] = []
         self.schedule_events: list[dict[str, str]] = []
         self.conflicts: list[dict[str, str]] = []
+        self.response_stream_state: dict[str, Any] | None = None
+        self.response_stream_timer = QTimer(self)
+        self.response_stream_timer.setInterval(45)
+        self.response_stream_timer.timeout.connect(self._advance_response_stream)
 
         self._reset_dynamic_state()
         self._build_root()
@@ -599,6 +603,134 @@ class MainWindow(QMainWindow):
         position = self.mode_button.mapToGlobal(QPoint(0, self.mode_button.height() + 6))
         self.mode_menu.exec(position)
 
+    def _response_chunk_size(self, text: str, cursor: int) -> int:
+        remaining = max(0, len(text) - cursor)
+        if remaining > 180:
+            return 24
+        if remaining > 90:
+            return 18
+        if remaining > 32:
+            return 12
+        return 8
+
+    def _finalize_response_stream(self, *, open_dialog: bool) -> None:
+        state = self.response_stream_state or {}
+        self.response_stream_timer.stop()
+        self.response_stream_state = None
+        self.pending_hitl_request = state.get("pending_hitl_request")
+        self._sync_active_conversation()
+        if open_dialog and self.pending_hitl_request and state.get("auto_open_hitl", True):
+            self.open_hitl_dialog()
+
+    def _flush_response_stream(self, *, open_dialog: bool) -> None:
+        if not self.response_stream_state:
+            return
+
+        state = self.response_stream_state
+        assistant_index = state.get("assistant_index")
+        assistant_text = str(state.get("assistant_text", ""))
+        if assistant_index is not None and 0 <= assistant_index < len(self.chat_messages):
+            self.chat_messages[assistant_index]["text"] = assistant_text
+
+        trace_index = int(state.get("trace_index", 0))
+        trace_queue = list(state.get("trace_queue", []))
+        if trace_index < len(trace_queue):
+            self.trace_events.extend(trace_queue[trace_index:])
+
+        extra_index = int(state.get("extra_index", 0))
+        extra_messages = list(state.get("extra_messages", []))
+        if extra_index < len(extra_messages):
+            self.chat_messages.extend(extra_messages[extra_index:])
+
+        self._load_chat_messages(self.chat_messages)
+        self._load_trace_events(self.trace_events)
+        self._finalize_response_stream(open_dialog=open_dialog)
+
+    def _advance_response_stream(self) -> None:
+        if not self.response_stream_state:
+            self.response_stream_timer.stop()
+            return
+
+        state = self.response_stream_state
+        chat_changed = False
+        trace_changed = False
+
+        trace_queue = list(state.get("trace_queue", []))
+        trace_index = int(state.get("trace_index", 0))
+        if trace_index < len(trace_queue):
+            self.trace_events.append(trace_queue[trace_index])
+            state["trace_index"] = trace_index + 1
+            trace_changed = True
+
+        assistant_index = state.get("assistant_index")
+        assistant_text = str(state.get("assistant_text", ""))
+        cursor = int(state.get("assistant_cursor", 0))
+        if assistant_index is not None and cursor < len(assistant_text):
+            next_cursor = min(len(assistant_text), cursor + self._response_chunk_size(assistant_text, cursor))
+            state["assistant_cursor"] = next_cursor
+            if 0 <= assistant_index < len(self.chat_messages):
+                self.chat_messages[assistant_index]["text"] = assistant_text[:next_cursor]
+                chat_changed = True
+
+        extra_messages = list(state.get("extra_messages", []))
+        extra_index = int(state.get("extra_index", 0))
+        assistant_done = assistant_index is None or int(state.get("assistant_cursor", 0)) >= len(assistant_text)
+        trace_done = int(state.get("trace_index", 0)) >= len(trace_queue)
+        if assistant_done and trace_done and extra_index < len(extra_messages):
+            self.chat_messages.append(extra_messages[extra_index])
+            state["extra_index"] = extra_index + 1
+            chat_changed = True
+
+        if chat_changed:
+            self._load_chat_messages(self.chat_messages)
+        if trace_changed:
+            self._load_trace_events(self.trace_events)
+
+        trace_done = int(state.get("trace_index", 0)) >= len(trace_queue)
+        assistant_done = assistant_index is None or int(state.get("assistant_cursor", 0)) >= len(assistant_text)
+        extras_done = int(state.get("extra_index", 0)) >= len(extra_messages)
+        if trace_done and assistant_done and extras_done:
+            self._finalize_response_stream(open_dialog=True)
+
+    def _queue_response_stream(
+        self,
+        *,
+        assistant_text: str,
+        trace_items: list[dict[str, str]] | None = None,
+        extra_messages: list[dict[str, Any]] | None = None,
+        pending_hitl_request: dict[str, Any] | None = None,
+        auto_open_hitl: bool = True,
+    ) -> None:
+        self._flush_response_stream(open_dialog=False)
+
+        normalized_trace = list(trace_items or [])
+        queued_messages = [dict(item) for item in (extra_messages or [])]
+        assistant_index: int | None = None
+        initial_cursor = 0
+        if assistant_text:
+            initial_cursor = min(len(assistant_text), self._response_chunk_size(assistant_text, 0))
+            self.chat_messages.append(self._create_text_message("agent", assistant_text[:initial_cursor]))
+            assistant_index = len(self.chat_messages) - 1
+            self._load_chat_messages(self.chat_messages)
+
+        self.response_stream_state = {
+            "assistant_index": assistant_index,
+            "assistant_text": assistant_text,
+            "assistant_cursor": initial_cursor,
+            "trace_queue": normalized_trace,
+            "trace_index": 0,
+            "extra_messages": queued_messages,
+            "extra_index": 0,
+            "pending_hitl_request": pending_hitl_request,
+            "auto_open_hitl": auto_open_hitl,
+        }
+
+        if not assistant_text and not normalized_trace and not queued_messages:
+            self._finalize_response_stream(open_dialog=auto_open_hitl)
+            return
+
+        self.response_stream_timer.start()
+
     def _default_user_profile(self) -> dict[str, str]:
         return {
             "name": self.local(PROFILE["name"]),
@@ -664,6 +796,120 @@ class MainWindow(QMainWindow):
                 "citations": list(citations),
             },
         }
+
+    def _generate_mock_response(self, prompt: str) -> dict[str, Any]:
+        lowered = prompt.lower()
+        route = "chat"
+        assistant_text = self.ui("reply_generic")
+        trace: list[dict[str, Any]] = [
+            {
+                "phase": self.local({"en": "Reasoning", "zh": "推理"}),
+                "title": self.ui("trace_responded_main_chat_title"),
+                "detail": self.ui(
+                    "trace_responded_main_chat_detail",
+                    prompt=prompt[:72] + ("..." if len(prompt) > 72 else ""),
+                ),
+                "status": "done",
+            }
+        ]
+        ui_payload: dict[str, Any] = {"schedule": None, "encyclopedia": None}
+        hitl_request: dict[str, Any] | None = None
+
+        if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
+            route = "os_automation"
+            assistant_text = self.ui("reply_hitl")
+            trace = [
+                {
+                    "phase": self.local({"en": "Tool Use", "zh": "工具调用"}),
+                    "title": self.ui("trace_hitl_update_title"),
+                    "detail": self.ui("trace_hitl_pending"),
+                    "status": "pending",
+                }
+            ]
+            hitl_request = self._build_localized_hitl_request()
+            hitl_request["request_id"] = f"hitl_mock_{uuid4().hex[:10]}"
+        elif self.selected_mode == "scheduler":
+            route = "scheduler"
+            assistant_text = self.ui("reply_schedule")
+            ui_payload["schedule"] = {
+                "events": [dict(item) for item in self.schedule_events],
+                "conflicts": [dict(item) for item in self.conflicts],
+            }
+        elif self.selected_mode == "encyclopedia":
+            route = "encyclopedia"
+            if "dorm" in lowered or "宿舍" in lowered:
+                key = "dorm"
+            elif "credit" in lowered or "学分" in lowered:
+                key = "credit"
+            else:
+                key = "default"
+            payload = ENCYCLOPEDIA_RESULTS.get(key, ENCYCLOPEDIA_RESULTS["default"])
+            assistant_text = self.ui("reply_encyclopedia")
+            ui_payload["encyclopedia"] = {
+                "query": self.local(payload["query"]),
+                "answer_markdown": self.local(payload["answer"]),
+                "citations": self.local(payload["citations"]),
+            }
+            trace.append(
+                {
+                    "phase": self.local({"en": "Observation", "zh": "观察"}),
+                    "title": self.ui("trace_rendered_encyclopedia_title"),
+                    "detail": self.ui("trace_rendered_encyclopedia_detail", query=self.local(payload["query"])),
+                    "status": "done",
+                }
+            )
+
+        return {
+            "session_id": self.session_id,
+            "assistant_message": {"role": "assistant", "content": assistant_text},
+            "trace": trace,
+            "route": route,
+            "ui_payload": ui_payload,
+            "hitl_request": hitl_request,
+            "error": None,
+        }
+
+    def _build_response_cards(self, response: dict[str, Any]) -> list[dict[str, Any]]:
+        cards: list[dict[str, Any]] = []
+        ui_payload = response.get("ui_payload", {})
+        if not isinstance(ui_payload, dict):
+            return cards
+
+        schedule_payload = ui_payload.get("schedule")
+        if isinstance(schedule_payload, dict):
+            events = schedule_payload.get("events", [])
+            conflicts = schedule_payload.get("conflicts", [])
+            normalized_events: list[dict[str, str]] = []
+            normalized_conflicts: list[dict[str, str]] = []
+            if isinstance(events, list) and events:
+                normalized_events = self._normalize_schedule_events(events)
+                self.schedule_events = normalized_events
+            if isinstance(conflicts, list) and conflicts:
+                normalized_conflicts = self._normalize_conflicts(conflicts)
+                self.conflicts = normalized_conflicts
+            if normalized_events or normalized_conflicts:
+                cards.append(
+                    self._create_schedule_message(
+                        intro=self.ui("schedule_card_intro"),
+                        events=normalized_events or self.schedule_events,
+                        conflicts=normalized_conflicts or self.conflicts,
+                    )
+                )
+
+        encyclopedia_payload = ui_payload.get("encyclopedia")
+        if isinstance(encyclopedia_payload, dict):
+            answer_markdown = str(encyclopedia_payload.get("answer_markdown", "")).strip()
+            citations = encyclopedia_payload.get("citations", [])
+            cards.append(
+                self._create_encyclopedia_message(
+                    intro=self.ui("encyclopedia_card_intro"),
+                    query=str(encyclopedia_payload.get("query", "")).strip(),
+                    answer_markdown=answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
+                    citations=[str(item) for item in citations] if isinstance(citations, list) else [],
+                )
+            )
+
+        return cards
 
     def _create_conversation(
         self,
@@ -1026,12 +1272,14 @@ class MainWindow(QMainWindow):
         if current is None:
             return
 
+        self._flush_response_stream(open_dialog=False)
         session_id = current.data(Qt.ItemDataRole.UserRole)
         if not session_id or session_id == self.active_conversation_id:
             return
         self._activate_conversation(str(session_id))
 
     def toggle_language(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         current_page = self.stack.currentWidget().objectName() if hasattr(self, "stack") else "HomePage"
         auth_tab_index = self.auth_tabs.currentIndex() if hasattr(self, "auth_tabs") else 0
         login_username = self.login_username_input.text() if hasattr(self, "login_username_input") else ""
@@ -1873,6 +2121,7 @@ class MainWindow(QMainWindow):
             )
 
     def _apply_bootstrap_payload(self, payload: dict[str, Any]) -> None:
+        self._flush_response_stream(open_dialog=False)
         user_profile = payload.get("user_profile", {})
         display_name = str(user_profile.get("display_name") or self.current_username or self.local(PROFILE["name"]))
         major = str(user_profile.get("major") or self.local(PROFILE["major"]))
@@ -1932,70 +2181,35 @@ class MainWindow(QMainWindow):
     def _apply_agent_response(self, response: dict[str, Any], auto_open_hitl: bool = True) -> None:
         assistant_message = response.get("assistant_message", {})
         assistant_text = str(assistant_message.get("content", "")).strip()
-        if assistant_text:
-            self.chat_messages.append(self._create_text_message("agent", assistant_text))
-            self._load_chat_messages(self.chat_messages)
-
+        trace_items: list[dict[str, str]] = []
         trace = response.get("trace", [])
         if isinstance(trace, list) and trace:
-            self.trace_events.extend(self._normalize_backend_trace_events(trace))
-            self._load_trace_events(self.trace_events)
+            trace_items.extend(self._normalize_backend_trace_events(trace))
 
         error_payload = response.get("error")
         if isinstance(error_payload, dict):
             error_message = str(error_payload.get("message", "")).strip()
             if error_message:
-                self._append_trace(
-                    self.local({"en": "Reflection", "zh": "反思"}),
-                    str(error_payload.get("code", "backend_error")),
-                    error_message,
-                    "error",
+                trace_items.append(
+                    {
+                        "phase": self.local({"en": "Reflection", "zh": "反思"}),
+                        "title": str(error_payload.get("code", "backend_error")),
+                        "detail": error_message,
+                        "status": "error",
+                    }
                 )
-
-        ui_payload = response.get("ui_payload", {})
-        if isinstance(ui_payload, dict):
-            schedule_payload = ui_payload.get("schedule")
-            if isinstance(schedule_payload, dict):
-                events = schedule_payload.get("events", [])
-                conflicts = schedule_payload.get("conflicts", [])
-                normalized_events: list[dict[str, str]] = []
-                normalized_conflicts: list[dict[str, str]] = []
-                if isinstance(events, list) and events:
-                    normalized_events = self._normalize_schedule_events(events)
-                    self.schedule_events = normalized_events
-                if isinstance(conflicts, list) and conflicts:
-                    normalized_conflicts = self._normalize_conflicts(conflicts)
-                    self.conflicts = normalized_conflicts
-                if normalized_events or normalized_conflicts:
-                    self.chat_messages.append(
-                        self._create_schedule_message(
-                            intro=self.ui("schedule_card_intro"),
-                            events=normalized_events or self.schedule_events,
-                            conflicts=normalized_conflicts or self.conflicts,
-                        )
-                    )
-                    self._load_chat_messages(self.chat_messages)
-
-            encyclopedia_payload = ui_payload.get("encyclopedia")
-            if isinstance(encyclopedia_payload, dict):
-                answer_markdown = str(encyclopedia_payload.get("answer_markdown", "")).strip()
-                citations = encyclopedia_payload.get("citations", [])
-                self.chat_messages.append(
-                    self._create_encyclopedia_message(
-                        intro=self.ui("encyclopedia_card_intro"),
-                        query=str(encyclopedia_payload.get("query", "")).strip(),
-                        answer_markdown=answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
-                        citations=[str(item) for item in citations] if isinstance(citations, list) else [],
-                    )
-                )
-                self._load_chat_messages(self.chat_messages)
 
         hitl_request = response.get("hitl_request")
-        self.pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
-        self._sync_active_conversation()
+        pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
+        extra_messages = self._build_response_cards(response)
+        self._queue_response_stream(
+            assistant_text=assistant_text,
+            trace_items=trace_items,
+            extra_messages=extra_messages,
+            pending_hitl_request=pending_hitl_request,
+            auto_open_hitl=auto_open_hitl,
+        )
         self._sync_remote_sessions()
-        if self.pending_hitl_request and auto_open_hitl:
-            self.open_hitl_dialog()
 
     def _run_remote_agent(
         self,
@@ -2113,6 +2327,7 @@ class MainWindow(QMainWindow):
         self._show_auth(0)
 
     def start_new_chat(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         conversation = self._active_conversation()
         if conversation is not None:
             has_user_messages = any(item["sender"] == "user" for item in conversation["messages"])
@@ -2130,6 +2345,7 @@ class MainWindow(QMainWindow):
             self.message_input.clear()
 
     def delete_current_chat(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         conversation = self._active_conversation()
         if conversation is None:
             return
@@ -2162,6 +2378,7 @@ class MainWindow(QMainWindow):
         self._activate_conversation(self.conversations[0]["session_id"])
 
     def logout(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         if self.api_client.authenticated:
             try:
                 self.api_client.logout()
@@ -2179,6 +2396,7 @@ class MainWindow(QMainWindow):
         self._show_home()
 
     def handle_send_message(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         text = self.message_input.toPlainText().strip()
         if not text:
             return
@@ -2191,54 +2409,8 @@ class MainWindow(QMainWindow):
             self.message_input.clear()
             return
 
-        reply, result_card = self._generate_mock_reply(text)
-        if reply:
-            self.chat_messages.append(self._create_text_message("agent", reply))
-        if result_card:
-            self.chat_messages.append(result_card)
-        self._load_chat_messages(self.chat_messages)
+        self._apply_agent_response(self._generate_mock_response(text))
         self.message_input.clear()
-
-        prompt_preview = text[:72] + ("..." if len(text) > 72 else "")
-        self._append_trace(
-            self.local({"en": "Reasoning", "zh": "推理"}),
-            self.ui("trace_responded_main_chat_title"),
-            self.ui("trace_responded_main_chat_detail", prompt=prompt_preview),
-            "done",
-        )
-
-    def _generate_mock_reply(self, prompt: str) -> tuple[str, dict[str, Any] | None]:
-        lowered = prompt.lower()
-        if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
-            self.open_hitl_dialog()
-            return self.ui("reply_hitl"), None
-        if self.selected_mode == "scheduler":
-            return (
-                self.ui("reply_schedule"),
-                self._create_schedule_message(
-                    intro=self.ui("schedule_card_intro"),
-                    events=self.schedule_events,
-                    conflicts=self.conflicts,
-                ),
-            )
-        if self.selected_mode == "encyclopedia":
-            if "dorm" in lowered or "宿舍" in lowered:
-                key = "dorm"
-            elif "credit" in lowered or "学分" in lowered:
-                key = "credit"
-            else:
-                key = "default"
-            payload = ENCYCLOPEDIA_RESULTS.get(key, ENCYCLOPEDIA_RESULTS["default"])
-            return (
-                self.ui("reply_encyclopedia"),
-                self._create_encyclopedia_message(
-                    intro=self.ui("encyclopedia_card_intro"),
-                    query=self.local(payload["query"]),
-                    answer_markdown=self.local(payload["answer"]),
-                    citations=self.local(payload["citations"]),
-                ),
-            )
-        return self.ui("reply_generic"), None
 
     def _append_trace(self, phase: str, title: str, detail: str, status: str) -> None:
         event = {
@@ -2251,6 +2423,7 @@ class MainWindow(QMainWindow):
         self._load_trace_events(self.trace_events)
 
     def open_hitl_dialog(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         request_payload = self.pending_hitl_request or self._build_localized_hitl_request()
         dialog = HitlDialog(self, UI_TEXTS[self.language], request_payload)
         accepted = dialog.exec()
@@ -2272,6 +2445,7 @@ class MainWindow(QMainWindow):
         )
 
     def refresh_mock_content(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         if self.current_username and self.api_client.authenticated:
             self.sync_bootstrap_data(record_trace=True)
             return
@@ -2282,6 +2456,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.dashboard_page if self.current_username else self.home_page)
 
     def refresh_schedule_data(self) -> None:
+        self._flush_response_stream(open_dialog=False)
         if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
             self.refresh_mock_content()
             return
@@ -2305,19 +2480,23 @@ class MainWindow(QMainWindow):
         if isinstance(conflicts, list):
             self.conflicts = self._normalize_conflicts(conflicts)
 
-        self.chat_messages.append(
-            self._create_schedule_message(
-                intro=self.ui("schedule_card_intro"),
-                events=self.schedule_events,
-                conflicts=self.conflicts,
-            )
-        )
-        self._load_chat_messages(self.chat_messages)
-        self._append_trace(
-            self.local({"en": "Observation", "zh": "观察"}),
-            self.ui("trace_schedule_refresh_title"),
-            self.ui("trace_schedule_refresh_detail"),
-            "done",
+        self._queue_response_stream(
+            assistant_text="",
+            trace_items=[
+                {
+                    "phase": self.local({"en": "Observation", "zh": "观察"}),
+                    "title": self.ui("trace_schedule_refresh_title"),
+                    "detail": self.ui("trace_schedule_refresh_detail"),
+                    "status": "done",
+                }
+            ],
+            extra_messages=[
+                self._create_schedule_message(
+                    intro=self.ui("schedule_card_intro"),
+                    events=self.schedule_events,
+                    conflicts=self.conflicts,
+                )
+            ],
         )
 
     def _add_resource_files(self) -> None:

@@ -54,6 +54,7 @@ python3 frontend/app.py
   - right: thought trace + HITL
 - `Schedule` and `Campus QA` are rendered as chat result cards instead of separate main pages.
 - The composer mode menu is kept for UX guidance and local mock routing; the current backend framework performs its own route selection from the message content.
+- Assistant replies and trace steps now render progressively in the desktop UI instead of appearing all at once.
 - Selected materials in the left sidebar are forwarded to `POST /api/agent/run` as `attachments`.
 - Conversation history now syncs with `GET /api/agent/sessions`, `Delete Chat` uses `DELETE /api/agent/sessions/{session_id}`, and `Refresh Schedule` uses `POST /api/schedule/refresh`.
 - Dashboard bootstrap, auth, materials upload, sessions, schedule refresh, chat, encyclopedia, and HITL flows are wired to the current backend contract.
