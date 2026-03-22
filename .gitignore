@@ -1,0 +1,30 @@
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+*.env.local
+
+# Data & uploads (local only)
+data/
+uploads/
+
+# conda/venv
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
