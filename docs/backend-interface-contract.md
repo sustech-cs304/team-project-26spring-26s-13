@@ -1,132 +1,334 @@
-# Frontend Backend Interface Contract
+# Current Frontend/Backend Interface Contract
 
-This document defines the two core interfaces the frontend needs from the AI Loop layer and the database layer for the `Student Productivity Agent` project.
+This document describes how the current `zhaoxun` frontend branch integrates with the backend framework that now exists on `main`.
 
-The goal is to keep the integration small:
+Current stack:
 
-1. One interface for the AI loop
-2. One interface for the database bootstrap data
+- Frontend: `PyQt6` desktop client
+- Backend: `FastAPI` REST API
+- Auth: `JWT Bearer Token`
 
-This is enough for the current frontend prototype:
+When `SPA_API_BASE_URL` is not set, the frontend stays in local mock mode.
+When it is set, the frontend switches to the real backend contract described below.
 
-- main chat
-- thought trace panel
-- HITL authorization dialog
-- schedule result rendering inside chat
-- campus encyclopedia result rendering inside chat
-- profile and chat history initialization
+## Endpoints the current frontend actually calls
 
-## Interface 1: AI Loop
+In REST mode, the frontend currently calls:
 
-### Endpoint
+1. `POST /api/auth/login`
+2. `POST /api/auth/register`
+3. `POST /api/auth/logout`
+4. `GET /api/dashboard/bootstrap`
+5. `PUT /api/user/credentials`
+6. `POST /api/materials/upload`
+7. `POST /api/agent/run`
 
-`POST /api/agent/run`
+The backend also exposes more endpoints on `main`, but the current frontend does not actively depend on them yet:
 
-### Purpose
+- `GET /api/materials`
+- `GET /api/user/profile`
+- `PUT /api/user/profile`
+- `POST /api/schedule/refresh`
+- `GET /api/agent/sessions`
+- `DELETE /api/agent/sessions/{session_id}`
 
-The frontend sends one user action to the AI loop, and the backend returns:
+## Current frontend behavior
 
-- assistant reply
-- thought trace events
-- route result for schedule or encyclopedia
-- optional HITL interception request
+The frontend flow is:
 
-To keep the total number of interfaces at two, HITL approval can also reuse this same endpoint.
+1. `HomePage`
+2. `AuthPage`
+3. `DashboardPage`
 
-### Request Body
+The dashboard layout is:
+
+- left: workspace summary, conversation history, materials
+- center: chat-first workflow
+- right: thought trace + HITL
+
+Important note:
+
+- the mode menu (`Chat / Schedule / Campus QA`) is still visible in the UI
+- but in real backend mode, the frontend no longer sends explicit route hints
+- backend-side routing is expected to happen inside the current agent/router implementation
+
+## Common rules
+
+### Auth header
+
+All authenticated requests use:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### Time format
+
+Use `ISO 8601`, for example:
+
+```text
+2026-03-23T10:01:00+08:00
+```
+
+### Error handling
+
+If the backend returns non-2xx, the frontend will surface FastAPI `detail` directly.
+Readable string details are strongly recommended.
+
+## 1. Auth
+
+## `POST /api/auth/login`
+
+Request:
+
+```json
+{
+  "username": "zhaoxun",
+  "password": "password123"
+}
+```
+
+Response:
 
 ```json
 {
   "user_id": "u_001",
-  "session_id": "sess_20260321_01",
-  "message": "Check whether my Blackboard deadlines conflict with lab time.",
-  "attachments": [
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering",
+  "token": "eyJhbGciOi..."
+}
+```
+
+Frontend usage:
+
+- store JWT token
+- switch into Dashboard
+- immediately call `GET /api/dashboard/bootstrap`
+
+## `POST /api/auth/register`
+
+Request:
+
+```json
+{
+  "username": "zhaoxun",
+  "password": "password123",
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering"
+}
+```
+
+Response:
+
+```json
+{
+  "user_id": "u_001",
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering",
+  "token": "eyJhbGciOi..."
+}
+```
+
+## `POST /api/auth/logout`
+
+Recommended response:
+
+- `204 No Content`
+
+## 2. Dashboard Bootstrap
+
+## `GET /api/dashboard/bootstrap`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Response:
+
+```json
+{
+  "user_profile": {
+    "user_id": "u_001",
+    "display_name": "Zhaoxun",
+    "major": "Software Engineering",
+    "preferences": {
+      "theme": "light",
+      "language": "zh"
+    }
+  },
+  "chat_history": [
     {
-      "file_id": "file_101",
-      "file_name": "week5_notes.md",
-      "file_type": "text/markdown"
+      "message_id": "msg_001",
+      "role": "assistant",
+      "content": "Welcome back.",
+      "timestamp": "2026-03-23T10:00:00+08:00"
     }
   ],
-  "context": {
-    "active_tab": "chat",
-    "selected_feature": "scheduler"
-  },
-  "hitl_reply": null,
-  "connection_settings": {
-    "cas": {
-      "username": "1221xxxx",
-      "password": "example-password"
-    },
-    "api": {
-      "base_url": "https://api.example.com",
-      "api_key": "example-api-key"
+  "materials": [
+    {
+      "file_id": "file_101",
+      "file_name": "student_handbook_2026.pdf",
+      "file_type": "application/pdf",
+      "subject_type": "policy",
+      "vectorized": true,
+      "uploaded_at": "2026-03-23T09:58:00+08:00"
     }
+  ],
+  "local_schedule": {
+    "events": [],
+    "conflicts": []
   }
 }
 ```
 
-### Notes
+Frontend mapping:
 
-- `message` is the natural language input from the main chat box.
-- `attachments` is optional and is used for uploaded files or selected materials.
-- `context.active_tab` is currently fixed to `chat` in the frontend.
-- `context.selected_feature` is the important routing hint. It is chosen by the mode selector under the chat composer (`agent_chat`, `scheduler`, `encyclopedia`) unless the request becomes a high-risk `os_automation` action.
-- `hitl_reply` is used only when the user is responding to a previously blocked high-risk action.
-- `connection_settings` is optional. The frontend can store CAS / API configuration locally and forward it to the backend with the request.
+- `user_profile` -> top bar + workspace summary
+- `chat_history` -> center chat
+- `materials` -> left sidebar material list
+- `local_schedule` -> schedule baseline data for later result cards
 
-### HITL Follow-up Request Example
+Contract rule:
+
+- do not omit fields
+- return empty arrays / empty objects instead of `null`
+
+## 3. Credentials
+
+## `PUT /api/user/credentials`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Request:
+
+```json
+{
+  "cas_account": "1221xxxx",
+  "cas_password": "example-password",
+  "llm_api_key": null
+}
+```
+
+or:
+
+```json
+{
+  "cas_account": null,
+  "cas_password": null,
+  "llm_api_key": "sk-example"
+}
+```
+
+Recommended response:
+
+- `204 No Content`
+
+Frontend behavior:
+
+- `Save CAS` sends `cas_account` + `cas_password`
+- `Save API` sends `llm_api_key`
+
+## 4. Material Upload
+
+## `POST /api/materials/upload`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+Content-Type: multipart/form-data
+```
+
+Form field:
+
+- field name is always `file`
+
+Current frontend file picker filters:
+
+- `.pdf`
+- `.ppt`
+- `.pptx`
+- `.md`
+
+Response:
+
+```json
+{
+  "file_id": "file_201",
+  "file_name": "uploaded_notes.md",
+  "file_type": "text/markdown",
+  "subject_type": "cs",
+  "vectorized": false,
+  "uploaded_at": "2026-03-23T10:02:00+08:00"
+}
+```
+
+Frontend behavior:
+
+- insert `file_name` into the left material list
+- append a trace item saying materials were loaded
+
+## 5. Agent
+
+## `POST /api/agent/run`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+Normal request:
 
 ```json
 {
   "user_id": "u_001",
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
+  "message": "Check whether my Blackboard deadlines conflict with lab time.",
+  "attachments": [],
+  "hitl_reply": null
+}
+```
+
+HITL follow-up request:
+
+```json
+{
+  "user_id": "u_001",
+  "session_id": "sess_ab12cd34",
   "message": "",
   "attachments": [],
-  "context": {
-    "active_tab": "chat",
-    "selected_feature": "os_automation"
-  },
-  "connection_settings": {
-    "cas": {
-      "username": "1221xxxx",
-      "password": "example-password"
-    },
-    "api": {
-      "base_url": "https://api.example.com",
-      "api_key": "example-api-key"
-    }
-  },
   "hitl_reply": {
-    "request_id": "hitl_9001",
+    "request_id": "hitl_sess_ab12cd34_001",
     "approved": true
   }
 }
 ```
 
-### Response Body
+Response:
 
 ```json
 {
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
   "assistant_message": {
     "role": "assistant",
-    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary rendered in chat.",
-    "timestamp": "2026-03-21T20:00:00+08:00"
+    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary below.",
+    "timestamp": "2026-03-23T10:01:00+08:00"
   },
   "trace": [
     {
       "phase": "Observation",
       "title": "Read user goal",
-      "detail": "Need a schedule conflict check and concise explanation.",
+      "detail": "Need a schedule conflict check.",
       "status": "done",
-      "timestamp": "2026-03-21T19:59:58+08:00"
-    },
-    {
-      "phase": "Reasoning",
-      "title": "Plan tool sequence",
-      "detail": "Blackboard scraper -> merge local calendar -> detect overlap.",
-      "status": "done",
-      "timestamp": "2026-03-21T19:59:59+08:00"
+      "timestamp": "2026-03-23T10:00:58+08:00"
     }
   ],
   "route": "scheduler",
@@ -134,16 +336,11 @@ To keep the total number of interfaces at two, HITL approval can also reuse this
     "schedule": {
       "events": [
         {
+          "event_id": "evt_002",
           "title": "Blackboard Deadline: OOAD Report",
           "time": "Thu 15:30",
           "source": "Blackboard",
           "detail": "Upload final report before the submission closes."
-        },
-        {
-          "title": "Embedded Systems Lab",
-          "time": "Thu 16:00 - 18:00",
-          "source": "Campus Calendar",
-          "detail": "Lab room 107, attendance required."
         }
       ],
       "conflicts": [
@@ -160,207 +357,42 @@ To keep the total number of interfaces at two, HITL approval can also reuse this
 }
 ```
 
-### When the Route Is Encyclopedia
+Valid route values:
 
-Set:
+- `chat`
+- `scheduler`
+- `encyclopedia`
+- `os_automation`
 
-- `route = "encyclopedia"`
-- `ui_payload.encyclopedia.answer_markdown`
-- `ui_payload.encyclopedia.citations`
+Trace status values supported by the frontend:
 
-Example:
+- `pending`
+- `running`
+- `done`
+- `error`
 
-```json
-{
-  "route": "encyclopedia",
-  "ui_payload": {
-    "schedule": null,
-    "encyclopedia": {
-      "query": "credit requirements",
-      "answer_markdown": "### Credit Requirement Summary\n- ...",
-      "citations": [
-        "Student Handbook / Degree Requirements / General Rules"
-      ]
-    }
-  }
-}
-```
+Trace phase values expected by the backend schema:
 
-### When a HITL Interception Is Triggered
+- `Observation`
+- `Reasoning`
+- `Tool Use`
+- `Reflection`
 
-Set `hitl_request` instead of directly executing the risky action.
+Frontend mapping:
 
-```json
-{
-  "session_id": "sess_20260321_01",
-  "assistant_message": {
-    "role": "assistant",
-    "content": "This action requires manual approval before execution.",
-    "timestamp": "2026-03-21T20:05:00+08:00"
-  },
-  "trace": [
-    {
-      "phase": "Tool Use",
-      "title": "Awaiting authorization",
-      "detail": "Calendar overwrite is classified as a high-risk action.",
-      "status": "pending",
-      "timestamp": "2026-03-21T20:05:00+08:00"
-    }
-  ],
-  "route": "chat",
-  "ui_payload": {
-    "schedule": null,
-    "encyclopedia": null
-  },
-  "hitl_request": {
-    "request_id": "hitl_9001",
-    "action": "Overwrite local study calendar",
-    "risk": "high",
-    "reason": "The agent wants to move three study blocks to avoid a deadline collision.",
-    "payload": [
-      "Move OOAD report reminder from Thu 15:00 to Wed 21:00",
-      "Create a 40-minute buffer before the Thursday lab"
-    ]
-  },
-  "error": null
-}
-```
+- `assistant_message.content` -> center chat
+- `trace` -> right-side thought trace panel
+- `ui_payload.schedule` -> schedule card inside chat
+- `ui_payload.encyclopedia` -> campus QA card inside chat
+- `hitl_request` -> authorization dialog
+- `error` -> error trace item
 
-### Frontend Mapping
+## Most important implementation target
 
-- Chat panel uses `assistant_message`
-- Thought Trace panel uses `trace`
-- The main chat flow renders `ui_payload.schedule` as a schedule result card
-- The main chat flow renders `ui_payload.encyclopedia` as a campus QA result card
-- HITL modal uses `hitl_request`
+If the backend team wants the current frontend to run successfully as soon as possible, these are the critical pieces:
 
-## Interface 2: Database Bootstrap
-
-### Endpoint
-
-`GET /api/dashboard/bootstrap?user_id=u_001`
-
-### Purpose
-
-The frontend needs one database-facing bootstrap interface to initialize the whole page.
-
-This endpoint should return:
-
-- user profile
-- user settings
-- historical chat records
-- uploaded material list
-- cached local schedule items
-
-### Response Body
-
-```json
-{
-  "user_profile": {
-    "user_id": "u_001",
-    "display_name": "SUSTech Student",
-    "major": "Software Engineering",
-    "preferences": {
-      "theme": "cosmic",
-      "language": "en"
-    }
-  },
-  "chat_history": [
-    {
-      "message_id": "msg_001",
-      "role": "assistant",
-      "content": "Welcome back. I can track your schedule, search campus policies, and explain each tool step in the Thought Trace panel.",
-      "timestamp": "2026-03-21T19:50:00+08:00"
-    },
-    {
-      "message_id": "msg_002",
-      "role": "user",
-      "content": "Please check whether my Blackboard deadlines conflict with lab time.",
-      "timestamp": "2026-03-21T19:51:00+08:00"
-    }
-  ],
-  "materials": [
-    {
-      "file_id": "file_101",
-      "file_name": "week5_notes.md",
-      "file_type": "text/markdown",
-      "vectorized": false,
-      "uploaded_at": "2026-03-21T18:00:00+08:00"
-    },
-    {
-      "file_id": "file_102",
-      "file_name": "student_handbook_2026.pdf",
-      "file_type": "application/pdf",
-      "vectorized": true,
-      "uploaded_at": "2026-03-20T21:00:00+08:00"
-    }
-  ],
-  "local_schedule": {
-    "events": [
-      {
-        "event_id": "evt_001",
-        "title": "CS304 Team Meeting",
-        "time": "Mon 19:00 - 20:30",
-        "source": "Local TODO",
-        "detail": "Finalize API contract and UI handoff."
-      }
-    ],
-    "conflicts": [
-      {
-        "title": "OOAD report overlaps with lab preparation",
-        "detail": "Deadline is 30 minutes before a fixed lab block on Thursday."
-      }
-    ]
-  }
-}
-```
-
-### Frontend Mapping
-
-- Left profile card uses `user_profile`
-- Material list uses `materials`
-- Initial chat window uses `chat_history`
-- Schedule dashboard can preload `local_schedule.events` and `local_schedule.conflicts`
-
-## Recommended Field Rules
-
-- All timestamps should use ISO 8601 format with timezone, for example `2026-03-21T20:00:00+08:00`
-- `role` should only be `user` or `assistant`
-- `trace.status` should only be `done`, `running`, or `pending`
-- `route` should only be `chat`, `scheduler`, or `encyclopedia`
-- `hitl_request.risk` should only be `low`, `medium`, or `high`
-
-## Minimal Integration Flow
-
-1. Frontend startup:
-   `GET /api/dashboard/bootstrap`
-
-2. User sends a message:
-   `POST /api/agent/run`
-
-3. AI loop returns:
-   chat reply + trace + schedule update or encyclopedia result
-
-4. If risky action is detected:
-   frontend shows HITL dialog using `hitl_request`
-
-5. User approves or rejects:
-   frontend sends approval back to the same `POST /api/agent/run` endpoint using `hitl_reply`
-
-## Why Only These Two Interfaces
-
-For the current milestone, these two interfaces are enough because:
-
-- AI loop already owns reasoning, routing, tool execution, and HITL interception
-- database bootstrap already owns persistent user information and chat history
-- the frontend only needs one dynamic channel and one initialization channel
-
-If the backend later becomes more detailed, it can split into more endpoints such as:
-
-- file upload
-- profile update
-- standalone HITL approval
-- schedule sync refresh
-- RAG search only
-
-But for now, the frontend can move forward with just the two interfaces above.
+1. `login/register` must return a JWT token
+2. `bootstrap` must return a full object with no missing fields
+3. `PUT /api/user/credentials` must accept the payload and return `204`
+4. `POST /api/materials/upload` must return `MaterialInfo`
+5. `POST /api/agent/run` must return a complete `AgentResponse`

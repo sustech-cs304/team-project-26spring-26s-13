@@ -52,3 +52,7 @@ python3 frontend/app.py
 - `Schedule` and `Campus QA` are rendered as chat result cards instead of separate main pages.
 - The composer mode menu is kept for UX guidance and local mock routing; the current backend framework performs its own route selection from the message content.
 - Dashboard bootstrap, auth, materials upload, chat, schedule, encyclopedia, and HITL flows are wired to the current backend contract.
+- Current backend-facing docs:
+  - [docs/backend-interface-contract-zh.md](docs/backend-interface-contract-zh.md)
+  - [docs/backend-interface-contract.md](docs/backend-interface-contract.md)
+  - [docs/backend-readme-zh.md](docs/backend-readme-zh.md)

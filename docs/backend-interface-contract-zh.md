@@ -1,231 +1,229 @@
-# Student Productivity Agent 后端对接说明
+# Student Productivity Agent 当前后端接口契约
 
-这份文档是给后端同学的中文联调说明，目标是把当前前端需要的接口、字段含义、返回格式和联调注意事项一次讲清楚。
+这份文档描述的是 `zhaoxun` 分支当前前端，如何对接 `main` 分支现有后端框架。
 
-当前项目技术方向已经固定为：
+当前真实技术方向：
 
-- 前端：`PyQt6 / PySide6` 桌面端
-- 后端：`RESTful API`
-- 当前前端默认可跑本地 mock，但已经支持切换到真实 REST 接口
+- 前端：`PyQt6` 桌面端
+- 后端：`FastAPI + RESTful API`
+- 认证方式：`JWT Bearer Token`
+- 运行方式：
+  - 不设置 `SPA_API_BASE_URL` 时，前端走本地 mock
+  - 设置 `SPA_API_BASE_URL` 后，前端切到真实后端接口
 
-对于当前里程碑，前后端只需要先对接 2 个核心接口：
+## 1. 当前前端会实际调用哪些接口
 
-1. `GET /api/dashboard/bootstrap`
-2. `POST /api/agent/run`
+当前前端在 REST 模式下会调用这些接口：
 
-这样就足够支撑以下前端区域：
+1. `POST /api/auth/login`
+2. `POST /api/auth/register`
+3. `POST /api/auth/logout`
+4. `GET /api/dashboard/bootstrap`
+5. `PUT /api/user/credentials`
+6. `POST /api/materials/upload`
+7. `POST /api/agent/run`
 
-- 主页后的登录与主界面进入流程
-- 主聊天区
-- `Thought Trace` 面板
-- 聊天中的 `Schedule` 结果卡片
-- 聊天中的 `Campus QA` 结果卡片
-- `HITL` 授权弹窗
-- 左侧用户资料与材料列表
+当前后端仓库里还有这些接口，但前端这版没有直接主动调用：
 
-## 1. 前端当前长什么样
+- `GET /api/materials`
+- `GET /api/user/profile`
+- `PUT /api/user/profile`
+- `POST /api/schedule/refresh`
+- `GET /api/agent/sessions`
+- `DELETE /api/agent/sessions/{session_id}`
 
-前端当前的页面流转是：
+## 2. 当前前端界面怎么消费这些接口
+
+### 2.1 页面流转
+
+前端当前流程是：
 
 1. `HomePage`
-2. `AuthPage`（登录 / 注册）
+2. `AuthPage`
 3. `DashboardPage`
 
-其中 `DashboardPage` 由三部分组成：
+### 2.2 Dashboard 布局
 
-- 左侧：历史对话、资料列表、工作区概览
-- 中间：主聊天区
-- 右侧：`Thought Trace` + `HITL` 授权入口
+Dashboard 是三栏：
+
+- 左栏：工作区概览、历史对话、资料列表
+- 中栏：聊天主窗口
+- 右栏：`Thought Trace` 和 `HITL`
 
 补充说明：
 
-- 当前中间聊天区只有一个输入入口
-- 输入框下方有模式选择入口
-- 用户可显式选择：
-  - `Chat`
-  - `Schedule`
-  - `Campus QA`
-- `Schedule` 和 `Campus QA` 的结果会直接插入聊天流里，而不是依赖独立页签
+- 输入框下方仍保留 `Chat / Schedule / Campus QA` 模式选择
+- 但这只是当前前端的交互引导和 mock 路由
+- 在真实后端模式下，前端不会再把 `selected_feature` 发给后端
+- 路由判断由后端自己的 agent/router 决定
 
-也就是说，后端返回的数据不是给某一个小组件用的，而是要同时驱动聊天、思维追踪、日程、百科和授权弹窗。
+### 2.3 前端和后端的职责边界
 
-## 2. 总体接口设计原则
-
-### 2.1 为什么只先要两个接口
-
-当前阶段我们故意把接口压得很小，原因是：
-
-- 前端先要能跑通主流程，而不是把接口拆得特别细
-- AI loop 本身天然适合统一承接“用户输入 -> 推理 -> 工具 -> 结果回传”
-- 页面初始化也适合通过一个 bootstrap 接口一次性加载
-
-所以当前建议分工是：
-
-- `bootstrap` 负责“初始化页面”
-- `agent/run` 负责“处理用户动作”
-
-### 2.2 当前不要求的部分
-
-下面这些可以后面再拆，不是这一版必须项：
-
-- 单独文件上传接口
-- 单独百科查询接口
-- 单独 schedule 刷新接口
-- 单独 HITL 审批接口
-- 单独 trace 拉流接口
-- 登录 / 注册真实后端接口
-
-说明：
-
-- 现在前端里的登录 / 注册仍然是本地原型逻辑
-- 也就是说，本轮联调先不用被认证系统卡住
-- 真正需要后端先提供的是“主界面初始化”和“AI loop 返回”
+- 前端负责：
+  - 登录 / 注册界面
+  - JWT token 持有
+  - 聊天、trace、HITL 的展示
+  - 文件选择和上传触发
+- 后端负责：
+  - JWT 认证
+  - bootstrap 数据拼装
+  - CAS / API Key 持久化
+  - materials 上传与向量化
+  - agent loop、工具路由、HITL 管理
 
 ## 3. 通用约定
 
-## 3.1 请求与返回
+### 3.1 协议和格式
 
 - 协议：HTTP
 - 风格：RESTful
-- 数据格式：`application/json`
-- 字符编码：`UTF-8`
+- 编码：`UTF-8`
+- JSON：除上传接口外，统一 `application/json`
 
-## 3.2 时间格式
+### 3.2 认证头
 
-统一用 `ISO 8601`，例如：
-
-```text
-2026-03-21T20:00:00+08:00
-```
-
-## 3.3 枚举值约定
-
-### `trace.status`
-
-只能是：
-
-- `done`
-- `running`
-- `pending`
-
-### `route`
-
-只能是：
-
-- `chat`
-- `scheduler`
-- `encyclopedia`
-
-### `hitl_request.risk`
-
-建议只用：
-
-- `low`
-- `medium`
-- `high`
-
-### `assistant_message.role`
-
-当前前端只关心助手消息，因此推荐固定返回：
-
-- `assistant`
-
-### `chat_history.role`
-
-只能是：
-
-- `user`
-- `assistant`
-
-## 3.4 多语言约定
-
-前端本身已经支持中英文 UI 切换，但当前后端接口里的正文内容先不强制要求双语。
-
-当前建议：
-
-- `trace.title`
-- `trace.detail`
-- `assistant_message.content`
-- `ui_payload.*`
-- `hitl_request.*`
-
-这些字段先返回单语字符串即可，优先保证结构稳定。
-
-如果后端后续要支持真正的双语内容，可以再统一升级字段结构；当前阶段不建议过早把接口设计成双语嵌套对象。
-
-## 4. 接口一：Dashboard Bootstrap
-
-## 4.1 Endpoint
+除 `login` / `register` 外，前端在登录成功后会自动带：
 
 ```http
-GET /api/dashboard/bootstrap?user_id=u_001
+Authorization: Bearer <jwt-token>
 ```
 
-## 4.2 作用
+### 3.3 时间格式
 
-前端进入主界面后，会调用这个接口一次性拿到页面初始化数据。
+建议统一返回 `ISO 8601`，例如：
 
-这个接口负责返回：
+```text
+2026-03-23T10:01:00+08:00
+```
 
-- 用户资料
-- 聊天历史
-- 材料列表
-- 本地日程缓存
+### 3.4 前端对错误的处理方式
 
-## 4.3 Query 参数
+- 只要后端返回非 `2xx`，前端会把 `detail` 或响应文本显示成错误提示
+- 所以建议 FastAPI 的 `HTTPException.detail` 直接返回可读字符串
 
-### `user_id`
+## 4. 认证接口
 
-- 类型：`string`
-- 必填：是
-- 含义：当前用户唯一标识
+## 4.1 `POST /api/auth/login`
 
-说明：
+### 请求体
 
-- 当前前端原型里，`user_id` 可以先直接用用户名代替
-- 后续如果你们接正式认证，再换成数据库里的真正用户 ID 即可
+```json
+{
+  "username": "zhaoxun",
+  "password": "password123"
+}
+```
 
-## 4.4 返回结构
+### 返回体
+
+```json
+{
+  "user_id": "u_001",
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering",
+  "token": "eyJhbGciOi..."
+}
+```
+
+### 前端用途
+
+- 登录成功后保存 token
+- 进入 Dashboard
+- 紧接着调用 `GET /api/dashboard/bootstrap`
+
+## 4.2 `POST /api/auth/register`
+
+### 请求体
+
+```json
+{
+  "username": "zhaoxun",
+  "password": "password123",
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering"
+}
+```
+
+### 返回体
+
+与 `login` 相同：
+
+```json
+{
+  "user_id": "u_001",
+  "display_name": "Zhaoxun",
+  "major": "Software Engineering",
+  "token": "eyJhbGciOi..."
+}
+```
+
+### 前端用途
+
+- 当前前端在 REST 模式下注册成功后，不再走本地 mock
+- 会直接进入已登录状态
+
+## 4.3 `POST /api/auth/logout`
+
+### 请求体
+
+```json
+{}
+```
+
+### 返回体
+
+- 推荐：`204 No Content`
+
+### 前端用途
+
+- 前端会清掉本地 token
+- 返回首页
+
+## 5. Dashboard 初始化接口
+
+## 5.1 `GET /api/dashboard/bootstrap`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### 返回体
 
 ```json
 {
   "user_profile": {
     "user_id": "u_001",
-    "display_name": "SUSTech Student",
+    "display_name": "Zhaoxun",
     "major": "Software Engineering",
     "preferences": {
-      "theme": "cosmic",
-      "language": "en"
+      "theme": "light",
+      "language": "zh"
     }
   },
   "chat_history": [
     {
       "message_id": "msg_001",
       "role": "assistant",
-      "content": "Welcome back. I can track your schedule, search campus policies, and explain each tool step in the Thought Trace panel.",
-      "timestamp": "2026-03-21T19:50:00+08:00"
+      "content": "Welcome back.",
+      "timestamp": "2026-03-23T10:00:00+08:00"
     },
     {
       "message_id": "msg_002",
       "role": "user",
-      "content": "Please check whether my Blackboard deadlines conflict with lab time.",
-      "timestamp": "2026-03-21T19:51:00+08:00"
+      "content": "Check my schedule this week.",
+      "timestamp": "2026-03-23T10:00:30+08:00"
     }
   ],
   "materials": [
     {
       "file_id": "file_101",
-      "file_name": "week5_notes.md",
-      "file_type": "text/markdown",
-      "vectorized": false,
-      "uploaded_at": "2026-03-21T18:00:00+08:00"
-    },
-    {
-      "file_id": "file_102",
       "file_name": "student_handbook_2026.pdf",
       "file_type": "application/pdf",
+      "subject_type": "policy",
       "vectorized": true,
-      "uploaded_at": "2026-03-20T21:00:00+08:00"
+      "uploaded_at": "2026-03-23T09:58:00+08:00"
     }
   ],
   "local_schedule": {
@@ -248,302 +246,168 @@ GET /api/dashboard/bootstrap?user_id=u_001
 }
 ```
 
-## 4.5 字段说明
+### 前端用途
 
-### `user_profile`
+- `user_profile`：顶部用户状态和左侧工作区
+- `chat_history`：中间聊天区初始化
+- `materials`：左侧资料列表
+- `local_schedule`：后续 `Schedule` 结果卡片的本地基线数据
 
-用于左侧用户卡片和顶部状态栏。
+### 返回约定
 
-推荐字段：
+- 不要缺字段
+- 没有数据时返回空列表 / 空对象，不要返回 `null`
 
-- `user_id`: 用户 ID
-- `display_name`: 界面显示名
-- `major`: 专业
-- `preferences`: 可选配置
+## 6. 用户凭据接口
 
-当前前端实际会直接消费：
+## 6.1 `PUT /api/user/credentials`
 
-- `display_name`
-- `major`
+这个接口是当前设置弹窗的真实落点。
 
-### `chat_history`
-
-用于初始化主聊天区。
-
-每条消息至少要有：
-
-- `role`
-- `content`
-
-其余字段如：
-
-- `message_id`
-- `timestamp`
-
-可以作为后续扩展保留。
-
-### `materials`
-
-用于左侧材料列表。
-
-当前前端至少会读取：
-
-- `file_name`
-
-所以如果后端已经有文件表，最少只要保证 `file_name` 存在即可。
-
-### `local_schedule`
-
-这是一个对象，不是数组。
-
-结构必须是：
-
-```json
-{
-  "events": [],
-  "conflicts": []
-}
-```
-
-其中：
-
-- `events` 给日程列表
-- `conflicts` 给冲突提醒卡片
-
-### `local_schedule.events[]`
-
-每一项建议包含：
-
-- `title`
-- `time`
-- `source`
-- `detail`
-
-### `local_schedule.conflicts[]`
-
-每一项建议包含：
-
-- `title`
-- `detail`
-
-## 4.6 前端消费方式
-
-这个接口的数据会映射到：
-
-- 左侧资料卡：`user_profile`
-- 左侧材料列表：`materials`
-- 中间聊天历史：`chat_history`
-- 日程能力的本地缓存：`local_schedule.events`
-- 日程能力的冲突缓存：`local_schedule.conflicts`
-
-## 4.7 推荐实现建议
-
-- 哪怕某一块数据暂时没有，也尽量返回空数组 / 空对象，而不是缺字段
-- 推荐保证这些 key 始终存在：
-  - `user_profile`
-  - `chat_history`
-  - `materials`
-  - `local_schedule`
-- `local_schedule` 即使没有内容，也建议返回：
-
-```json
-{
-  "events": [],
-  "conflicts": []
-}
-```
-
-## 5. 接口二：AI Loop Run
-
-## 5.1 Endpoint
+### 请求头
 
 ```http
-POST /api/agent/run
+Authorization: Bearer <jwt-token>
 ```
 
-## 5.2 作用
+### 请求体
 
-这个接口负责承接前端的用户动作，并把 AI loop 的结果一次性返回给前端。
+只传需要更新的字段即可：
 
-你可以把它理解为：
+```json
+{
+  "cas_account": "1221xxxx",
+  "cas_password": "example-password",
+  "llm_api_key": null
+}
+```
 
-- 前端发一个“用户请求”
-- 后端完成推理 / 路由 / 调工具 / 生成结果
-- 把界面需要的所有数据一次回传
+或：
 
-## 5.3 它负责什么
+```json
+{
+  "cas_account": null,
+  "cas_password": null,
+  "llm_api_key": "sk-example"
+}
+```
 
-这个接口当前同时负责：
+### 返回体
 
-- 主聊天回复
-- `Thought Trace`
-- 日程结果
-- 校园百科结果
-- `HITL` 拦截
-- `HITL` 审批回传
+- 推荐：`204 No Content`
 
-也就是说，对前端来说这是一个总入口。
+### 前端用途
 
-## 5.4 请求体
+- 设置弹窗里点 `Save CAS` 时，前端会发 `cas_account` 和 `cas_password`
+- 点 `Save API` 时，前端会发 `llm_api_key`
+- 如果当前不在 REST 模式，前端只做本地保存，不会调用此接口
+
+## 7. 材料上传接口
+
+## 7.1 `POST /api/materials/upload`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+Content-Type: multipart/form-data
+```
+
+### 表单字段
+
+- 字段名固定：`file`
+
+### 前端上传行为
+
+- 左侧点击 `Add Resource`
+- 选择文件后，前端逐个上传
+- 支持的文件过滤目前是：
+  - `.pdf`
+  - `.ppt`
+  - `.pptx`
+  - `.md`
+
+### 返回体
+
+```json
+{
+  "file_id": "file_201",
+  "file_name": "uploaded_notes.md",
+  "file_type": "text/markdown",
+  "subject_type": "cs",
+  "vectorized": false,
+  "uploaded_at": "2026-03-23T10:02:00+08:00"
+}
+```
+
+### 前端用途
+
+- 成功后，把 `file_name` 插到左侧资料列表
+- 并在右侧 trace 里追加“已加载资料”
+
+## 8. Agent 主接口
+
+## 8.1 `POST /api/agent/run`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+### 普通对话请求体
 
 ```json
 {
   "user_id": "u_001",
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
   "message": "Check whether my Blackboard deadlines conflict with lab time.",
-  "attachments": [
-    {
-      "file_id": "file_101",
-      "file_name": "week5_notes.md",
-      "file_type": "text/markdown"
-    }
-  ],
-  "context": {
-    "active_tab": "chat",
-    "selected_feature": "scheduler"
-  },
-  "hitl_reply": null,
-  "connection_settings": {
-    "cas": {
-      "username": "1221xxxx",
-      "password": "example-password"
-    },
-    "api": {
-      "base_url": "https://api.example.com",
-      "api_key": "example-api-key"
-    }
+  "attachments": [],
+  "hitl_reply": null
+}
+```
+
+### HITL 审批回传请求体
+
+```json
+{
+  "user_id": "u_001",
+  "session_id": "sess_ab12cd34",
+  "message": "",
+  "attachments": [],
+  "hitl_reply": {
+    "request_id": "hitl_sess_ab12cd34_001",
+    "approved": true
   }
 }
 ```
 
-## 5.5 请求字段说明
+### 字段说明
 
-### `user_id`
+- `user_id`：来自登录 / bootstrap
+- `session_id`：前端创建并维护，用于区分左侧会话
+- `message`：用户输入
+- `attachments`：当前前端暂时传空数组；后续如果要引用已上传文件，可以填这里
+- `hitl_reply`：只有在用户点了批准 / 拒绝后才会非空
 
-- 类型：`string`
-- 必填：是
-- 含义：当前用户 ID
-
-### `session_id`
-
-- 类型：`string`
-- 必填：是
-- 含义：当前会话 ID
-
-说明：
-
-- 前端会在应用运行时维持一个 `session_id`
-- 后端建议把它作为上下文串联标识
-
-### `message`
-
-- 类型：`string`
-- 必填：是
-- 含义：用户这一次的自然语言输入
-
-注意：
-
-- 如果是用户在审批 `HITL`，这里可以是空字符串
-
-### `attachments`
-
-- 类型：`array`
-- 必填：否
-- 含义：这次请求附带的文件
-
-当前前端还没有真实上传流，但字段已经预留好了。
-
-### `context.active_tab`
-
-当前前端固定传 `chat`，因为主工作区现在是聊天优先布局。
-
-可选值建议：
-
-- `chat`
-
-### `context.selected_feature`
-
-用于告诉后端，这次输入更偏向哪类功能。
-
-当前前端会发这些值：
-
-- `agent_chat`
-- `scheduler`
-- `encyclopedia`
-- `os_automation`
-
-说明：
-
-- `agent_chat / scheduler / encyclopedia` 来自输入框下方的模式选择
-- `os_automation` 主要用于高风险动作和 HITL 继续执行流程
-
-### `hitl_reply`
-
-如果本次请求是对先前高风险操作的审批，则这里不为 `null`。
-
-格式如下：
+## 8.2 返回体
 
 ```json
 {
-  "request_id": "hitl_9001",
-  "approved": true
-}
-```
-
-### `connection_settings`
-
-这是一个可选字段。
-
-作用是：
-
-- 前端把用户在设置页中填写的 `CAS` 和 `API` 配置先保存在本地会话中
-- 当用户发起 `agent/run` 请求时，再把这些配置一起转交给后端
-
-推荐结构：
-
-```json
-{
-  "cas": {
-    "username": "1221xxxx",
-    "password": "example-password"
-  },
-  "api": {
-    "base_url": "https://api.example.com",
-    "api_key": "example-api-key"
-  }
-}
-```
-
-说明：
-
-- 如果某一项还没配置，可以不传，或者传 `null`
-- 前端不会直接使用这些配置去连接服务，只负责保存和转发
-- 后端收到后，自行决定是否用于 Blackboard、CAS 登录、LLM / 第三方 API 调用等流程
-
-## 5.6 普通请求返回结构
-
-```json
-{
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
   "assistant_message": {
     "role": "assistant",
-    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary rendered in chat.",
-    "timestamp": "2026-03-21T20:00:00+08:00"
+    "content": "I found a conflict on Thursday 16:00. Please review the schedule summary below.",
+    "timestamp": "2026-03-23T10:01:00+08:00"
   },
   "trace": [
     {
       "phase": "Observation",
       "title": "Read user goal",
-      "detail": "Need a schedule conflict check and concise explanation.",
+      "detail": "Need a schedule conflict check.",
       "status": "done",
-      "timestamp": "2026-03-21T19:59:58+08:00"
-    },
-    {
-      "phase": "Reasoning",
-      "title": "Plan tool sequence",
-      "detail": "Blackboard scraper -> merge local calendar -> detect overlap.",
-      "status": "done",
-      "timestamp": "2026-03-21T19:59:59+08:00"
+      "timestamp": "2026-03-23T10:00:58+08:00"
     }
   ],
   "route": "scheduler",
@@ -551,16 +415,11 @@ POST /api/agent/run
     "schedule": {
       "events": [
         {
+          "event_id": "evt_002",
           "title": "Blackboard Deadline: OOAD Report",
           "time": "Thu 15:30",
           "source": "Blackboard",
           "detail": "Upload final report before the submission closes."
-        },
-        {
-          "title": "Embedded Systems Lab",
-          "time": "Thu 16:00 - 18:00",
-          "source": "Campus Calendar",
-          "detail": "Lab room 107, attendance required."
         }
       ],
       "conflicts": [
@@ -577,125 +436,61 @@ POST /api/agent/run
 }
 ```
 
-## 5.7 返回字段说明
+### 路由枚举
 
-### `assistant_message`
-
-这是主聊天区要显示的内容。
-
-当前前端至少使用：
-
-- `assistant_message.content`
-
-### `trace`
-
-这是右侧 `Thought Trace` 面板的数据源。
-
-每一项建议包含：
-
-- `phase`
-- `title`
-- `detail`
-- `status`
-
-时间戳可以带，也可以不带；前端当前不会渲染时间戳，但保留对后续有帮助。
-
-### `route`
-
-用于告诉前端，这次回复更偏向哪类能力结果。
-
-可选值：
+`route` 只应返回：
 
 - `chat`
 - `scheduler`
 - `encyclopedia`
+- `os_automation`
 
-前端当前行为：
+### trace.status 枚举
 
-- `scheduler`：在主聊天区插入日程结果卡片
-- `encyclopedia`：在主聊天区插入校园问答结果卡片
-- 其他：作为普通聊天回复处理
+当前前端已支持：
 
-### `ui_payload`
+- `pending`
+- `running`
+- `done`
+- `error`
 
-这是专门给界面消费的结构化数据。
+### trace.phase 枚举
 
-当前建议始终返回：
+按当前后端 schema，建议只用：
 
-```json
-{
-  "schedule": null,
-  "encyclopedia": null
-}
-```
+- `Observation`
+- `Reasoning`
+- `Tool Use`
+- `Reflection`
 
-如果某一块没有数据，就给 `null`。
+## 8.3 前端如何消费 `AgentResponse`
 
-### `ui_payload.schedule`
+- `assistant_message.content`：插入主聊天区
+- `trace`：更新右侧 `Thought Trace`
+- `ui_payload.schedule`：渲染成聊天里的 `Schedule` 结果卡片
+- `ui_payload.encyclopedia`：渲染成聊天里的 `Campus QA` 结果卡片
+- `hitl_request`：弹出授权弹窗
+- `error`：追加一条 `TraceItemError`
 
-如果 route 指向日程，或本次请求产生日程数据，就填这个对象。
-
-结构：
-
-```json
-{
-  "events": [],
-  "conflicts": []
-}
-```
-
-### `ui_payload.encyclopedia`
-
-如果本次请求产出校园百科结果，就填这个对象。
-
-结构建议：
+## 8.4 Encyclopedia 响应示例
 
 ```json
 {
-  "query": "credit requirements",
-  "answer_markdown": "### Credit Requirement Summary\n- ...",
-  "citations": [
-    "Student Handbook / Degree Requirements / General Rules"
-  ]
-}
-```
-
-说明：
-
-- `answer_markdown` 给聊天中的 markdown 结果卡片
-- `citations` 给同一张聊天结果卡片里的引用区域
-
-### `hitl_request`
-
-如果本次动作被后端识别为高风险操作，就不要直接执行，而是返回 `hitl_request`。
-
-## 5.8 Encyclopedia 返回示例
-
-```json
-{
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
   "assistant_message": {
     "role": "assistant",
-    "content": "Here is the handbook-based answer with citations.",
-    "timestamp": "2026-03-21T20:10:00+08:00"
+    "content": "Here is the handbook answer.",
+    "timestamp": "2026-03-23T10:05:00+08:00"
   },
-  "trace": [
-    {
-      "phase": "Observation",
-      "title": "Recognized campus policy query",
-      "detail": "Routed to handbook retrieval pipeline.",
-      "status": "done",
-      "timestamp": "2026-03-21T20:09:59+08:00"
-    }
-  ],
+  "trace": [],
   "route": "encyclopedia",
   "ui_payload": {
     "schedule": null,
     "encyclopedia": {
       "query": "credit requirements",
-      "answer_markdown": "### Credit Requirement Summary\n- Undergraduate students must complete the program credit minimum.",
+      "answer_markdown": "### Credit Requirement Summary\n- ...",
       "citations": [
-        "Student Handbook / Degree Requirements / General Rules"
+        "Student Handbook / Degree Requirements"
       ]
     }
   },
@@ -704,15 +499,15 @@ POST /api/agent/run
 }
 ```
 
-## 5.9 HITL 拦截返回示例
+## 8.5 HITL 响应示例
 
 ```json
 {
-  "session_id": "sess_20260321_01",
+  "session_id": "sess_ab12cd34",
   "assistant_message": {
     "role": "assistant",
     "content": "This action requires manual approval before execution.",
-    "timestamp": "2026-03-21T20:05:00+08:00"
+    "timestamp": "2026-03-23T10:07:00+08:00"
   },
   "trace": [
     {
@@ -720,16 +515,16 @@ POST /api/agent/run
       "title": "Awaiting authorization",
       "detail": "Calendar overwrite is classified as a high-risk action.",
       "status": "pending",
-      "timestamp": "2026-03-21T20:05:00+08:00"
+      "timestamp": "2026-03-23T10:07:00+08:00"
     }
   ],
-  "route": "chat",
+  "route": "os_automation",
   "ui_payload": {
     "schedule": null,
     "encyclopedia": null
   },
   "hitl_request": {
-    "request_id": "hitl_9001",
+    "request_id": "hitl_sess_ab12cd34_001",
     "action": "Overwrite local study calendar",
     "risk": "high",
     "reason": "The agent wants to move three study blocks to avoid a deadline collision.",
@@ -742,234 +537,14 @@ POST /api/agent/run
 }
 ```
 
-## 5.10 HITL 审批回传示例
+## 9. 当前联调最重要的结论
 
-当前前端会复用同一个接口，把审批结果再发回去：
+如果你只想先把前端跑起来，优先保证这 5 条：
 
-```json
-{
-  "user_id": "u_001",
-  "session_id": "sess_20260321_01",
-  "message": "",
-  "attachments": [],
-  "context": {
-    "active_tab": "chat",
-    "selected_feature": "os_automation"
-  },
-  "hitl_reply": {
-    "request_id": "hitl_9001",
-    "approved": true
-  }
-}
-```
+1. `login/register` 能返回 `token`
+2. `bootstrap` 能返回完整对象且不缺字段
+3. `PUT /api/user/credentials` 能正常接收并返回 `204`
+4. `POST /api/materials/upload` 能返回 `MaterialInfo`
+5. `POST /api/agent/run` 能返回完整的 `AgentResponse`
 
-后端收到后建议：
-
-1. 根据 `request_id` 找到对应待审批动作
-2. 判断 `approved`
-3. 如果批准，则继续执行或继续规划
-4. 再把新的 `assistant_message`、`trace`、`ui_payload` 返回给前端
-
-## 5.11 前端消费方式
-
-这个接口返回的数据在前端里的映射关系如下：
-
-- `assistant_message.content` -> 主聊天区
-- `trace[]` -> 右侧 Thought Trace
-- `route` -> 标记本次结果更偏向哪种能力
-- `ui_payload.schedule` -> 聊天中的日程结果卡片
-- `ui_payload.encyclopedia` -> 聊天中的校园问答结果卡片
-- `hitl_request` -> 授权弹窗
-
-## 6. 错误处理建议
-
-## 6.1 推荐保留 `error` 字段
-
-建议所有返回都保留：
-
-```json
-{
-  "error": null
-}
-```
-
-当发生业务错误时，可以写成：
-
-```json
-{
-  "error": {
-    "code": "RAG_TIMEOUT",
-    "message": "Vector retrieval timed out.",
-    "retryable": true
-  }
-}
-```
-
-说明：
-
-- 当前前端对 `error` 的 UI 展示还比较轻
-- 但这个字段非常适合后续扩展，不建议省掉
-
-## 6.2 HTTP 状态码建议
-
-- `200`: 请求成功，哪怕业务上返回了 `hitl_request`
-- `400`: 参数错误
-- `404`: 资源不存在
-- `500`: 后端内部错误
-- `503`: 外部工具服务不可用
-
-## 7. 当前前端实际联调方式
-
-当前前端已经支持通过环境变量连接真实后端：
-
-```bash
-export SPA_API_BASE_URL=http://127.0.0.1:8000
-python3 frontend/app.py
-```
-
-联调行为如下：
-
-1. 用户登录成功后
-   前端调用 `GET /api/dashboard/bootstrap`
-
-2. 用户在聊天框发消息
-   前端调用 `POST /api/agent/run`
-
-3. 用户在聊天输入区切换到 `Schedule` 或 `Campus QA` 模式后发消息
-   前端也调用 `POST /api/agent/run`
-
-4. 后端如果返回 `hitl_request`
-   前端会弹出授权框
-
-5. 用户点击同意 / 拒绝
-   前端再次调用 `POST /api/agent/run`，带上 `hitl_reply`
-
-## 8. 推荐后端实现顺序
-
-如果你们想最快联通，建议按下面顺序做：
-
-### 第一步
-
-先做 `GET /api/dashboard/bootstrap`
-
-哪怕先返回静态数据也没关系，只要结构稳定，前端就能先把主界面吃起来。
-
-### 第二步
-
-做 `POST /api/agent/run` 的最小返回版本：
-
-- `assistant_message`
-- `trace`
-- `route`
-- `ui_payload`
-- `hitl_request: null`
-
-这样前端聊天、百科、日程切页就能先联通。
-
-### 第三步
-
-再补 `hitl_request`
-
-这样高风险操作弹窗也能跑起来。
-
-### 第四步
-
-最后再让 `ui_payload.schedule` 和 `ui_payload.encyclopedia` 真正接你们的工具链和 RAG。
-
-## 9. curl 联调示例
-
-## 9.1 bootstrap
-
-```bash
-curl "http://127.0.0.1:8000/api/dashboard/bootstrap?user_id=student"
-```
-
-## 9.2 普通 agent 请求
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/agent/run" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "student",
-    "session_id": "sess_demo_001",
-    "message": "check credit requirements",
-    "attachments": [],
-    "context": {
-      "active_tab": "chat",
-      "selected_feature": "encyclopedia"
-    },
-    "hitl_reply": null,
-    "connection_settings": {
-      "cas": {
-        "username": "1221xxxx",
-        "password": "example-password"
-      },
-      "api": {
-        "base_url": "https://api.example.com",
-        "api_key": "example-api-key"
-      }
-    }
-  }'
-```
-
-## 9.3 HITL 审批回传
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/agent/run" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "student",
-    "session_id": "sess_demo_001",
-    "message": "",
-    "attachments": [],
-    "context": {
-      "active_tab": "chat",
-      "selected_feature": "os_automation"
-    },
-    "connection_settings": {
-      "cas": {
-        "username": "1221xxxx",
-        "password": "example-password"
-      },
-      "api": {
-        "base_url": "https://api.example.com",
-        "api_key": "example-api-key"
-      }
-    },
-    "hitl_reply": {
-      "request_id": "hitl_9001",
-      "approved": true
-    }
-  }'
-```
-
-## 10. 后端联调检查清单
-
-后端同学可以按这个清单自查：
-
-- `bootstrap` 是否一定返回 `user_profile / chat_history / materials / local_schedule`
-- `local_schedule` 是否是对象而不是数组
-- `local_schedule.events` 和 `local_schedule.conflicts` 是否字段齐全
-- `agent/run` 是否一定返回 `assistant_message / trace / route / ui_payload / hitl_request / error`
-- `trace.status` 是否只使用 `done / running / pending`
-- `route` 是否只使用 `chat / scheduler / encyclopedia`
-- `hitl_request` 是否包含 `request_id / action / risk / reason / payload`
-- `ui_payload.encyclopedia.answer_markdown` 是否真的是 markdown 字符串
-- 所有时间字段是否统一使用 `ISO 8601`
-
-## 11. 当前最重要的结论
-
-如果后端现在时间有限，先保证下面两件事就够前端联调：
-
-1. `GET /api/dashboard/bootstrap` 返回结构稳定
-2. `POST /api/agent/run` 返回结构稳定
-
-只要这两件事稳定了，前端这边的：
-
-- 聊天
-- Trace
-- 日程
-- 百科
-- HITL
-
-就都能跟着接起来。
+做到这 5 条，当前 `zhaoxun` 分支前端就能和 `main` 的后端框架跑通主流程。
