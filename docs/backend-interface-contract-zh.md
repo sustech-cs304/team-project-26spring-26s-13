@@ -21,16 +21,16 @@
 4. `GET /api/dashboard/bootstrap`
 5. `PUT /api/user/credentials`
 6. `POST /api/materials/upload`
-7. `POST /api/agent/run`
+7. `GET /api/materials`
+8. `POST /api/schedule/refresh`
+9. `GET /api/agent/sessions`
+10. `DELETE /api/agent/sessions/{session_id}`
+11. `POST /api/agent/run`
 
 当前后端仓库里还有这些接口，但前端这版没有直接主动调用：
 
-- `GET /api/materials`
 - `GET /api/user/profile`
 - `PUT /api/user/profile`
-- `POST /api/schedule/refresh`
-- `GET /api/agent/sessions`
-- `DELETE /api/agent/sessions/{session_id}`
 
 ## 2. 当前前端界面怎么消费这些接口
 
@@ -52,10 +52,12 @@ Dashboard 是三栏：
 
 补充说明：
 
-- 输入框下方仍保留 `Chat / Schedule / Campus QA` 模式选择
+- 输入框下方仍保留 `Chat / Schedule / Campus QA` 模式下拉选择
 - 但这只是当前前端的交互引导和 mock 路由
 - 在真实后端模式下，前端不会再把 `selected_feature` 发给后端
 - 路由判断由后端自己的 agent/router 决定
+- 左栏可多选资料；发送消息时，选中的资料会被转成 `attachments`
+- 左栏历史对话会在 bootstrap 后继续调用 `GET /api/agent/sessions` 补齐远端会话摘要
 
 ### 2.3 前端和后端的职责边界
 
@@ -298,11 +300,11 @@ Authorization: Bearer <jwt-token>
 
 ### 前端用途
 
-- 设置弹窗里点 `Save CAS` 时，前端会发 `cas_account` 和 `cas_password`
+- 设置弹窗里点 `Save CAS` 时，前端会按当前填写情况发送一个或两个 CAS 字段
 - 点 `Save API` 时，前端会发 `llm_api_key`
 - 如果当前不在 REST 模式，前端只做本地保存，不会调用此接口
 
-## 7. 材料上传接口
+## 7. 材料与同步接口
 
 ## 7.1 `POST /api/materials/upload`
 
@@ -342,8 +344,70 @@ Content-Type: multipart/form-data
 
 ### 前端用途
 
-- 成功后，把 `file_name` 插到左侧资料列表
+- 成功后，前端会再调一次 `GET /api/materials`
+- 用后端返回的最新 materials 刷新左侧资料列表
 - 并在右侧 trace 里追加“已加载资料”
+
+## 7.2 `GET /api/materials`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### 前端用途
+
+- 当前前端会在上传资料成功后调这个接口
+- 目的是用后端的真实 materials 列表刷新左侧资料区，而不是只依赖单次上传返回值
+
+## 7.3 `POST /api/schedule/refresh`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### 请求体
+
+```json
+{}
+```
+
+### 前端用途
+
+- Dashboard 顶部有 `Refresh Schedule` 按钮
+- 用户点击后，前端会调这个接口
+- 返回的 `events / conflicts` 会直接渲染成聊天里的 `Schedule` 结果卡片
+
+## 7.4 `GET /api/agent/sessions`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### 前端用途
+
+- 登录成功并完成 bootstrap 后，前端会继续调这个接口
+- 左栏历史对话会显示远端会话摘要和更新时间
+- 当前会话如果还没进入远端列表，前端会暂时保留本地会话项
+
+## 7.5 `DELETE /api/agent/sessions/{session_id}`
+
+### 请求头
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+### 前端用途
+
+- 左栏 `Delete Chat` 会调用这个接口
+- 只有当前会话已经有真实远端状态时，前端才会请求后端删除
+- 删除成功后，前端会把该会话从左栏移除
 
 ## 8. Agent 主接口
 
@@ -363,7 +427,13 @@ Content-Type: application/json
   "user_id": "u_001",
   "session_id": "sess_ab12cd34",
   "message": "Check whether my Blackboard deadlines conflict with lab time.",
-  "attachments": [],
+  "attachments": [
+    {
+      "file_id": "file_201",
+      "file_name": "uploaded_notes.md",
+      "file_type": "text/markdown"
+    }
+  ],
   "hitl_reply": null
 }
 ```
@@ -388,7 +458,8 @@ Content-Type: application/json
 - `user_id`：来自登录 / bootstrap
 - `session_id`：前端创建并维护，用于区分左侧会话
 - `message`：用户输入
-- `attachments`：当前前端暂时传空数组；后续如果要引用已上传文件，可以填这里
+- `attachments`：如果用户在左栏选中了资料，前端会把它们转成 `AttachmentRef`
+- `attachments`：如果当前没选资料，则会传空数组
 - `hitl_reply`：只有在用户点了批准 / 拒绝后才会非空
 
 ## 8.2 返回体

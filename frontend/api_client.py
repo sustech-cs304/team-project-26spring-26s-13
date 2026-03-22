@@ -156,6 +156,15 @@ class BackendApiClient:
             raise BackendApiError("Agent response must be a JSON object.")
         return payload
 
+    def list_sessions(self) -> list[dict[str, Any]]:
+        payload = self._request("GET", "/api/agent/sessions")
+        if not isinstance(payload, list):
+            raise BackendApiError("Sessions response must be a JSON array.")
+        return [item for item in payload if isinstance(item, dict)]
+
+    def delete_session(self, session_id: str) -> None:
+        self._request("DELETE", f"/api/agent/sessions/{session_id}")
+
     def refresh_schedule(self) -> dict[str, Any]:
         payload = self._request("POST", "/api/schedule/refresh", json_body={})
         if not isinstance(payload, dict):

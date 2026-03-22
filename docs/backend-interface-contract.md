@@ -21,16 +21,16 @@ In REST mode, the frontend currently calls:
 4. `GET /api/dashboard/bootstrap`
 5. `PUT /api/user/credentials`
 6. `POST /api/materials/upload`
-7. `POST /api/agent/run`
+7. `GET /api/materials`
+8. `POST /api/schedule/refresh`
+9. `GET /api/agent/sessions`
+10. `DELETE /api/agent/sessions/{session_id}`
+11. `POST /api/agent/run`
 
 The backend also exposes more endpoints on `main`, but the current frontend does not actively depend on them yet:
 
-- `GET /api/materials`
 - `GET /api/user/profile`
 - `PUT /api/user/profile`
-- `POST /api/schedule/refresh`
-- `GET /api/agent/sessions`
-- `DELETE /api/agent/sessions/{session_id}`
 
 ## Current frontend behavior
 
@@ -51,6 +51,8 @@ Important note:
 - the mode menu (`Chat / Schedule / Campus QA`) is still visible in the UI
 - but in real backend mode, the frontend no longer sends explicit route hints
 - backend-side routing is expected to happen inside the current agent/router implementation
+- selected items in the left material list are forwarded as `attachments`
+- the history sidebar is supplemented by `GET /api/agent/sessions`
 
 ## Common rules
 
@@ -231,7 +233,7 @@ Recommended response:
 
 Frontend behavior:
 
-- `Save CAS` sends `cas_account` + `cas_password`
+- `Save CAS` sends whichever CAS fields the user filled in
 - `Save API` sends `llm_api_key`
 
 ## 4. Material Upload
@@ -271,8 +273,67 @@ Response:
 
 Frontend behavior:
 
-- insert `file_name` into the left material list
+- call `GET /api/materials` after successful uploads
+- refresh the left material list from the backend response
 - append a trace item saying materials were loaded
+
+## `GET /api/materials`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Frontend behavior:
+
+- called after successful uploads
+- used to refresh the authoritative left-sidebar material list
+
+## `POST /api/schedule/refresh`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Request:
+
+```json
+{}
+```
+
+Frontend behavior:
+
+- triggered by the `Refresh Schedule` button in the dashboard header
+- response data is rendered as a schedule result card inside the chat flow
+
+## `GET /api/agent/sessions`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Frontend behavior:
+
+- called after bootstrap to populate the left conversation history with remote summaries
+- used again after chat responses to keep timestamps/previews in sync
+
+## `DELETE /api/agent/sessions/{session_id}`
+
+Headers:
+
+```http
+Authorization: Bearer <jwt-token>
+```
+
+Frontend behavior:
+
+- triggered by `Delete Chat` in the left sidebar
+- only used when the current chat has remote-backed state
 
 ## 5. Agent
 
@@ -292,7 +353,13 @@ Normal request:
   "user_id": "u_001",
   "session_id": "sess_ab12cd34",
   "message": "Check whether my Blackboard deadlines conflict with lab time.",
-  "attachments": [],
+  "attachments": [
+    {
+      "file_id": "file_201",
+      "file_name": "uploaded_notes.md",
+      "file_type": "text/markdown"
+    }
+  ],
   "hitl_reply": null
 }
 ```
@@ -386,6 +453,7 @@ Frontend mapping:
 - `ui_payload.encyclopedia` -> campus QA card inside chat
 - `hitl_request` -> authorization dialog
 - `error` -> error trace item
+- selected materials are forwarded as `attachments`; when nothing is selected, the frontend sends `[]`
 
 ## Most important implementation target
 

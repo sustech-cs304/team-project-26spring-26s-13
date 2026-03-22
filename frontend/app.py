@@ -672,15 +672,22 @@ class MainWindow(QMainWindow):
         messages: list[dict[str, Any]] | None = None,
         trace: list[dict[str, str]] | None = None,
         pending_hitl_request: dict[str, Any] | None = None,
+        title: str | None = None,
+        remote_updated_at: str | None = None,
     ) -> dict[str, Any]:
         return {
             "session_id": session_id or self._new_session_id(),
             "messages": list(messages or self._build_new_chat_messages()),
             "trace": list(trace or []),
             "pending_hitl_request": pending_hitl_request,
+            "title": title,
+            "remote_updated_at": remote_updated_at,
         }
 
     def _derive_conversation_title(self, conversation: dict[str, Any]) -> str:
+        title = str(conversation.get("title", "")).strip()
+        if title:
+            return title[:32] + ("..." if len(title) > 32 else "")
         for item in conversation["messages"]:
             if item.get("sender") == "user" and str(item.get("text", "")).strip():
                 title = str(item.get("text", "")).strip().replace("\n", " ")
@@ -688,11 +695,21 @@ class MainWindow(QMainWindow):
         return self.ui("new_chat")
 
     def _conversation_meta(self, conversation: dict[str, Any]) -> str:
+        updated_at = str(conversation.get("remote_updated_at", "")).strip()
+        if updated_at:
+            return self.ui("conversation_meta_remote", updated=self._format_remote_timestamp(updated_at))
         return self.ui(
             "conversation_meta",
             messages=len(conversation["messages"]),
             trace=len(conversation["trace"]),
         )
+
+    def _format_remote_timestamp(self, value: str) -> str:
+        if "T" in value:
+            value = value.replace("T", " ")
+        if "+" in value:
+            value = value.split("+", 1)[0]
+        return value[:16] if len(value) > 16 else value
 
     def _resource_display_name(self, resource_name: str) -> str:
         return Path(resource_name).name or resource_name
@@ -844,6 +861,80 @@ class MainWindow(QMainWindow):
             "reason": str(payload.get("reason", self.local(HITL_REQUEST["reason"]))),
             "payload": [str(item) for item in payload.get("payload", [])],
         }
+
+    def _selected_material_attachments(self) -> list[dict[str, Any]]:
+        if not hasattr(self, "resource_list") or not self.material_records:
+            return []
+
+        attachments: list[dict[str, Any]] = []
+        for item in self.resource_list.selectedItems():
+            row = self.resource_list.row(item)
+            if row < 0 or row >= len(self.material_records):
+                continue
+            material = self.material_records[row]
+            attachments.append(
+                {
+                    "file_id": str(material.get("file_id", "")),
+                    "file_name": str(material.get("file_name", "")),
+                    "file_type": str(material.get("file_type", "")),
+                }
+            )
+        return [item for item in attachments if item["file_id"]]
+
+    def _sync_remote_sessions(self) -> None:
+        if not (self.api_client.enabled and self.api_client.authenticated):
+            return
+
+        try:
+            summaries = self.api_client.list_sessions()
+        except BackendApiError:
+            return
+
+        if not summaries:
+            return
+
+        existing = {conversation["session_id"]: conversation for conversation in self.conversations}
+        merged: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for item in summaries:
+            session_id = str(item.get("session_id", "")).strip()
+            if not session_id:
+                continue
+            preview = str(item.get("preview", "")).strip()
+            updated_at = str(item.get("updated_at", "")).strip()
+            conversation = existing.get(session_id)
+            if conversation is None:
+                placeholder_messages = (
+                    [self._create_text_message("agent", preview)]
+                    if preview
+                    else self._build_new_chat_messages()
+                )
+                conversation = self._create_conversation(
+                    session_id=session_id,
+                    messages=placeholder_messages,
+                    trace=[],
+                    title=preview,
+                    remote_updated_at=updated_at,
+                )
+            else:
+                conversation["title"] = preview or conversation.get("title")
+                conversation["remote_updated_at"] = updated_at
+
+            merged.append(conversation)
+            seen.add(session_id)
+
+        active = self._active_conversation()
+        if active and active["session_id"] not in seen:
+            merged.insert(0, active)
+
+        if merged:
+            self.conversations = merged
+            if active and active["session_id"] in {item["session_id"] for item in merged}:
+                self.active_conversation_id = active["session_id"]
+            else:
+                self.active_conversation_id = merged[0]["session_id"]
+            self._refresh_conversation_list()
 
     def _build_root(self) -> None:
         self.setWindowTitle(self.app_title())
@@ -1325,6 +1416,8 @@ class MainWindow(QMainWindow):
         settings_button.clicked.connect(self.open_settings_dialog)
         refresh_button = QPushButton(self.ui("refresh_mock"))
         refresh_button.clicked.connect(self.refresh_mock_content)
+        refresh_schedule_button = QPushButton(self.ui("refresh_schedule"))
+        refresh_schedule_button.clicked.connect(self.refresh_schedule_data)
         simulate_button = QPushButton(self.ui("simulate_hitl"))
         simulate_button.setObjectName("PrimaryButton")
         simulate_button.clicked.connect(self.open_hitl_dialog)
@@ -1337,6 +1430,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(lang_button)
         layout.addWidget(settings_button)
         layout.addWidget(refresh_button)
+        layout.addWidget(refresh_schedule_button)
         layout.addWidget(simulate_button)
         layout.addWidget(logout_button)
         return layout
@@ -1393,6 +1487,8 @@ class MainWindow(QMainWindow):
         new_chat_button = QPushButton(self.ui("new_chat"))
         new_chat_button.setObjectName("PrimaryButton")
         new_chat_button.clicked.connect(self.start_new_chat)
+        delete_chat_button = QPushButton(self.ui("delete_chat"))
+        delete_chat_button.clicked.connect(self.delete_current_chat)
         history_hint = QLabel(self.ui("conversation_history_hint"))
         history_hint.setObjectName("MutedText")
         history_hint.setWordWrap(True)
@@ -1402,6 +1498,7 @@ class MainWindow(QMainWindow):
 
         history_header.addWidget(history_title)
         history_header.addStretch(1)
+        history_header.addWidget(delete_chat_button)
         history_header.addWidget(new_chat_button)
         history_layout.addLayout(history_header)
         history_layout.addWidget(history_hint)
@@ -1421,6 +1518,7 @@ class MainWindow(QMainWindow):
 
         self.resource_list = QListWidget()
         self.resource_list.setObjectName("ResourceList")
+        self.resource_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self._load_resource_files()
 
         add_button = QPushButton(self.ui("add_resource"))
@@ -1655,7 +1753,9 @@ class MainWindow(QMainWindow):
 
         payload = dialog.payload()
         if dialog.intent == "cas":
-            if not payload["cas_username"] or not payload["cas_password"]:
+            cas_account = payload["cas_username"] or None
+            cas_password = payload["cas_password"] or None
+            if cas_account is None and cas_password is None:
                 QMessageBox.warning(
                     self,
                     self.ui("settings_dialog_title"),
@@ -1666,8 +1766,8 @@ class MainWindow(QMainWindow):
             if self.api_client.enabled and self.api_client.authenticated:
                 try:
                     self.api_client.update_credentials(
-                        cas_account=payload["cas_username"],
-                        cas_password=payload["cas_password"],
+                        cas_account=cas_account,
+                        cas_password=cas_password,
                     )
                 except BackendApiError as exc:
                     QMessageBox.warning(
@@ -1678,8 +1778,8 @@ class MainWindow(QMainWindow):
                     return
 
             self.cas_settings = {
-                "username": payload["cas_username"],
-                "password": payload["cas_password"],
+                "username": cas_account or self.cas_settings.get("username", ""),
+                "password": cas_password or self.cas_settings.get("password", ""),
                 "saved": True,
             }
             QMessageBox.information(
@@ -1826,6 +1926,7 @@ class MainWindow(QMainWindow):
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
 
+        self._sync_remote_sessions()
         self._refresh_profile_views()
 
     def _apply_agent_response(self, response: dict[str, Any], auto_open_hitl: bool = True) -> None:
@@ -1892,6 +1993,7 @@ class MainWindow(QMainWindow):
         hitl_request = response.get("hitl_request")
         self.pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
         self._sync_active_conversation()
+        self._sync_remote_sessions()
         if self.pending_hitl_request and auto_open_hitl:
             self.open_hitl_dialog()
 
@@ -2027,6 +2129,38 @@ class MainWindow(QMainWindow):
         if hasattr(self, "message_input"):
             self.message_input.clear()
 
+    def delete_current_chat(self) -> None:
+        conversation = self._active_conversation()
+        if conversation is None:
+            return
+
+        result = QMessageBox.question(
+            self,
+            self.ui("delete_chat_confirm_title"),
+            self.ui("delete_chat_confirm_body"),
+        )
+        if result != QMessageBox.StandardButton.Yes:
+            return
+
+        session_id = str(conversation["session_id"])
+        should_delete_remote = any(item.get("sender") == "user" for item in conversation.get("messages", []))
+        should_delete_remote = should_delete_remote or bool(str(conversation.get("remote_updated_at", "")).strip())
+        should_delete_remote = should_delete_remote or bool(str(conversation.get("title", "")).strip())
+
+        if self.api_client.enabled and self.api_client.authenticated and should_delete_remote:
+            try:
+                self.api_client.delete_session(session_id)
+            except BackendApiError as exc:
+                QMessageBox.warning(self, self.ui("delete_chat_failed_title"), str(exc))
+                return
+
+        self.conversations = [item for item in self.conversations if item["session_id"] != session_id]
+        if not self.conversations:
+            self.session_id = self._new_session_id()
+            replacement = self._create_conversation(session_id=self.session_id)
+            self.conversations = [replacement]
+        self._activate_conversation(self.conversations[0]["session_id"])
+
     def logout(self) -> None:
         if self.api_client.authenticated:
             try:
@@ -2049,10 +2183,11 @@ class MainWindow(QMainWindow):
         if not text:
             return
 
+        attachments = self._selected_material_attachments()
         self.chat_messages.append(self._create_text_message("user", text))
         self._move_active_conversation_to_top()
         self._load_chat_messages(self.chat_messages)
-        if self._run_remote_agent(message=text):
+        if self._run_remote_agent(message=text, attachments=attachments):
             self.message_input.clear()
             return
 
@@ -2146,6 +2281,45 @@ class MainWindow(QMainWindow):
         self._build_root()
         self.stack.setCurrentWidget(self.dashboard_page if self.current_username else self.home_page)
 
+    def refresh_schedule_data(self) -> None:
+        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
+            self.refresh_mock_content()
+            return
+
+        try:
+            payload = self.api_client.refresh_schedule()
+        except BackendApiError as exc:
+            QMessageBox.warning(self, self.ui("refresh_schedule_failed_title"), str(exc))
+            self._append_trace(
+                self.local({"en": "Observation", "zh": "观察"}),
+                self.ui("refresh_schedule_failed_title"),
+                str(exc),
+                "error",
+            )
+            return
+
+        events = payload.get("events", [])
+        conflicts = payload.get("conflicts", [])
+        if isinstance(events, list):
+            self.schedule_events = self._normalize_schedule_events(events)
+        if isinstance(conflicts, list):
+            self.conflicts = self._normalize_conflicts(conflicts)
+
+        self.chat_messages.append(
+            self._create_schedule_message(
+                intro=self.ui("schedule_card_intro"),
+                events=self.schedule_events,
+                conflicts=self.conflicts,
+            )
+        )
+        self._load_chat_messages(self.chat_messages)
+        self._append_trace(
+            self.local({"en": "Observation", "zh": "观察"}),
+            self.ui("trace_schedule_refresh_title"),
+            self.ui("trace_schedule_refresh_detail"),
+            "done",
+        )
+
     def _add_resource_files(self) -> None:
         selected_files, _selected_filter = QFileDialog.getOpenFileNames(
             self,
@@ -2196,8 +2370,20 @@ class MainWindow(QMainWindow):
                 self,
                 self.ui("resource_already_loaded_title"),
                 self.ui("resource_already_loaded_body"),
-            )
+                )
             return
+
+        if self.api_client.enabled and self.api_client.authenticated:
+            try:
+                materials = self.api_client.list_materials()
+            except BackendApiError:
+                materials = []
+            if materials:
+                self.material_records = materials
+                self.resource_files = [
+                    str(item.get("file_name") or item.get("name") or item.get("file_id") or "resource")
+                    for item in materials
+                ]
 
         self._load_resource_files()
         preview = ", ".join(added_files[:2])

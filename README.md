@@ -41,17 +41,22 @@ python3 frontend/app.py
   - `GET /api/materials`
   - `POST /api/materials/upload`
   - `GET /api/dashboard/bootstrap`
+  - `POST /api/schedule/refresh`
+  - `GET /api/agent/sessions`
+  - `DELETE /api/agent/sessions/{session_id}`
   - `POST /api/agent/run`
 - Login and registration use the backend when REST mode is enabled; otherwise the app falls back to local mock auth.
-- The settings dialog now maps to backend credentials storage (`CAS` + `LLM API Key`) when the user is authenticated.
-- The `Add Resource` button uploads files to `/api/materials/upload` in REST mode and falls back to local sidebar-only loading in mock mode.
+- The settings dialog now maps to backend credentials storage (`CAS` + `LLM API Key`) when the user is authenticated, and `CAS` supports partial updates.
+- The `Add Resource` button uploads files to `/api/materials/upload`, then refreshes the authoritative material list from `GET /api/materials` in REST mode.
 - After login, the dashboard uses a chat-first flow:
   - left: conversation history + materials
   - center: chat composer and result cards
   - right: thought trace + HITL
 - `Schedule` and `Campus QA` are rendered as chat result cards instead of separate main pages.
 - The composer mode menu is kept for UX guidance and local mock routing; the current backend framework performs its own route selection from the message content.
-- Dashboard bootstrap, auth, materials upload, chat, schedule, encyclopedia, and HITL flows are wired to the current backend contract.
+- Selected materials in the left sidebar are forwarded to `POST /api/agent/run` as `attachments`.
+- Conversation history now syncs with `GET /api/agent/sessions`, `Delete Chat` uses `DELETE /api/agent/sessions/{session_id}`, and `Refresh Schedule` uses `POST /api/schedule/refresh`.
+- Dashboard bootstrap, auth, materials upload, sessions, schedule refresh, chat, encyclopedia, and HITL flows are wired to the current backend contract.
 - Current backend-facing docs:
   - [docs/backend-interface-contract-zh.md](docs/backend-interface-contract-zh.md)
   - [docs/backend-interface-contract.md](docs/backend-interface-contract.md)

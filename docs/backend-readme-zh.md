@@ -24,7 +24,11 @@
 - `/api/auth/logout`
 - `/api/dashboard/bootstrap`
 - `/api/user/credentials`
+- `/api/materials`
 - `/api/materials/upload`
+- `/api/schedule/refresh`
+- `/api/agent/sessions`
+- `/api/agent/sessions/{session_id}`
 - `/api/agent/run`
 
 也就是说，后端现在最重要的不是再重新讨论接口设计，而是尽快把这批接口的实现补上。
@@ -67,7 +71,7 @@ Dashboard 是三栏：
 
 ### 2.4 模式选择怎么理解
 
-输入框下面现在还有 `Chat / Schedule / Campus QA` 模式按钮。
+输入框下面现在还有 `Chat / Schedule / Campus QA` 模式下拉入口。
 
 但当前真实联调里：
 
@@ -79,6 +83,7 @@ Dashboard 是三栏：
 
 - 不要再按旧文档依赖 `context.selected_feature`
 - 现在请按 `backend/schemas/agent.py` 的 `AgentRequest` 来收
+- 左栏多选的资料会被前端转成 `attachments`
 
 ## 3. 前端什么时候调什么接口
 
@@ -181,10 +186,35 @@ Content-Type: multipart/form-data
 
 上传成功后，前端会：
 
-- 把返回的 `file_name` 加到左栏资料列表
+- 再调一次 `GET /api/materials`
+- 用后端返回的完整 materials 列表刷新左栏资料区
 - 在 trace 里追加“已加载资料”
 
-## 3.6 发送聊天消息
+## 3.6 左栏历史对话同步
+
+进入 Dashboard 并完成 bootstrap 后，前端会继续调：
+
+```http
+GET /api/agent/sessions
+```
+
+作用是：
+
+- 给左栏历史对话补齐远端 session summary
+- 显示 preview 和 updated_at
+- 聊天成功返回后，前端也会再次同步这个列表
+
+## 3.7 删除聊天
+
+左栏点 `Delete Chat` 时，前端会优先本地移除当前会话；如果这个会话已经有远端状态，还会继续调：
+
+```http
+DELETE /api/agent/sessions/{session_id}
+```
+
+如果只是一个还没真正发出去的新空白会话，前端不会强行请求后端删除。
+
+## 3.8 发送聊天消息
 
 用户发消息时：
 
@@ -199,12 +229,34 @@ POST /api/agent/run
   "user_id": "u_001",
   "session_id": "sess_ab12cd34",
   "message": "Check whether my Blackboard deadlines conflict with lab time.",
-  "attachments": [],
+  "attachments": [
+    {
+      "file_id": "file_201",
+      "file_name": "uploaded_notes.md",
+      "file_type": "text/markdown"
+    }
+  ],
   "hitl_reply": null
 }
 ```
 
-### 3.7 HITL 回执
+如果当前没有选中任何资料，前端会传：
+
+```json
+"attachments": []
+```
+
+## 3.9 刷新日程
+
+Dashboard 顶部 `Refresh Schedule` 会调：
+
+```http
+POST /api/schedule/refresh
+```
+
+返回的 `events / conflicts` 会直接渲染成聊天里的 `Schedule` 卡片，并在右栏 trace 里追加一条“已刷新日程”。
+
+## 3.10 HITL 回执
 
 如果后端返回了 `hitl_request`，前端会弹窗。
 
@@ -271,10 +323,28 @@ POST /api/agent/run
 实现：
 
 - `POST /api/materials/upload`
+- `GET /api/materials`
 
-这一步通了，左栏资料导入就是真上传，不再只是本地文件列表。
+这一步通了，左栏资料导入就是真上传，而且上传后能立即刷新成后端真实 materials 列表。
 
-### 第五步：agent/run
+### 第五步：sessions
+
+实现：
+
+- `GET /api/agent/sessions`
+- `DELETE /api/agent/sessions/{session_id}`
+
+这一步通了，左栏历史对话和删除聊天就能真正联到后端。
+
+### 第六步：schedule refresh
+
+实现：
+
+- `POST /api/schedule/refresh`
+
+这一步通了，顶部 `Refresh Schedule` 就能真正返回最新日程并渲染成聊天卡片。
+
+### 第七步：agent/run
 
 实现：
 
