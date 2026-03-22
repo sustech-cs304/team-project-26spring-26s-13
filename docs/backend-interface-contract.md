@@ -53,6 +53,8 @@ Important note:
 - backend-side routing is expected to happen inside the current agent/router implementation
 - selected items in the left material list are forwarded as `attachments`
 - the history sidebar is supplemented by `GET /api/agent/sessions`
+- assistant replies and trace steps are progressively rendered in the UI for a streaming-like experience
+- the transport contract is still ordinary JSON; SSE/WebSocket is not required for the current frontend to work
 
 ## Common rules
 

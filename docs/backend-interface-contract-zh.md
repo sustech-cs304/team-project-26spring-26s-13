@@ -58,6 +58,8 @@ Dashboard 是三栏：
 - 路由判断由后端自己的 agent/router 决定
 - 左栏可多选资料；发送消息时，选中的资料会被转成 `attachments`
 - 左栏历史对话会在 bootstrap 后继续调用 `GET /api/agent/sessions` 补齐远端会话摘要
+- assistant 回复和 trace 在当前前端里会做渐进式渲染，用户看到的是流式体验
+- 但当前接口层仍然是普通 JSON 响应，不要求后端已经提供 SSE / WebSocket
 
 ### 2.3 前端和后端的职责边界
 
