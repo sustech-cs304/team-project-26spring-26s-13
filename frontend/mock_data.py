@@ -95,6 +95,7 @@ AUTH_DEMO_ACCOUNTS = [
     {
         "username": "student",
         "password": "123456",
+        "display_name": {"en": "SUSTech Student", "zh": "南科大学生"},
         "major": {"en": "Software Engineering", "zh": "软件工程"},
     }
 ]

@@ -442,10 +442,8 @@ class SettingsDialog(QDialog):
         api_form = QFormLayout()
         api_form.setContentsMargins(0, 0, 0, 0)
         api_form.setSpacing(10)
-        self.api_base_url_input = QLineEdit(str(api_state.get("base_url", "")))
         self.api_key_input = QLineEdit(str(api_state.get("api_key", "")))
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        api_form.addRow(texts["settings_api_base_url"], self.api_base_url_input)
         api_form.addRow(texts["settings_api_key"], self.api_key_input)
         api_button = QPushButton(texts["settings_save_api"])
         api_button.setObjectName("PrimaryButton")
@@ -479,7 +477,6 @@ class SettingsDialog(QDialog):
         return {
             "cas_username": self.cas_account_input.text().strip(),
             "cas_password": self.cas_password_input.text(),
-            "api_base_url": self.api_base_url_input.text().strip(),
             "api_key": self.api_key_input.text().strip(),
         }
 
@@ -491,10 +488,13 @@ class MainWindow(QMainWindow):
         self.api_client = BackendApiClient.from_env()
         self.language = "en"
         self.current_username: str | None = None
+        self.current_user_id_value: str | None = None
+        self.remote_profile: dict[str, str] | None = None
         self.pending_hitl_request: dict[str, Any] | None = None
         self.registered_users = {
             account["username"]: {
                 "password": account["password"],
+                "display_name": account.get("display_name", account["username"]),
                 "major": account["major"],
             }
             for account in AUTH_DEMO_ACCOUNTS
@@ -506,10 +506,10 @@ class MainWindow(QMainWindow):
             "saved": False,
         }
         self.api_settings = {
-            "base_url": "",
             "api_key": "",
             "saved": False,
         }
+        self.material_records: list[dict[str, Any]] = []
         self.selected_mode = "agent_chat"
         self.mode_button: QPushButton | None = None
         self.mode_menu: QMenu | None = None
@@ -562,31 +562,8 @@ class MainWindow(QMainWindow):
     def _new_session_id(self) -> str:
         return f"sess_{uuid4().hex[:12]}"
 
-    def connection_settings_payload(self) -> dict[str, Any] | None:
-        payload: dict[str, Any] = {}
-        if self.cas_settings.get("saved"):
-            payload["cas"] = {
-                "username": self.cas_settings.get("username", ""),
-                "password": self.cas_settings.get("password", ""),
-            }
-        if self.api_settings.get("saved"):
-            payload["api"] = {
-                "base_url": self.api_settings.get("base_url", ""),
-                "api_key": self.api_settings.get("api_key", ""),
-            }
-        return payload or None
-
     def current_user_id(self) -> str:
-        return self.current_username or "local_student"
-
-    def active_tab_key(self) -> str:
-        return "chat"
-
-    def selected_feature_key(self, prompt: str = "") -> str:
-        lowered = prompt.lower()
-        if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
-            return "os_automation"
-        return self.selected_mode
+        return self.current_user_id_value or self.current_username or "local_student"
 
     def _message_placeholder_for_mode(self) -> str:
         return {
@@ -823,7 +800,7 @@ class MainWindow(QMainWindow):
         normalized = []
         for item in events:
             status = str(item.get("status", "running")).lower()
-            if status not in {"done", "running", "pending"}:
+            if status not in {"done", "running", "pending", "error"}:
                 status = "running"
             normalized.append(
                 {
@@ -898,11 +875,19 @@ class MainWindow(QMainWindow):
         self.schedule_events = self._build_localized_schedule_events()
         self.conflicts = self._build_localized_conflicts()
 
+        if self.remote_profile:
+            self.current_user = {
+                "name": str(self.remote_profile.get("name", self.current_username or self.local(PROFILE["name"]))),
+                "major": str(self.remote_profile.get("major", self.local(PROFILE["major"]))),
+                "focus": self.ui("authenticated_focus"),
+            }
+            return
+
         if self.current_username:
             record = self.registered_users.get(self.current_username)
             major = self.local(record["major"]) if record else self.local(PROFILE["major"])
             self.current_user = {
-                "name": self.current_username,
+                "name": str(self.local(record["display_name"])) if record and "display_name" in record else self.current_username,
                 "major": major,
                 "focus": self.ui("authenticated_focus"),
             }
@@ -960,26 +945,23 @@ class MainWindow(QMainWindow):
         auth_tab_index = self.auth_tabs.currentIndex() if hasattr(self, "auth_tabs") else 0
         login_username = self.login_username_input.text() if hasattr(self, "login_username_input") else ""
         register_username = self.register_username_input.text() if hasattr(self, "register_username_input") else ""
+        register_display_name = (
+            self.register_display_name_input.text() if hasattr(self, "register_display_name_input") else ""
+        )
+        register_major = self.register_major_input.text() if hasattr(self, "register_major_input") else ""
 
         self.language = "zh" if self.language == "en" else "en"
-        if self.current_username:
-            record = self.registered_users.get(self.current_username)
-            major = self.local(record["major"]) if record else self.local(PROFILE["major"])
-            self.current_user = {
-                "name": self.current_user["name"],
-                "major": major,
-                "focus": self.ui("authenticated_focus"),
-            }
-        else:
-            self._reset_dynamic_state()
+        self._reset_dynamic_state()
         self._build_root()
 
         self.login_username_input.setText(login_username)
         self.register_username_input.setText(register_username)
+        self.register_display_name_input.setText(register_display_name)
+        self.register_major_input.setText(register_major)
 
         if current_page == "DashboardPage":
             self.stack.setCurrentWidget(self.dashboard_page)
-            if self.current_username and self.api_client.enabled:
+            if self.current_username and self.api_client.authenticated:
                 self.sync_bootstrap_data(record_trace=False)
         elif current_page == "AuthPage":
             self._show_auth(auth_tab_index)
@@ -1264,6 +1246,12 @@ class MainWindow(QMainWindow):
         self.register_username_input = QLineEdit()
         self.register_username_input.setObjectName("AuthInput")
         self.register_username_input.setPlaceholderText(self.ui("username"))
+        self.register_display_name_input = QLineEdit()
+        self.register_display_name_input.setObjectName("AuthInput")
+        self.register_display_name_input.setPlaceholderText(self.ui("display_name"))
+        self.register_major_input = QLineEdit()
+        self.register_major_input.setObjectName("AuthInput")
+        self.register_major_input.setPlaceholderText(self.ui("major"))
         self.register_password_input = QLineEdit()
         self.register_password_input.setObjectName("AuthInput")
         self.register_password_input.setPlaceholderText(self.ui("password"))
@@ -1282,6 +1270,8 @@ class MainWindow(QMainWindow):
         helper.setWordWrap(True)
 
         layout.addWidget(self.register_username_input)
+        layout.addWidget(self.register_display_name_input)
+        layout.addWidget(self.register_major_input)
         layout.addWidget(self.register_password_input)
         layout.addWidget(self.register_confirm_input)
         layout.addWidget(register_button)
@@ -1673,6 +1663,20 @@ class MainWindow(QMainWindow):
                 )
                 return
 
+            if self.api_client.enabled and self.api_client.authenticated:
+                try:
+                    self.api_client.update_credentials(
+                        cas_account=payload["cas_username"],
+                        cas_password=payload["cas_password"],
+                    )
+                except BackendApiError as exc:
+                    QMessageBox.warning(
+                        self,
+                        self.ui("settings_dialog_title"),
+                        self.ui("trace_backend_unavailable_detail", error=str(exc)),
+                    )
+                    return
+
             self.cas_settings = {
                 "username": payload["cas_username"],
                 "password": payload["cas_password"],
@@ -1685,7 +1689,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if not payload["api_base_url"]:
+        if not payload["api_key"]:
             QMessageBox.warning(
                 self,
                 self.ui("settings_dialog_title"),
@@ -1693,11 +1697,19 @@ class MainWindow(QMainWindow):
             )
             return
 
-        base_url = payload["api_base_url"].rstrip("/")
-        api_key = payload["api_key"]
+        if self.api_client.enabled and self.api_client.authenticated:
+            try:
+                self.api_client.update_credentials(llm_api_key=payload["api_key"])
+            except BackendApiError as exc:
+                QMessageBox.warning(
+                    self,
+                    self.ui("settings_dialog_title"),
+                    self.ui("trace_backend_unavailable_detail", error=str(exc)),
+                )
+                return
+
         self.api_settings = {
-            "base_url": base_url,
-            "api_key": api_key,
+            "api_key": payload["api_key"],
             "saved": True,
         }
         QMessageBox.information(
@@ -1713,19 +1725,34 @@ class MainWindow(QMainWindow):
         self.auth_tabs.setCurrentIndex(tab_index)
         self.stack.setCurrentWidget(self.auth_page)
 
-    def _complete_login(self, username: str) -> None:
+    def _complete_login(
+        self,
+        username: str,
+        *,
+        user_id: str | None = None,
+        display_name: str | None = None,
+        major: str | None = None,
+    ) -> None:
         self.current_username = username
+        self.current_user_id_value = user_id or username
+        if display_name or major:
+            self.remote_profile = {
+                "name": display_name or username,
+                "major": major or self.local(PROFILE["major"]),
+            }
+        else:
+            self.remote_profile = None
         self._reset_dynamic_state()
         self._build_root()
         self.stack.setCurrentWidget(self.dashboard_page)
         self.sync_bootstrap_data(record_trace=True)
 
     def sync_bootstrap_data(self, record_trace: bool) -> None:
-        if not (self.api_client.enabled and self.current_username):
+        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
             return
 
         try:
-            payload = self.api_client.bootstrap_dashboard(self.current_user_id())
+            payload = self.api_client.bootstrap_dashboard()
         except BackendApiError as exc:
             if record_trace:
                 self._append_trace(
@@ -1749,6 +1776,11 @@ class MainWindow(QMainWindow):
         user_profile = payload.get("user_profile", {})
         display_name = str(user_profile.get("display_name") or self.current_username or self.local(PROFILE["name"]))
         major = str(user_profile.get("major") or self.local(PROFILE["major"]))
+        self.current_user_id_value = str(user_profile.get("user_id") or self.current_user_id())
+        self.remote_profile = {
+            "name": display_name,
+            "major": major,
+        }
         self.current_user = {
             "name": display_name,
             "major": major,
@@ -1756,7 +1788,7 @@ class MainWindow(QMainWindow):
         }
 
         chat_history = payload.get("chat_history", [])
-        if isinstance(chat_history, list) and chat_history:
+        if isinstance(chat_history, list):
             self.chat_messages = [
                 {
                     "kind": "text",
@@ -1772,11 +1804,11 @@ class MainWindow(QMainWindow):
             self._load_trace_events(self.trace_events)
 
         materials = payload.get("materials", [])
-        if isinstance(materials, list) and materials:
+        if isinstance(materials, list):
+            self.material_records = [item for item in materials if isinstance(item, dict)]
             self.resource_files = [
                 str(
-                    item.get("local_path")
-                    or item.get("file_name")
+                    item.get("file_name")
                     or item.get("name")
                     or item.get("file_id")
                     or "resource"
@@ -1789,9 +1821,9 @@ class MainWindow(QMainWindow):
         if isinstance(local_schedule, dict):
             events = local_schedule.get("events", [])
             conflicts = local_schedule.get("conflicts", [])
-            if isinstance(events, list) and events:
+            if isinstance(events, list):
                 self.schedule_events = self._normalize_schedule_events(events)
-            if isinstance(conflicts, list) and conflicts:
+            if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
 
         self._refresh_profile_views()
@@ -1807,6 +1839,17 @@ class MainWindow(QMainWindow):
         if isinstance(trace, list) and trace:
             self.trace_events.extend(self._normalize_backend_trace_events(trace))
             self._load_trace_events(self.trace_events)
+
+        error_payload = response.get("error")
+        if isinstance(error_payload, dict):
+            error_message = str(error_payload.get("message", "")).strip()
+            if error_message:
+                self._append_trace(
+                    self.local({"en": "Reflection", "zh": "反思"}),
+                    str(error_payload.get("code", "backend_error")),
+                    error_message,
+                    "error",
+                )
 
         ui_payload = response.get("ui_payload", {})
         if isinstance(ui_payload, dict):
@@ -1856,11 +1899,11 @@ class MainWindow(QMainWindow):
         self,
         *,
         message: str,
-        selected_feature: str,
+        attachments: list[dict[str, Any]] | None = None,
         hitl_reply: dict[str, Any] | None = None,
         auto_open_hitl: bool = True,
     ) -> bool:
-        if not (self.api_client.enabled and self.current_username):
+        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
             return False
 
         try:
@@ -1868,10 +1911,8 @@ class MainWindow(QMainWindow):
                 user_id=self.current_user_id(),
                 session_id=self.session_id,
                 message=message,
-                active_tab=self.active_tab_key(),
-                selected_feature=selected_feature,
+                attachments=attachments,
                 hitl_reply=hitl_reply,
-                connection_settings=self.connection_settings_payload(),
             )
         except BackendApiError as exc:
             self._append_trace(
@@ -1892,6 +1933,20 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, self.ui("login_failed"), self.ui("enter_both_username_password"))
             return
 
+        if self.api_client.enabled:
+            try:
+                response = self.api_client.login(username, password)
+            except BackendApiError as exc:
+                QMessageBox.warning(self, self.ui("login_failed"), str(exc))
+                return
+            self._complete_login(
+                username,
+                user_id=str(response.get("user_id", username)),
+                display_name=str(response.get("display_name", username)),
+                major=str(response.get("major", self.local(PROFILE["major"]))),
+            )
+            return
+
         record = self.registered_users.get(username)
         if record is None or record["password"] != password:
             QMessageBox.warning(self, self.ui("login_failed"), self.ui("invalid_credentials"))
@@ -1901,14 +1956,19 @@ class MainWindow(QMainWindow):
 
     def handle_register(self) -> None:
         username = self.register_username_input.text().strip()
+        display_name = self.register_display_name_input.text().strip()
+        major = self.register_major_input.text().strip()
         password = self.register_password_input.text()
         confirm = self.register_confirm_input.text()
 
         if not username:
             QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_username"))
             return
-        if username in self.registered_users:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("username_exists"))
+        if not display_name:
+            QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_display_name"))
+            return
+        if not major:
+            QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_major"))
             return
         if not password or not confirm:
             QMessageBox.warning(self, self.ui("register_failed"), self.ui("enter_confirm_password"))
@@ -1917,14 +1977,35 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, self.ui("register_failed"), self.ui("passwords_do_not_match"))
             return
 
+        if self.api_client.enabled:
+            try:
+                response = self.api_client.register(username, password, display_name, major)
+            except BackendApiError as exc:
+                QMessageBox.warning(self, self.ui("register_failed"), str(exc))
+                return
+            self._complete_login(
+                username,
+                user_id=str(response.get("user_id", username)),
+                display_name=str(response.get("display_name", display_name)),
+                major=str(response.get("major", major)),
+            )
+            return
+
+        if username in self.registered_users:
+            QMessageBox.warning(self, self.ui("register_failed"), self.ui("username_exists"))
+            return
+
         self.registered_users[username] = {
             "password": password,
-            "major": PROFILE["major"],
+            "display_name": display_name,
+            "major": major,
         }
 
         QMessageBox.information(self, self.ui("registration_complete"), self.ui("registration_success"))
         self.login_username_input.setText(username)
         self.register_username_input.clear()
+        self.register_display_name_input.clear()
+        self.register_major_input.clear()
         self.register_password_input.clear()
         self.register_confirm_input.clear()
         self._show_auth(0)
@@ -1947,8 +2028,16 @@ class MainWindow(QMainWindow):
             self.message_input.clear()
 
     def logout(self) -> None:
+        if self.api_client.authenticated:
+            try:
+                self.api_client.logout()
+            except BackendApiError:
+                self.api_client.clear_token()
         self.current_username = None
+        self.current_user_id_value = None
+        self.remote_profile = None
         self.pending_hitl_request = None
+        self.material_records = []
         self.resource_files = list(RESOURCE_FILES)
         self.session_id = self._new_session_id()
         self._reset_dynamic_state()
@@ -1963,7 +2052,7 @@ class MainWindow(QMainWindow):
         self.chat_messages.append(self._create_text_message("user", text))
         self._move_active_conversation_to_top()
         self._load_chat_messages(self.chat_messages)
-        if self._run_remote_agent(message=text, selected_feature=self.selected_feature_key(text)):
+        if self._run_remote_agent(message=text):
             self.message_input.clear()
             return
 
@@ -2034,7 +2123,6 @@ class MainWindow(QMainWindow):
         request_id = str(request_payload.get("request_id", "")).strip() if isinstance(request_payload, dict) else ""
         if request_id and self._run_remote_agent(
             message="",
-            selected_feature="os_automation",
             hitl_reply={"request_id": request_id, "approved": bool(accepted)},
             auto_open_hitl=False,
         ):
@@ -2049,7 +2137,7 @@ class MainWindow(QMainWindow):
         )
 
     def refresh_mock_content(self) -> None:
-        if self.current_username and self.api_client.enabled:
+        if self.current_username and self.api_client.authenticated:
             self.sync_bootstrap_data(record_trace=True)
             return
 
@@ -2071,17 +2159,39 @@ class MainWindow(QMainWindow):
         existing_names = {self._resource_display_name(resource).lower() for resource in self.resource_files}
         added_files: list[str] = []
         skipped_count = 0
+        upload_errors: list[str] = []
 
         for file_path in selected_files:
             display_name = self._resource_display_name(file_path)
             if display_name.lower() in existing_names:
                 skipped_count += 1
                 continue
+
+            if self.api_client.enabled and self.api_client.authenticated:
+                try:
+                    material = self.api_client.upload_material(file_path)
+                except BackendApiError as exc:
+                    upload_errors.append(f"{display_name}: {exc}")
+                    continue
+                self.material_records.insert(0, material)
+                saved_name = str(material.get("file_name") or display_name)
+                self.resource_files.insert(0, saved_name)
+                existing_names.add(saved_name.lower())
+                added_files.append(saved_name)
+                continue
+
             self.resource_files.insert(0, file_path)
             existing_names.add(display_name.lower())
             added_files.append(display_name)
 
         if not added_files:
+            if upload_errors:
+                QMessageBox.warning(
+                    self,
+                    self.ui("resource_upload_failed_title"),
+                    self.ui("resource_upload_failed_body", details="\n".join(upload_errors[:4])),
+                )
+                return
             QMessageBox.information(
                 self,
                 self.ui("resource_already_loaded_title"),
@@ -2104,6 +2214,12 @@ class MainWindow(QMainWindow):
             self.ui("resource_added_title"),
             self.ui("resource_added_body", count=len(added_files), skipped=skipped_count),
         )
+        if upload_errors:
+            QMessageBox.warning(
+                self,
+                self.ui("resource_upload_failed_title"),
+                self.ui("resource_upload_failed_body", details="\n".join(upload_errors[:4])),
+            )
 
 
 def main() -> int:

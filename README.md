@@ -14,7 +14,7 @@ This repository now includes a `PyQt6` frontend prototype for the Student Produc
 - A mode selector under the composer for `Chat / Schedule / Campus QA`
 - Right-side Thought Trace panel
 - A Human-in-the-Loop authorization dialog
-- Local mock data plus a REST client scaffold for backend integration
+- Local mock data plus a REST client adapted to the current backend framework on `main`
 
 ### Run the prototype
 
@@ -34,18 +34,21 @@ python3 frontend/app.py
 ```
 
 - The frontend currently calls these REST endpoints when `SPA_API_BASE_URL` is set:
+  - `POST /api/auth/login`
+  - `POST /api/auth/register`
+  - `POST /api/auth/logout`
+  - `PUT /api/user/credentials`
+  - `GET /api/materials`
+  - `POST /api/materials/upload`
   - `GET /api/dashboard/bootstrap`
   - `POST /api/agent/run`
-- Login and registration are still local in this prototype.
+- Login and registration use the backend when REST mode is enabled; otherwise the app falls back to local mock auth.
+- The settings dialog now maps to backend credentials storage (`CAS` + `LLM API Key`) when the user is authenticated.
+- The `Add Resource` button uploads files to `/api/materials/upload` in REST mode and falls back to local sidebar-only loading in mock mode.
 - After login, the dashboard uses a chat-first flow:
   - left: conversation history + materials
   - center: chat composer and result cards
   - right: thought trace + HITL
 - `Schedule` and `Campus QA` are rendered as chat result cards instead of separate main pages.
-- The composer mode menu decides whether a request should go to `agent_chat`, `scheduler`, or `encyclopedia`.
-- Dashboard bootstrap, chat, schedule, encyclopedia, and HITL flows are ready for backend wiring.
-- The interface contracts are documented in:
-  - [docs/backend-interface-contract.md](docs/backend-interface-contract.md)
-  - [docs/backend-interface-contract-zh.md](docs/backend-interface-contract-zh.md)
-- A backend-oriented Chinese README is also available:
-  - [docs/backend-readme-zh.md](docs/backend-readme-zh.md)
+- The composer mode menu is kept for UX guidance and local mock routing; the current backend framework performs its own route selection from the message content.
+- Dashboard bootstrap, auth, materials upload, chat, schedule, encyclopedia, and HITL flows are wired to the current backend contract.

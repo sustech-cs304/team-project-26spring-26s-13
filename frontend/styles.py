@@ -33,6 +33,7 @@ QFrame#MiniConflictCard,
 QFrame#TraceItemDone,
 QFrame#TraceItemRunning,
 QFrame#TraceItemPending,
+QFrame#TraceItemError,
 QFrame#AuthHeroFrame,
 QFrame#AuthCard,
 QFrame#FeaturePill,
@@ -489,5 +490,10 @@ QFrame#TraceItemRunning {
 QFrame#TraceItemPending {
     background: rgba(255, 188, 92, 0.12);
     border: 1px solid rgba(255, 188, 92, 0.26);
+}
+
+QFrame#TraceItemError {
+    background: rgba(255, 104, 104, 0.14);
+    border: 1px solid rgba(255, 126, 126, 0.30);
 }
 """
