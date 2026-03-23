@@ -5,9 +5,25 @@ ChromaDB 向量数据库客户端封装。
 
 Collection 命名规则："{subject_type}"
   - cs          计算机科学与技术
-  - statistics  统计与数学
-  - finance     金融与经济
-  - policy      学校政策与规定
+  - electronics 电子与电气工程
+  - materials   材料科学与工程
+  - math        数学
+  - physics     物理
+  - chemistry   化学
+  - biology     生物
+  - geography   地理
+  - philosophy  哲学
+  - history     历史
+  - literature  文学
+  - politics    政治
+  - finance     金融
+  - statistics  统计
+  - ocean       海洋科学
+  - economics   经济
+  - law         法律
+  - management  管理
+  - medicine    医学
+  - policy      学校政策与规章制度
   - other       未分类（每次 RAG 必查）
 
 向量 Metadata schema（每个 chunk）：
@@ -26,8 +42,18 @@ from chromadb import Collection
 
 from backend.config import settings
 
-SubjectType = Literal["cs", "statistics", "finance", "policy", "other"]
-ALL_SUBJECT_TYPES: list[SubjectType] = ["cs", "statistics", "finance", "policy", "other"]
+SubjectType = Literal[
+    "cs", "electronics", "materials", "math", "physics",
+    "chemistry", "biology", "geography", "philosophy", "history",
+    "literature", "politics", "finance", "statistics", "ocean",
+    "economics", "law", "management", "medicine", "policy", "other"
+]
+ALL_SUBJECT_TYPES: list[SubjectType] = [
+    "cs", "electronics", "materials", "math", "physics",
+    "chemistry", "biology", "geography", "philosophy", "history",
+    "literature", "politics", "finance", "statistics", "ocean",
+    "economics", "law", "management", "medicine", "policy", "other"
+]
 
 
 # ── Client singleton ──────────────────────────────────────────────────────────

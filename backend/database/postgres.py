@@ -122,7 +122,13 @@ class Material(Base):
     file_type: Mapped[str] = mapped_column(String(64), nullable=False)   # MIME type, e.g. "application/pdf"
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)  # 服务器本地绝对路径
     subject_type: Mapped[str] = mapped_column(
-        Enum("cs", "statistics", "finance", "policy", "other", name="subject_type"),
+        Enum(
+            "cs", "electronics", "materials", "math", "physics",
+            "chemistry", "biology", "geography", "philosophy", "history",
+            "literature", "politics", "finance", "statistics", "ocean",
+            "economics", "law", "management", "medicine", "policy", "other",
+            name="subject_type"
+        ),
         nullable=False,
         default="other"
     )

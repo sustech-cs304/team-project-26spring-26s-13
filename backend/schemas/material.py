@@ -8,7 +8,12 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-SubjectType = Literal["cs", "statistics", "finance", "policy", "other"]
+SubjectType = Literal[
+    "cs", "electronics", "materials", "math", "physics",
+    "chemistry", "biology", "geography", "philosophy", "history",
+    "literature", "politics", "finance", "statistics", "ocean",
+    "economics", "law", "management", "medicine", "policy", "other"
+]
 
 
 class MaterialInfo(BaseModel):

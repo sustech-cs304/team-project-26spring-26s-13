@@ -294,13 +294,29 @@ team-project-26spring-26s-13/
 | `vectorized` | BOOLEAN | 是否已完成向量化（默认 False） |
 | `uploaded_at` | TIMESTAMPTZ | 上传时间 |
 
-**`subject_type` 枚举值**：
+**`subject_type` 枚举值**（共 20 类）：
 
 | 值 | 含义 |
 |----|------|
 | `cs` | 计算机科学与技术 |
-| `statistics` | 统计与数学 |
-| `finance` | 金融与经济 |
+| `electronics` | 电子与电气工程 |
+| `materials` | 材料科学与工程 |
+| `math` | 数学 |
+| `physics` | 物理 |
+| `chemistry` | 化学 |
+| `biology` | 生物 |
+| `geography` | 地理 |
+| `philosophy` | 哲学 |
+| `history` | 历史 |
+| `literature` | 文学 |
+| `politics` | 政治 |
+| `finance` | 金融 |
+| `statistics` | 统计 |
+| `ocean` | 海洋科学 |
+| `economics` | 经济 |
+| `law` | 法律 |
+| `management` | 管理 |
+| `medicine` | 医学 |
 | `policy` | 学校政策与规章制度 |
 | `other` | 未能分类 / 通用（**RAG 时必查**） |
 
@@ -326,14 +342,30 @@ team-project-26spring-26s-13/
 
 ### 5.2 ChromaDB 向量数据库设计
 
-ChromaDB 按学科类型分为 **5 个独立 Collection**：
+ChromaDB 按学科类型分为 **20 个独立 Collection**：
 
 | Collection 名 | 对应 subject_type | 说明 |
 |--------------|-------------------|------|
 | `cs` | cs | 计算机类教材 |
-| `statistics` | statistics | 统计/数学类教材 |
-| `finance` | finance | 金融/经济类教材 |
-| `policy` | policy | 学校政策文件 |
+| `electronics` | electronics | 电子/电气类教材 |
+| `materials` | materials | 材料科学类教材 |
+| `math` | math | 数学类教材 |
+| `physics` | physics | 物理类教材 |
+| `chemistry` | chemistry | 化学类教材 |
+| `biology` | biology | 生物类教材 |
+| `geography` | geography | 地理类教材 |
+| `philosophy` | philosophy | 哲学类教材 |
+| `history` | history | 历史类教材 |
+| `literature` | literature | 文学类教材 |
+| `politics` | politics | 政治类教材 |
+| `finance` | finance | 金融类教材 |
+| `statistics` | statistics | 统计类教材 |
+| `ocean` | ocean | 海洋科学类教材 |
+| `economics` | economics | 经济类教材 |
+| `law` | law | 法律类教材 |
+| `management` | management | 管理类教材 |
+| `medicine` | medicine | 医学类教材 |
+| `policy` | policy | 学校政策与规章制度 |
 | `other` | other | 未分类（**每次 RAG 必查**） |
 
 **每个向量 chunk 的 metadata 格式**：

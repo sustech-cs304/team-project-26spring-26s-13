@@ -3,7 +3,9 @@ backend/agent/tools/rag.py
 RAG 检索工具：根据查询内容进行学科剪枝后查询向量数据库，返回增强上下文。
 
 剪枝策略：
-  - LLM 先判断问题属于哪个学科（cs/statistics/finance/policy/other）
+  - LLM 先判断问题属于哪个学科（cs/electronics/materials/math/physics/chemistry/
+    biology/geography/philosophy/history/literature/politics/finance/statistics/
+    ocean/economics/law/management/medicine/other）
   - "other" 集合必查（存放未能分类的内容）
   - 若明确属于某学科，则查该学科集合 + other
   - 若无法判断，则查全部集合
@@ -28,7 +30,10 @@ async def query_rag(
     Args:
         query:        用户的原始问题（或经过改写的检索 query）
         subject_hint: LLM 判断的学科分类，必须是以下之一：
-                      "cs" | "statistics" | "finance" | "policy" | "other" | "unknown"
+                      "cs" | "electronics" | "materials" | "math" | "physics" |
+                      "chemistry" | "biology" | "geography" | "philosophy" | "history" |
+                      "literature" | "politics" | "finance" | "statistics" | "ocean" |
+                      "economics" | "law" | "management" | "medicine" | "policy" | "other" | "unknown"
                       传 "unknown" 时查全部集合
 
     Returns:
@@ -64,8 +69,11 @@ async def classify_subject(
         text: 需要分类的文本（文件前几百字或用户问题）
 
     Returns:
-        SubjectType 枚举字符串之一：
-        "cs" | "statistics" | "finance" | "policy" | "other"
+        SubjectType 枚举字符串之一（共 20 类）：
+        "cs" | "electronics" | "materials" | "math" | "physics" |
+        "chemistry" | "biology" | "geography" | "philosophy" | "history" |
+        "literature" | "politics" | "finance" | "statistics" | "ocean" |
+        "economics" | "law" | "management" | "medicine" | "policy" | "other"
     """
     # TODO:
     # 使用轻量 LLM 调用（few-shot prompt）分类
