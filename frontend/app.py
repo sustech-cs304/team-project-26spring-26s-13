@@ -7,7 +7,7 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QPoint, QSize, Qt, QTimer
+from PyQt6.QtCore import QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
@@ -75,6 +75,24 @@ except ImportError:
         TRACE_EVENTS,
     )
     from styles import APP_STYLE  # type: ignore
+
+
+class ApiWorker(QThread):
+    """Run a single blocking API call on a background thread and emit the result."""
+
+    finished = pyqtSignal(object)   # emits the return value (any type)
+    errored = pyqtSignal(str)       # emits the error message string
+
+    def __init__(self, fn, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._fn = fn
+
+    def run(self) -> None:
+        try:
+            result = self._fn()
+            self.finished.emit(result)
+        except Exception as exc:  # noqa: BLE001
+            self.errored.emit(str(exc))
 
 
 def localized(value, language: str):
@@ -526,6 +544,7 @@ class MainWindow(QMainWindow):
         self.response_stream_timer = QTimer(self)
         self.response_stream_timer.setInterval(45)
         self.response_stream_timer.timeout.connect(self._advance_response_stream)
+        self._active_workers: list[ApiWorker] = []
 
         self._reset_dynamic_state()
         self._build_root()
@@ -1131,56 +1150,49 @@ class MainWindow(QMainWindow):
         if not (self.api_client.enabled and self.api_client.authenticated):
             return
 
-        try:
-            summaries = self.api_client.list_sessions()
-        except BackendApiError:
-            return
+        def _on_done(summaries):
+            if not summaries:
+                return
+            existing = {conversation["session_id"]: conversation for conversation in self.conversations}
+            merged: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for item in summaries:
+                session_id = str(item.get("session_id", "")).strip()
+                if not session_id:
+                    continue
+                preview = str(item.get("preview", "")).strip()
+                updated_at = str(item.get("updated_at", "")).strip()
+                conversation = existing.get(session_id)
+                if conversation is None:
+                    placeholder_messages = (
+                        [self._create_text_message("agent", preview)]
+                        if preview
+                        else self._build_new_chat_messages()
+                    )
+                    conversation = self._create_conversation(
+                        session_id=session_id,
+                        messages=placeholder_messages,
+                        trace=[],
+                        title=preview,
+                        remote_updated_at=updated_at,
+                    )
+                else:
+                    conversation["title"] = preview or conversation.get("title")
+                    conversation["remote_updated_at"] = updated_at
+                merged.append(conversation)
+                seen.add(session_id)
+            active = self._active_conversation()
+            if active and active["session_id"] not in seen:
+                merged.insert(0, active)
+            if merged:
+                self.conversations = merged
+                if active and active["session_id"] in {item["session_id"] for item in merged}:
+                    self.active_conversation_id = active["session_id"]
+                else:
+                    self.active_conversation_id = merged[0]["session_id"]
+                self._refresh_conversation_list()
 
-        if not summaries:
-            return
-
-        existing = {conversation["session_id"]: conversation for conversation in self.conversations}
-        merged: list[dict[str, Any]] = []
-        seen: set[str] = set()
-
-        for item in summaries:
-            session_id = str(item.get("session_id", "")).strip()
-            if not session_id:
-                continue
-            preview = str(item.get("preview", "")).strip()
-            updated_at = str(item.get("updated_at", "")).strip()
-            conversation = existing.get(session_id)
-            if conversation is None:
-                placeholder_messages = (
-                    [self._create_text_message("agent", preview)]
-                    if preview
-                    else self._build_new_chat_messages()
-                )
-                conversation = self._create_conversation(
-                    session_id=session_id,
-                    messages=placeholder_messages,
-                    trace=[],
-                    title=preview,
-                    remote_updated_at=updated_at,
-                )
-            else:
-                conversation["title"] = preview or conversation.get("title")
-                conversation["remote_updated_at"] = updated_at
-
-            merged.append(conversation)
-            seen.add(session_id)
-
-        active = self._active_conversation()
-        if active and active["session_id"] not in seen:
-            merged.insert(0, active)
-
-        if merged:
-            self.conversations = merged
-            if active and active["session_id"] in {item["session_id"] for item in merged}:
-                self.active_conversation_id = active["session_id"]
-            else:
-                self.active_conversation_id = merged[0]["session_id"]
-            self._refresh_conversation_list()
+        self._start_worker(self.api_client.list_sessions, _on_done)
 
     def _build_root(self) -> None:
         self.setWindowTitle(self.app_title())
@@ -2099,26 +2111,28 @@ class MainWindow(QMainWindow):
         if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
             return
 
-        try:
-            payload = self.api_client.bootstrap_dashboard()
-        except BackendApiError as exc:
-            if record_trace:
+        _record_trace = record_trace
+
+        def _on_done(payload):
+            self._apply_bootstrap_payload(payload)
+            if _record_trace:
+                self._append_trace(
+                    self.local({"en": "Observation", "zh": "观察"}),
+                    self.ui("trace_bootstrap_loaded_title"),
+                    self.ui("trace_bootstrap_loaded_detail"),
+                    "done",
+                )
+
+        def _on_error(err):
+            if _record_trace:
                 self._append_trace(
                     self.local({"en": "Observation", "zh": "观察"}),
                     self.ui("trace_backend_unavailable_title"),
-                    self.ui("trace_backend_unavailable_detail", error=str(exc)),
+                    self.ui("trace_backend_unavailable_detail", error=err),
                     "pending",
                 )
-            return
 
-        self._apply_bootstrap_payload(payload)
-        if record_trace:
-            self._append_trace(
-                self.local({"en": "Observation", "zh": "观察"}),
-                self.ui("trace_bootstrap_loaded_title"),
-                self.ui("trace_bootstrap_loaded_detail"),
-                "done",
-            )
+        self._start_worker(self.api_client.bootstrap_dashboard, _on_done, _on_error)
 
     def _apply_bootstrap_payload(self, payload: dict[str, Any]) -> None:
         self._flush_response_stream(open_dialog=False)
@@ -2211,6 +2225,18 @@ class MainWindow(QMainWindow):
         )
         self._sync_remote_sessions()
 
+    def _start_worker(self, fn, on_finished, on_error=None) -> ApiWorker:
+        """Start fn() on a background thread; call on_finished(result) or on_error(msg) on the main thread."""
+        worker = ApiWorker(fn, parent=self)
+        self._active_workers.append(worker)
+        worker.finished.connect(on_finished)
+        if on_error:
+            worker.errored.connect(on_error)
+        worker.finished.connect(lambda _: self._active_workers.remove(worker) if worker in self._active_workers else None)
+        worker.errored.connect(lambda _: self._active_workers.remove(worker) if worker in self._active_workers else None)
+        worker.start()
+        return worker
+
     def _run_remote_agent(
         self,
         *,
@@ -2222,24 +2248,32 @@ class MainWindow(QMainWindow):
         if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
             return False
 
-        try:
-            response = self.api_client.run_agent(
-                user_id=self.current_user_id(),
-                session_id=self.session_id,
+        user_id = self.current_user_id()
+        session_id = self.session_id
+        _attachments = attachments or []
+        _auto_open_hitl = auto_open_hitl
+
+        def _call():
+            return self.api_client.run_agent(
+                user_id=user_id,
+                session_id=session_id,
                 message=message,
-                attachments=attachments,
+                attachments=_attachments,
                 hitl_reply=hitl_reply,
             )
-        except BackendApiError as exc:
+
+        def _on_done(response):
+            self._apply_agent_response(response, auto_open_hitl=_auto_open_hitl)
+
+        def _on_error(err):
             self._append_trace(
                 self.local({"en": "Observation", "zh": "观察"}),
                 self.ui("trace_backend_unavailable_title"),
-                self.ui("trace_backend_unavailable_detail", error=str(exc)),
+                self.ui("trace_backend_unavailable_detail", error=err),
                 "pending",
             )
-            return False
 
-        self._apply_agent_response(response, auto_open_hitl=auto_open_hitl)
+        self._start_worker(_call, _on_done, _on_error)
         return True
 
     def handle_password_login(self) -> None:
@@ -2250,17 +2284,24 @@ class MainWindow(QMainWindow):
             return
 
         if self.api_client.enabled:
-            try:
-                response = self.api_client.login(username, password)
-            except BackendApiError as exc:
-                QMessageBox.warning(self, self.ui("login_failed"), str(exc))
-                return
-            self._complete_login(
-                username,
-                user_id=str(response.get("user_id", username)),
-                display_name=str(response.get("display_name", username)),
-                major=str(response.get("major", self.local(PROFILE["major"]))),
-            )
+            _username = username
+            _default_major = self.local(PROFILE["major"])
+
+            def _call():
+                return self.api_client.login(_username, password)
+
+            def _on_done(response):
+                self._complete_login(
+                    _username,
+                    user_id=str(response.get("user_id", _username)),
+                    display_name=str(response.get("display_name", _username)),
+                    major=str(response.get("major", _default_major)),
+                )
+
+            def _on_error(err):
+                QMessageBox.warning(self, self.ui("login_failed"), err)
+
+            self._start_worker(_call, _on_done, _on_error)
             return
 
         record = self.registered_users.get(username)
@@ -2294,17 +2335,25 @@ class MainWindow(QMainWindow):
             return
 
         if self.api_client.enabled:
-            try:
-                response = self.api_client.register(username, password, display_name, major)
-            except BackendApiError as exc:
-                QMessageBox.warning(self, self.ui("register_failed"), str(exc))
-                return
-            self._complete_login(
-                username,
-                user_id=str(response.get("user_id", username)),
-                display_name=str(response.get("display_name", display_name)),
-                major=str(response.get("major", major)),
-            )
+            _username = username
+            _display_name = display_name
+            _major = major
+
+            def _call():
+                return self.api_client.register(_username, password, _display_name, _major)
+
+            def _on_done(response):
+                self._complete_login(
+                    _username,
+                    user_id=str(response.get("user_id", _username)),
+                    display_name=str(response.get("display_name", _display_name)),
+                    major=str(response.get("major", _major)),
+                )
+
+            def _on_error(err):
+                QMessageBox.warning(self, self.ui("register_failed"), err)
+
+            self._start_worker(_call, _on_done, _on_error)
             return
 
         if username in self.registered_users:
@@ -2461,43 +2510,42 @@ class MainWindow(QMainWindow):
             self.refresh_mock_content()
             return
 
-        try:
-            payload = self.api_client.refresh_schedule()
-        except BackendApiError as exc:
-            QMessageBox.warning(self, self.ui("refresh_schedule_failed_title"), str(exc))
+        def _on_done(payload):
+            events = payload.get("events", [])
+            conflicts = payload.get("conflicts", [])
+            if isinstance(events, list):
+                self.schedule_events = self._normalize_schedule_events(events)
+            if isinstance(conflicts, list):
+                self.conflicts = self._normalize_conflicts(conflicts)
+            self._queue_response_stream(
+                assistant_text="",
+                trace_items=[
+                    {
+                        "phase": self.local({"en": "Observation", "zh": "观察"}),
+                        "title": self.ui("trace_schedule_refresh_title"),
+                        "detail": self.ui("trace_schedule_refresh_detail"),
+                        "status": "done",
+                    }
+                ],
+                extra_messages=[
+                    self._create_schedule_message(
+                        intro=self.ui("schedule_card_intro"),
+                        events=self.schedule_events,
+                        conflicts=self.conflicts,
+                    )
+                ],
+            )
+
+        def _on_error(err):
+            QMessageBox.warning(self, self.ui("refresh_schedule_failed_title"), err)
             self._append_trace(
                 self.local({"en": "Observation", "zh": "观察"}),
                 self.ui("refresh_schedule_failed_title"),
-                str(exc),
+                err,
                 "error",
             )
-            return
 
-        events = payload.get("events", [])
-        conflicts = payload.get("conflicts", [])
-        if isinstance(events, list):
-            self.schedule_events = self._normalize_schedule_events(events)
-        if isinstance(conflicts, list):
-            self.conflicts = self._normalize_conflicts(conflicts)
-
-        self._queue_response_stream(
-            assistant_text="",
-            trace_items=[
-                {
-                    "phase": self.local({"en": "Observation", "zh": "观察"}),
-                    "title": self.ui("trace_schedule_refresh_title"),
-                    "detail": self.ui("trace_schedule_refresh_detail"),
-                    "status": "done",
-                }
-            ],
-            extra_messages=[
-                self._create_schedule_message(
-                    intro=self.ui("schedule_card_intro"),
-                    events=self.schedule_events,
-                    conflicts=self.conflicts,
-                )
-            ],
-        )
+        self._start_worker(self.api_client.refresh_schedule, _on_done, _on_error)
 
     def _add_resource_files(self) -> None:
         selected_files, _selected_filter = QFileDialog.getOpenFileNames(
@@ -2510,81 +2558,100 @@ class MainWindow(QMainWindow):
             return
 
         existing_names = {self._resource_display_name(resource).lower() for resource in self.resource_files}
-        added_files: list[str] = []
+        files_to_upload: list[tuple[str, str]] = []  # (file_path, display_name)
+        local_only: list[str] = []
         skipped_count = 0
-        upload_errors: list[str] = []
 
         for file_path in selected_files:
             display_name = self._resource_display_name(file_path)
             if display_name.lower() in existing_names:
                 skipped_count += 1
                 continue
-
             if self.api_client.enabled and self.api_client.authenticated:
-                try:
-                    material = self.api_client.upload_material(file_path)
-                except BackendApiError as exc:
-                    upload_errors.append(f"{display_name}: {exc}")
-                    continue
-                self.material_records.insert(0, material)
-                saved_name = str(material.get("file_name") or display_name)
-                self.resource_files.insert(0, saved_name)
-                existing_names.add(saved_name.lower())
-                added_files.append(saved_name)
-                continue
+                files_to_upload.append((file_path, display_name))
+            else:
+                self.resource_files.insert(0, file_path)
+                existing_names.add(display_name.lower())
+                local_only.append(display_name)
 
-            self.resource_files.insert(0, file_path)
-            existing_names.add(display_name.lower())
-            added_files.append(display_name)
+        if local_only:
+            self._load_resource_files()
 
-        if not added_files:
-            if upload_errors:
-                QMessageBox.warning(
+        if not files_to_upload:
+            if not local_only:
+                QMessageBox.information(
                     self,
-                    self.ui("resource_upload_failed_title"),
-                    self.ui("resource_upload_failed_body", details="\n".join(upload_errors[:4])),
-                )
-                return
-            QMessageBox.information(
-                self,
-                self.ui("resource_already_loaded_title"),
-                self.ui("resource_already_loaded_body"),
+                    self.ui("resource_already_loaded_title"),
+                    self.ui("resource_already_loaded_body"),
                 )
             return
 
-        if self.api_client.enabled and self.api_client.authenticated:
+        _skipped_count = skipped_count
+
+        def _upload_all():
+            added: list[str] = []
+            errors: list[str] = []
+            for fp, dn in files_to_upload:
+                try:
+                    material = self.api_client.upload_material(fp)
+                    added.append((dn, material))
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{dn}: {exc}")
+            # refresh list after uploads
             try:
                 materials = self.api_client.list_materials()
-            except BackendApiError:
+            except Exception:  # noqa: BLE001
                 materials = []
+            return {"added": added, "errors": errors, "materials": materials}
+
+        def _on_done(result):
+            added = result["added"]
+            errors = result["errors"]
+            materials = result["materials"]
+            for _dn, material in added:
+                saved_name = str(material.get("file_name") or _dn)
+                self.material_records.insert(0, material)
+                self.resource_files.insert(0, saved_name)
             if materials:
                 self.material_records = materials
                 self.resource_files = [
                     str(item.get("file_name") or item.get("name") or item.get("file_id") or "resource")
                     for item in materials
                 ]
+            self._load_resource_files()
+            added_names = [dn for dn, _ in added]
+            all_added = local_only + added_names
+            if all_added:
+                preview = ", ".join(all_added[:2])
+                if len(all_added) > 2:
+                    preview = f"{preview}, +{len(all_added) - 2}"
+                self._append_trace(
+                    self.local({"en": "Observation", "zh": "观察"}),
+                    self.ui("trace_loaded_materials_title"),
+                    self.ui("trace_loaded_materials_detail", count=len(all_added), files=preview),
+                    "done",
+                )
+                QMessageBox.information(
+                    self,
+                    self.ui("resource_added_title"),
+                    self.ui("resource_added_body", count=len(all_added), skipped=_skipped_count),
+                )
+            if errors:
+                QMessageBox.warning(
+                    self,
+                    self.ui("resource_upload_failed_title"),
+                    self.ui("resource_upload_failed_body", details="\n".join(errors[:4])),
+                )
 
-        self._load_resource_files()
-        preview = ", ".join(added_files[:2])
-        if len(added_files) > 2:
-            preview = f"{preview}, +{len(added_files) - 2}"
-        self._append_trace(
-            self.local({"en": "Observation", "zh": "观察"}),
-            self.ui("trace_loaded_materials_title"),
-            self.ui("trace_loaded_materials_detail", count=len(added_files), files=preview),
-            "done",
-        )
-        QMessageBox.information(
-            self,
-            self.ui("resource_added_title"),
-            self.ui("resource_added_body", count=len(added_files), skipped=skipped_count),
-        )
-        if upload_errors:
+        def _on_error(err):
             QMessageBox.warning(
                 self,
                 self.ui("resource_upload_failed_title"),
-                self.ui("resource_upload_failed_body", details="\n".join(upload_errors[:4])),
+                self.ui("resource_upload_failed_body", details=err),
             )
+
+        self._start_worker(_upload_all, _on_done, _on_error)
+
 
 
 def main() -> int:
