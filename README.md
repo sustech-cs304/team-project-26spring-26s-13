@@ -62,3 +62,4 @@ python3 frontend/app.py
   - [docs/backend-interface-contract-zh.md](docs/backend-interface-contract-zh.md)
   - [docs/backend-interface-contract.md](docs/backend-interface-contract.md)
   - [docs/backend-readme-zh.md](docs/backend-readme-zh.md)
+  - [docs/frontend-api-connection-zh.md](docs/frontend-api-connection-zh.md)
