@@ -20,7 +20,15 @@ _fernet: Fernet | None = None
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is None:
-        _fernet = Fernet(settings.FERNET_KEY.encode())
+        key = (settings.FERNET_KEY or "").strip()
+        if not key or key.startswith("CHANGE_ME"):
+            raise RuntimeError(
+                "FERNET_KEY is not configured. Generate one with Fernet.generate_key() and set it in .env"
+            )
+        try:
+            _fernet = Fernet(key.encode())
+        except Exception as exc:
+            raise RuntimeError("Invalid FERNET_KEY. It must be a urlsafe base64-encoded 32-byte key.") from exc
     return _fernet
 
 
@@ -34,8 +42,7 @@ def encrypt(plaintext: str) -> bytes:
     Returns:
         Fernet 加密后的字节串
     """
-    # TODO: return _get_fernet().encrypt(plaintext.encode("utf-8"))
-    raise NotImplementedError
+    return _get_fernet().encrypt(plaintext.encode("utf-8"))
 
 
 def decrypt(ciphertext: bytes) -> str:
@@ -51,5 +58,4 @@ def decrypt(ciphertext: bytes) -> str:
     Raises:
         InvalidToken: ciphertext 被篡改或 key 错误
     """
-    # TODO: return _get_fernet().decrypt(ciphertext).decode("utf-8")
-    raise NotImplementedError
+    return _get_fernet().decrypt(ciphertext).decode("utf-8")
