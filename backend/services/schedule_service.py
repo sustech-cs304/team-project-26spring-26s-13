@@ -7,6 +7,7 @@ backend/services/schedule_service.py
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 import httpx
 from bs4 import BeautifulSoup
@@ -20,24 +21,61 @@ ACADEMIC_SYSTEM_BASE = "https://jwxt.sustech.edu.cn"
 
 
 @dataclass
-class RawDeadline:
+class Deadline:
     title: str
-    course: str
-    deadline: datetime
-    type: str   # "assignment" | "exam" | "quiz"
-
+    course_id: str
+    due_at: datetime
+    type: Literal["assignment", "quiz", "project", "presentation", "other"]
+    estimated_minutes: int | None = None
+    priority: int | None = None
+    url: str | None = None
 
 @dataclass
-class RawCourseSlot:
-    course: str
-    weekday: int        # 1=Monday ... 7=Sunday
-    start_time: str     # "HH:MM"
-    end_time: str       # "HH:MM"
+class Course:
+    course_id: str
+    course_name: str
+    credits: int | None = None
+    experiment_credits: int | None = None
+
+@dataclass
+class CourseOccurrence:
+    course_id: str
+    start_at: datetime
+    end_at: datetime
     location: str
-    weeks: list[int]    # [1, 2, ..., 16]
+    instructor: str | None = None
+    kind: Literal["lecture", "experiment", "other"]
+    notes: str | None = None # 事件备注
 
+@dataclass
+class FixedPersonalEvent:
+    # We assume that this fixed personal event occupied all time 
+    # from start_at to end_at, thus no duration needed
+    title: str
+    start_at: datetime
+    end_at: datetime
+    location: str | None = None
 
-async def fetch_blackboard(cas_account: str, cas_password: str) -> list[RawDeadline]:
+@dataclass
+class TimeWindow:
+    weekdays: set[int]
+    start_time: str # HH:MM, 24h format
+    end_time: str # HH:MM, 24h format
+
+@dataclass
+class PersonalTask:
+    title: str
+    duration_minutes: int
+    target_occurrences: int
+    period: Literal["day", "week", "month", "year"]
+    earliest_start: datetime | None = None
+    deadline: datetime | None = None
+    time_windows: list[TimeWindow] | None = None
+    location: str | None = None
+    importance: int | None = None
+    notes: str | None = None
+
+async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline]:
     """
     使用 CAS 统一认证登录 Blackboard，爬取当前学期所有未完成作业/考试的截止时间。
 
@@ -46,7 +84,7 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[RawDeadl
         cas_password: CAS 密码（已由调用方解密）
 
     Returns:
-        list[RawDeadline]，按截止时间升序排列
+        list[Deadline]，按截止时间升序排列
 
     Raises:
         ConnectionError: CAS 或 Blackboard 服务不可达
@@ -57,11 +95,11 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[RawDeadl
     # 2.   CAS 认证流程（GET cas/login → POST credentials → 获取 service ticket）
     # 3.   使用 ticket 访问 Blackboard
     # 4.   解析作业列表页面（BeautifulSoup）
-    # 5.   return [RawDeadline(...) for each item]
+    # 5.   return [Deadline(...) for each item]
     raise NotImplementedError
 
 
-async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[RawCourseSlot]:
+async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
     """
     使用 CAS 认证登录教务系统，爬取当前学期固定课表。
 
@@ -70,7 +108,7 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Raw
         cas_password: CAS 密码（已解密）
 
     Returns:
-        list[RawCourseSlot]
+        list[CourseOccurrence]
 
     Raises:
         ConnectionError: 服务不可达
@@ -81,8 +119,8 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Raw
 
 
 def detect_conflicts(
-    deadlines: list[RawDeadline],
-    course_slots: list[RawCourseSlot],
+    deadlines: list[Deadline],
+    course_slots: list[CourseOccurrence],
 ) -> ScheduleData:
     """
     将截止时间列表与固定课表合并，检测时间冲突。
