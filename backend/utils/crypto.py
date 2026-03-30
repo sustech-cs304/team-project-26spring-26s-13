@@ -10,12 +10,10 @@ Key 通过 settings.FERNET_KEY 注入，生产环境必须替换默认值。
 """
 
 from cryptography.fernet import Fernet, InvalidToken
-
 from backend.config import settings
 
 # 延迟初始化，避免模块加载时 settings 未就绪
 _fernet: Fernet | None = None
-
 
 def _get_fernet() -> Fernet:
     global _fernet
@@ -31,30 +29,23 @@ def _get_fernet() -> Fernet:
             raise RuntimeError("Invalid FERNET_KEY. It must be a urlsafe base64-encoded 32-byte key.") from exc
     return _fernet
 
-
 def encrypt(plaintext: str) -> bytes:
     """
     加密明文字符串，返回加密字节串（可直接存入 LargeBinary 列）。
-
     Args:
         plaintext: 待加密的明文字符串
-
     Returns:
         Fernet 加密后的字节串
     """
     return _get_fernet().encrypt(plaintext.encode("utf-8"))
 
-
 def decrypt(ciphertext: bytes) -> str:
     """
     解密字节串，返回原始明文字符串。
-
     Args:
         ciphertext: encrypt() 返回的字节串
-
     Returns:
         解密后的明文字符串
-
     Raises:
         InvalidToken: ciphertext 被篡改或 key 错误
     """
