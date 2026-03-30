@@ -469,65 +469,12 @@ def _extract_course_ids(text: str) -> set[str]:
 
     return ids
 
-
-_TARGET_COURSE_NAMES: set[str] = {
-    "Frontier Seminars in Computer Science and Technology Spring 2026",
-    "Introduction to Theory of Computation Spring 2026",
-    "Operating Systems Spring 2026",
-    "Software Engineering Spring 2026",
-    "中国城镇化（2026春）",
-}
-
-
-def _extract_course_ids_for_course_names(html: str, course_names: set[str]) -> set[str]:
-    if not html or not course_names:
-        return set()
-
-    wanted = {n.strip() for n in course_names if n and n.strip()}
-    soup = BeautifulSoup(html, "html.parser")
-
-    ids: set[str] = set()
-
-    for a in soup.find_all("a"):
-        text = a.get_text(" ", strip=True)
-        if not text:
-            continue
-        if not any(name in text for name in wanted):
-            continue
-
-        for attr in ("href", "data-href"):
-            v = (a.get(attr) or "").strip()
-            if v:
-                ids |= _extract_course_ids(v)
-
-        for _, v in (a.attrs or {}).items():
-            if isinstance(v, str):
-                ids |= _extract_course_ids(v)
-
-    if ids:
-        return ids
-
-    raw = html
-    for name in wanted:
-        start = 0
-        while True:
-            pos = raw.find(name, start)
-            if pos < 0:
-                break
-            lo = max(0, pos - 20000)
-            hi = min(len(raw), pos + 20000)
-            ids |= _extract_course_ids(raw[lo:hi])
-            start = pos + len(name)
-
-    return ids
-
-
 async def _crawl_course_upload_urls(
     client: httpx.AsyncClient,
     course_id: str,
     referer: str,
 ) -> set[str]:
-    start_url = f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}"
+    start_url = f"{BLACKBOARD_BASE}/webapps/blackboard/execute/launcher?type=Course&id={course_id}&url="
     to_visit: list[tuple[str, str]] = [(start_url, referer)]
     queued: set[str] = {start_url}
     visited: set[str] = set()
@@ -957,92 +904,416 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
 
 async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
     login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
-    r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
-    r1.raise_for_status()
 
-    soup = BeautifulSoup(r1.text, "html.parser")
-    forms = list(soup.find_all("form"))
-    form = None
-    for f in forms:
-        if f.find("input", attrs={"type": re.compile(r"^password$", re.I)}):
-            form = f
-            break
-    if form is None:
-        form = soup.find("form")
-    if not form:
-        raise ConnectionError("CAS login form not found")
+    post_headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Referer": str(login_url),
+        "Origin": f"{login_url.scheme}://{login_url.host}",
+    }
 
-    payload: dict[str, str] = {}
-    inputs = list(form.find_all("input"))
-    for inp in inputs:
-        name = inp.get("name")
-        if not name:
+    max_attempts = 6
+    last_r2: httpx.Response | None = None
+
+    for attempt in range(1, max_attempts + 1):
+        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        if _is_retryable_status(r1.status_code):
+            logger.warning(
+                "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
+                attempt,
+                max_attempts,
+                r1.status_code,
+                str(login_url),
+            )
+            if attempt >= max_attempts:
+                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+            await asyncio.sleep(_backoff_seconds(attempt))
             continue
-        payload[name] = inp.get("value") or ""
 
-    for btn in form.find_all("button"):
-        name = btn.get("name")
-        if not name:
-            continue
-        if name in payload:
-            continue
-        if (btn.get("type") or "").lower() not in {"submit", ""}:
-            continue
-        payload[name] = btn.get("value") or "submit"
+        r1.raise_for_status()
 
-    password_field = None
-    for inp in inputs:
-        if (inp.get("type") or "").lower() == "password" and inp.get("name"):
-            password_field = inp.get("name")
-            break
+        soup = BeautifulSoup(r1.text, "html.parser")
+        forms = list(soup.find_all("form"))
+        form = None
+        for f in forms:
+            if f.find("input", attrs={"type": re.compile(r"^password$", re.I)}):
+                form = f
+                break
+        if form is None:
+            form = soup.find("form")
+        if not form:
+            raise ConnectionError("CAS login form not found")
 
-    username_field = None
-    for inp in inputs:
-        t = (inp.get("type") or "").lower()
-        n = (inp.get("name") or "").lower()
-        if inp.get("name") and (
-            n in {"username", "user", "userid", "account"}
-            or (t in {"text", "email"} and "user" in n)
-        ):
-            username_field = inp.get("name")
-            break
+        payload: dict[str, str] = {}
+        inputs = list(form.find_all("input"))
+        for inp in inputs:
+            name = inp.get("name")
+            if not name:
+                continue
+            payload[name] = inp.get("value") or ""
 
-    if not username_field:
+        for btn in form.find_all("button"):
+            name = btn.get("name")
+            if not name:
+                continue
+            if name in payload:
+                continue
+            if (btn.get("type") or "").lower() not in {"submit", ""}:
+                continue
+            payload[name] = btn.get("value") or "submit"
+
+        password_field = None
+        for inp in inputs:
+            if (inp.get("type") or "").lower() == "password" and inp.get("name"):
+                password_field = inp.get("name")
+                break
+
+        username_field = None
         for inp in inputs:
             t = (inp.get("type") or "").lower()
-            if inp.get("name") and t in {"text", "email"}:
+            n = (inp.get("name") or "").lower()
+            if inp.get("name") and (
+                n in {"username", "user", "userid", "account"}
+                or (t in {"text", "email"} and "user" in n)
+            ):
                 username_field = inp.get("name")
                 break
 
-    if not username_field:
-        username_field = "username"
-        payload.setdefault(username_field, "")
+        if not username_field:
+            for inp in inputs:
+                t = (inp.get("type") or "").lower()
+                if inp.get("name") and t in {"text", "email"}:
+                    username_field = inp.get("name")
+                    break
 
-    if not password_field:
-        password_field = "password"
-        payload.setdefault(password_field, "")
+        if not username_field:
+            username_field = "username"
+            payload.setdefault(username_field, "")
 
-    payload[username_field] = cas_account
-    payload[password_field] = cas_password
+        if not password_field:
+            password_field = "password"
+            payload.setdefault(password_field, "")
 
-    action = form.get("action")
-    if not action:
-        post_url = login_url
-    else:
-        action_url = httpx.URL(urljoin(str(login_url), action))
-        if (
-            action_url.host == login_url.host
-            and action_url.path == login_url.path
-            and "service" not in action_url.params
-            and "service" in login_url.params
-        ):
-            action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
-        post_url = action_url
+        payload[username_field] = cas_account
+        payload[password_field] = cas_password
 
-    r2 = await _request_with_retry(client, "POST", str(post_url), data=payload, label="cas.login.post")
+        action = form.get("action")
+        if not action:
+            post_url = login_url
+        else:
+            action_url = httpx.URL(urljoin(str(login_url), action))
+            if (
+                action_url.host == login_url.host
+                and action_url.path == login_url.path
+                and "service" not in action_url.params
+                and "service" in login_url.params
+            ):
+                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+            post_url = action_url
+
+        try:
+            r2 = await client.request("POST", str(post_url), headers=post_headers, data=payload)
+        except httpx.HTTPError as exc:
+            logger.exception(
+                "cas.http: error attempt=%d/%d method=POST url=%s err=%s",
+                attempt,
+                max_attempts,
+                str(post_url),
+                _request_error_summary(exc),
+            )
+            if attempt >= max_attempts:
+                raise
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
+        _bb_sink_add("cas.login.post", r2)
+        last_r2 = r2
+
+        if _is_retryable_status(r2.status_code):
+            logger.warning(
+                "cas.http: retry attempt=%d/%d status=%d method=POST url=%s",
+                attempt,
+                max_attempts,
+                r2.status_code,
+                str(post_url),
+            )
+
+            u2 = str(r2.url)
+            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab.bounce{attempt}",
+                )
+
+            if attempt >= max_attempts:
+                break
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
+        break
+
+    if last_r2 is None:
+        raise ConnectionError("CAS login failed: no response")
+
+    r2 = last_r2
+
+    if r2.status_code >= 500:
+        u2 = str(r2.url)
+        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+            for i in range(1, 4):
+                await asyncio.sleep(_backoff_seconds(i))
+                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}")
+                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{i}")
+                r_tab = await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab.warmup{i}",
+                )
+
+                if (
+                    r_sso.status_code < 500
+                    and "/cas/login" not in str(r_sso.url)
+                    and "/authentication/require" not in str(r_sso.url)
+                ):
+                    return
+                if r_home.status_code < 500 and "/cas/login" not in str(r_home.url):
+                    return
+                if r_tab.status_code < 500 and "/cas/login" not in str(r_tab.url):
+                    return
+
+        _bb_sink_dump(f"cas_login_{r2.status_code}")
+        raise ConnectionError(f"CAS/SSO server error: status={r2.status_code} url={u2}")
+
     r2.raise_for_status()
 
     if "cas.sustech.edu.cn" in str(r2.url) and "/cas/login" in str(r2.url):
+        err_text = ""
+        page_title = ""
+        try:
+            s2 = BeautifulSoup(r2.text, "html.parser")
+            if s2.title:
+                page_title = s2.title.get_text(" ", strip=True)
+            candidates = [
+                s2.find(attrs={"role": "alert"}),
+                s2.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
+                s2.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
+                s2.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+            ]
+            for node in candidates:
+                if node:
+                    txt = node.get_text(" ", strip=True)
+                    if txt:
+                        err_text = txt
+                        break
+            if not err_text and re.search(r"captcha|验证码", r2.text, re.I):
+                err_text = "captcha required"
+        except Exception:
+            err_text = ""
+
+        msg = "CAS authentication failed"
+        if page_title:
+            msg = f"{msg} ({page_title})"
+        if err_text:
+            msg = f"{msg}: {err_text}"
+        raise PermissionError(msg)
+
+
+async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
+    """
+    Enhanced CAS login with more robust handling based on bb_login.py patterns
+    """
+    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
+
+    # Enhanced headers with realistic browser headers
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Origin": f"{login_url.scheme}://{login_url.host}",
+        "Referer": str(login_url),
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0",
+    }
+
+    max_attempts = 6
+    last_r2: httpx.Response | None = None
+
+    for attempt in range(1, max_attempts + 1):
+        r1 = await _request_with_retry(client, "GET", str(login_url), headers=headers, label="cas.login.get")
+        if _is_retryable_status(r1.status_code):
+            logger.warning(
+                "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
+                attempt,
+                max_attempts,
+                r1.status_code,
+                str(login_url),
+            )
+            if attempt >= max_attempts:
+                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
+        r1.raise_for_status()
+
+        soup = BeautifulSoup(r1.text, "html.parser")
+        forms = list(soup.find_all("form"))
+        form = None
+        for f in forms:
+            if f.find("input", attrs={"type": re.compile(r"^password$", re.I)}):
+                form = f
+                break
+        if form is None:
+            form = soup.find("form")
+        if not form:
+            raise ConnectionError("CAS login form not found")
+
+        action = form.get("action") or "/cas/login"
+        payload: dict[str, str] = {}
+
+        # Extract all inputs
+        inputs = list(form.find_all("input"))
+        for inp in inputs:
+            name = inp.get("name")
+            if not name:
+                continue
+            payload[name] = inp.get("value") or ""
+
+        # Find username and password fields
+        username_field = None
+        password_field = None
+
+        for inp in inputs:
+            t = (inp.get("type") or "").lower()
+            n = (inp.get("name") or "").lower()
+            if t == "password":
+                password_field = inp.get("name")
+            elif inp.get("name") and (
+                n in {"username", "user", "userid", "account"}
+                or (t in {"text", "email"} and "user" in n)
+            ):
+                username_field = inp.get("name")
+
+        # Fallback fields
+        if not username_field:
+            username_field = "username"
+        if not password_field:
+            password_field = "password"
+
+        # Set credentials
+        payload[username_field] = cas_account
+        payload[password_field] = cas_password
+        payload.setdefault("_eventId", "submit")
+
+        # Build post URL
+        post_url = action if action.startswith("http") else urljoin(str(login_url), action)
+        if (
+            httpx.URL(post_url).host == login_url.host
+            and httpx.URL(post_url).path == login_url.path
+            and "service" not in httpx.URL(post_url).params
+            and "service" in login_url.params
+        ):
+            post_url = httpx.URL(post_url).copy_merge_params({"service": login_url.params["service"]})
+
+        # Try login
+        try:
+            r2 = await client.request("POST", str(post_url), headers=headers, data=payload)
+            _bb_sink_add("cas.login.post", r2)
+            last_r2 = r2
+        except httpx.HTTPError as exc:
+            logger.exception(
+                "cas.http: error attempt=%d/%d method=POST url=%s err=%s",
+                attempt,
+                max_attempts,
+                str(post_url),
+                _request_error_summary(exc),
+            )
+            if attempt >= max_attempts:
+                raise
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
+        # Check for redirect to Blackboard
+        if 300 <= r2.status_code < 400:
+            location = r2.headers.get("Location", "")
+            if "bb.sustech.edu.cn" in location:
+                # Follow redirect to BB
+                await _request_with_retry(client, "GET", location, headers=headers, label="bb.from_cas")
+                # Warm up BB session
+                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+                return
+
+        # Handle retryable errors
+        if _is_retryable_status(r2.status_code):
+            u2 = str(r2.url)
+            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab.bounce{attempt}",
+                )
+
+            if attempt >= max_attempts:
+                break
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
+        break
+
+    # Check if we got a successful response
+    if last_r2 is None:
+        raise ConnectionError("CAS login failed: no response")
+
+    r2 = last_r2
+
+    # Handle SSO redirect and warmup
+    u2 = str(r2.url)
+    if "bb.sustech.edu.cn" in u2:
+        # We're being redirected to BB, follow and warm up
+        await _request_with_retry(client, "GET", u2, headers=headers, label="bb.from_cas")
+        await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+        return
+
+    # Handle server errors with warmup
+    if r2.status_code >= 500:
+        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+            for i in range(1, 4):
+                await asyncio.sleep(_backoff_seconds(i))
+                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}")
+                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{i}")
+                r_tab = await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab.warmup{i}",
+                )
+
+                if (
+                    r_sso.status_code < 500
+                    and "/cas/login" not in str(r_sso.url)
+                    and "/authentication/require" not in str(r_sso.url)
+                ):
+                    return
+                if r_home.status_code < 500 and "/cas/login" not in str(r_home.url):
+                    return
+                if r_tab.status_code < 500 and "/cas/login" not in str(r_tab.url):
+                    return
+
+        _bb_sink_dump(f"cas_login_{r2.status_code}")
+        raise ConnectionError(f"CAS/SSO server error: status={r2.status_code} url={u2}")
+
+    r2.raise_for_status()
+
+    # Check for authentication errors
+    if "cas.sustech.edu.cn" in u2 and "/cas/login" in u2:
         err_text = ""
         page_title = ""
         try:
@@ -1097,7 +1368,23 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
         raise ValueError("Missing CAS credentials")
 
     service_url = f"{BLACKBOARD_BASE}/webapps/bb-sso-BBLEARN/index.jsp"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    tab_url = f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_1_1"
+    default_tab_url = f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab"
+
+    # Enhanced headers with realistic browser headers
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+    }
 
     token = _bb_sink_var.set([])
 
@@ -1114,71 +1401,146 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
             trust_env=False,
             cookies=cookies,
         ) as client:
-            tab_url = f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_1_1"
+            async def _bb_warmup(label_suffix: str) -> None:
+                await _request_with_retry(client, "GET", service_url, label=f"bb.sso{label_suffix}")
+                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab{label_suffix}",
+                )
 
-            r0 = await _request_with_retry(client, "GET", tab_url, label="bb.tab")
+            def _looks_like_transient_bb_500(r: httpx.Response) -> bool:
+                if r.status_code >= 500:
+                    return True
+                u = str(r.url)
+                if "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u:
+                    return True
+                return False
+
+            async def _frontdoor_home(label_suffix: str) -> httpx.Response:
+                r = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}")
+
+                for _ in range(10):
+                    if not (300 <= r.status_code < 400):
+                        break
+                    loc = r.headers.get("Location") or ""
+                    if not loc:
+                        break
+                    loc = urljoin(str(r.url), loc)
+                    r = await _request_with_retry(client, "GET", loc, label=f"bb.redirect{label_suffix}")
+
+                return r
+
+            async def _bb_open_frontdoor(label_suffix: str) -> httpx.Response:
+                await _frontdoor_home(label_suffix)
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab{label_suffix}",
+                )
+                return await _request_with_retry(client, "GET", tab_url, label=f"bb.tab{label_suffix}")
+
+            # Initial frontdoor request
+            r0 = await _bb_open_frontdoor(".entry")
+
+            # If redirected to CAS, login
             if "cas.sustech.edu.cn" in str(r0.url):
-                await _cas_login(client, cas_account, cas_password, service_url)
-                r0 = await _request_with_retry(client, "GET", tab_url, label="bb.tab.after_login")
+                logger.info("bb.fetch: redirected to CAS, starting login")
+                await _cas_login_enhanced(client, cas_account, cas_password, service_url)
+                await _bb_warmup(".after_login")
+                r0 = await _bb_open_frontdoor(".after_login")
 
+            # Handle transient 500 errors
+            if _looks_like_transient_bb_500(r0):
+                logger.warning("bb.fetch: detected transient 500 error, attempting recovery")
+                for attempt in range(1, 4):
+                    await asyncio.sleep(_backoff_seconds(attempt))
+                    await _bb_warmup(f".recover{attempt}")
+                    r0 = await _request_with_retry(client, "GET", tab_url, label=f"bb.tab.recover{attempt}")
+                    if not _looks_like_transient_bb_500(r0):
+                        logger.info("bb.fetch: recovery successful on attempt %d", attempt)
+                        break
+
+            if _looks_like_transient_bb_500(r0):
+                err_id = r0.headers.get("X-Blackboard-errorid") or r0.headers.get("x-blackboard-errorid")
+                raise ConnectionError(
+                    f"Blackboard login unstable: status={r0.status_code} url={str(r0.url)} errorid={err_id or ''}".strip()
+                )
+
+            # Update cookie cache
             _BB_COOKIE_CACHE[cas_account] = (time.time(), _export_cookies(client.cookies))
 
             base_url = str(r0.url)
 
+            # Extract course IDs from various sources
             course_ids = _extract_course_ids(r0.text)
-            course_ids |= _extract_course_ids_for_course_names(r0.text, _TARGET_COURSE_NAMES)
 
+            # Crawl portal for courses and upload URLs
             portal_course_ids, portal_upload_urls = await _crawl_portal_upload_urls(
                 client,
                 [
                     tab_url,
-                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    default_tab_url,
                 ],
             )
 
             course_ids |= portal_course_ids
 
+            # Extract URLs from initial page
             upload_url_set: set[str] = set(_extract_upload_assignment_urls(r0.text, base_url))
             upload_url_set |= set(portal_upload_urls)
 
-            dwr_urls = await _fetch_upload_urls_via_tool_activity_dwr(client, base_url)
+            # Try DWR method (browser uses tabAction as page+referer)
+            dwr_urls = await _fetch_upload_urls_via_tool_activity_dwr(client, tab_url)
             upload_url_set |= set(dwr_urls)
 
+            # Crawl each course for upload URLs (human flow starts from tabAction -> launcher)
             for course_id in sorted(course_ids):
-                upload_url_set |= await _crawl_course_upload_urls(client, course_id, base_url)
+                course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                upload_url_set |= course_urls
 
             upload_urls = sorted(upload_url_set)
 
             logger.info(
-                "bb.fetch: base=%s course_ids=%d upload_urls(seed)=%d dwr_urls=%d",
+                "bb.fetch: base=%s course_ids=%d upload_urls(seed)=%d dwr_urls=%d total=%d",
                 base_url,
                 len(course_ids),
                 len(_extract_upload_assignment_urls(r0.text, base_url)),
                 len(dwr_urls),
+                len(upload_urls),
             )
 
+            # Fallback if no URLs found
             if not upload_urls:
                 logger.warning("bb.fetch: no upload urls after seed+dwr+course crawl; running portal fallback")
                 portal_course_ids2, portal_upload_urls2 = await _crawl_portal_upload_urls(
                     client,
                     [
                         tab_url,
-                        f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                        default_tab_url,
                     ],
                 )
                 course_ids |= portal_course_ids2
                 upload_url_set |= portal_upload_urls2
                 for course_id in sorted(portal_course_ids2):
-                    upload_url_set |= await _crawl_course_upload_urls(client, course_id, base_url)
+                    course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                    upload_url_set |= course_urls
                 upload_urls = sorted(upload_url_set)
 
+            # Fetch deadlines from all URLs
             async def fetch_one(u: str) -> Deadline | None:
                 try:
                     r = await _request_with_retry(
                         client,
                         "GET",
                         u,
-                        headers={"Referer": base_url},
+                        headers={
+                            "Referer": tab_url,
+                            **headers
+                        },
                         label="bb.upload_assignment",
                     )
                 except httpx.HTTPError as exc:
@@ -1186,6 +1548,9 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     return None
 
                 if r.status_code >= 400:
+                    if r.status_code == 500 and _looks_like_transient_bb_500(r):
+                        logger.warning("bb.fetch: transient 500 error on url=%s", u)
+                        return None
                     logger.warning(
                         "bb.fetch: bad status=%s url=%s body_len=%d",
                         r.status_code,
@@ -1205,8 +1570,8 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     )
                     return None
 
+            # Gather all deadlines
             now_local = datetime.now()
-
             deadlines_raw = await asyncio.gather(*(fetch_one(u) for u in upload_urls))
             deadlines = [
                 d
@@ -1214,6 +1579,7 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                 if d and d.type == "assignment" and d.due_at and d.due_at >= now_local
             ]
 
+            # Final fallback if no deadlines found
             if not deadlines and upload_urls:
                 logger.warning(
                     "bb.fetch: %d upload urls fetched but 0 parsed deadlines; trying portal+course refresh",
@@ -1223,13 +1589,14 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     client,
                     [
                         tab_url,
-                        f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                        default_tab_url,
                     ],
                 )
                 upload_url_set2 = set(upload_urls)
                 upload_url_set2 |= portal_upload_urls3
                 for course_id in sorted(portal_course_ids3):
-                    upload_url_set2 |= await _crawl_course_upload_urls(client, course_id, base_url)
+                    course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                    upload_url_set2 |= course_urls
 
                 deadlines_raw2 = await asyncio.gather(*(fetch_one(u) for u in sorted(upload_url_set2)))
                 deadlines = [
@@ -1610,7 +1977,7 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
     ) as client:
         r0 = await _request_with_retry(client, "GET", main_url, label="tis.main")
         if "cas.sustech.edu.cn" in str(r0.url):
-            await _cas_login(client, cas_account, cas_password, service_url)
+            await _cas_login_enhanced(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
 
         if r0.status_code >= 400:
@@ -1633,7 +2000,7 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
 
             r = await _request_with_retry(client, "POST", url, headers=req_headers, data=data or {}, label=label)
             if _tis_needs_auth_response(r):
-                await _cas_login(client, cas_account, cas_password, service_url)
+                await _cas_login_enhanced(client, cas_account, cas_password, service_url)
                 r = await _request_with_retry(
                     client,
                     "POST",
