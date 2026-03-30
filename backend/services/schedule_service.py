@@ -2089,12 +2089,84 @@ def detect_conflicts(
     Returns:
         ScheduleData，包含 events 列表（所有事件）和 conflicts 列表（检测到的冲突）
     """
-    # TODO:
-    # 1. 将 deadlines 和 course_slots 转换为统一时间轴
-    # 2. 对每个 deadline，检查其前 2 小时内是否有课
-    # 3. 构造 events 和 conflicts 列表
-    # 4. return ScheduleData(events=[...], conflicts=[...])
-    raise NotImplementedError
+
+    def _safe_id(prefix: str, raw: str) -> str:
+        s = (raw or "").strip()
+        s = re.sub(r"\s+", "_", s)
+        if len(s) > 200:
+            s = s[:200]
+        return f"{prefix}:{s}" if s else prefix
+
+    events_with_time: list[tuple[datetime, ScheduleEvent]] = []
+    conflicts: list[ScheduleConflict] = []
+
+    for o in course_slots or []:
+        title = (o.notes or o.course_id or "").strip() or "Course"
+        start = o.start_at
+        end = o.end_at
+        time_s = f"{start.isoformat()}~{end.isoformat()}"
+
+        detail_parts: list[str] = [f"course_id={o.course_id}"]
+        if o.location:
+            detail_parts.append(f"location={o.location}")
+        if o.instructor:
+            detail_parts.append(f"instructor={o.instructor}")
+        detail = " ".join(detail_parts)
+
+        event = ScheduleEvent(
+            event_id=_safe_id("tis", f"{o.course_id}:{start.isoformat()}"),
+            title=title,
+            time=time_s,
+            source="教务系统",
+            detail=detail,
+        )
+        events_with_time.append((start, event))
+
+    window = timedelta(hours=2)
+
+    for d in deadlines or []:
+        title = (d.title or "").strip() or "Deadline"
+        due = d.due_at
+        time_s = due.isoformat()
+
+        detail_parts: list[str] = [f"course_id={d.course_id}", f"type={d.type}"]
+        if d.url:
+            detail_parts.append(f"url={d.url}")
+        detail = " ".join(detail_parts)
+
+        raw_id = f"{d.course_id}:{due.isoformat()}:{d.url or title}"
+        event = ScheduleEvent(
+            event_id=_safe_id("bb", raw_id),
+            title=title,
+            time=time_s,
+            source="Blackboard",
+            detail=detail,
+        )
+        events_with_time.append((due, event))
+
+        start_window = due - window
+        for o in course_slots or []:
+            if not (o.start_at < due and o.end_at > start_window):
+                continue
+            course_title = (o.notes or o.course_id or "").strip() or o.course_id
+            slot_time = f"{o.start_at.isoformat()}~{o.end_at.isoformat()}"
+            parts = [
+                f"deadline_at={due.isoformat()}",
+                f"course={course_title}",
+                f"course_time={slot_time}",
+            ]
+            if o.location:
+                parts.append(f"location={o.location}")
+            conflicts.append(
+                ScheduleConflict(
+                    title=title,
+                    detail=" ".join(parts),
+                )
+            )
+
+    events_with_time.sort(key=lambda x: x[0])
+    events = [e for _t, e in events_with_time]
+    return ScheduleData(events=events, conflicts=conflicts)
 
 
 async def refresh(db, user) -> ScheduleData:
@@ -2109,10 +2181,24 @@ async def refresh(db, user) -> ScheduleData:
     Returns:
         最新的 ScheduleData
     """
-    # TODO:
-    # from backend.utils.crypto import decrypt
-    # cas_password = decrypt(user.cas_password_encrypted)
-    # deadlines = await fetch_blackboard(user.cas_account, cas_password)
-    # slots = await fetch_course_schedule(user.cas_account, cas_password)
-    # return detect_conflicts(deadlines, slots)
-    raise NotImplementedError
+    _ensure_file_logging()
+    _ = db
+
+    cas_account = (getattr(user, "cas_account", None) or "").strip()
+    cas_password_encrypted = getattr(user, "cas_password_encrypted", None)
+
+    if not cas_account or not cas_password_encrypted:
+        raise PermissionError("CAS credentials not configured")
+
+    from backend.utils.crypto import decrypt
+
+    try:
+        cas_password = decrypt(cas_password_encrypted)
+    except Exception as exc:
+        raise PermissionError(f"CAS credentials invalid: {type(exc).__name__}") from exc
+
+    deadlines, slots = await asyncio.gather(
+        fetch_blackboard(cas_account, cas_password),
+        fetch_course_schedule(cas_account, cas_password),
+    )
+    return detect_conflicts(deadlines, slots)
