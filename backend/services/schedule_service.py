@@ -905,6 +905,125 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
 async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
     login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
 
+    if "tis.sustech.edu.cn" in str(service_url):
+        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        r1.raise_for_status()
+
+        soup = BeautifulSoup(r1.text, "html.parser")
+        forms = list(soup.find_all("form"))
+        form = None
+        for f in forms:
+            if f.find("input", attrs={"type": re.compile(r"^password$", re.I)}):
+                form = f
+                break
+        if form is None:
+            form = soup.find("form")
+        if not form:
+            raise ConnectionError("CAS login form not found")
+
+        payload: dict[str, str] = {}
+        inputs = list(form.find_all("input"))
+        for inp in inputs:
+            name = inp.get("name")
+            if not name:
+                continue
+            payload[name] = inp.get("value") or ""
+
+        for btn in form.find_all("button"):
+            name = btn.get("name")
+            if not name:
+                continue
+            if name in payload:
+                continue
+            if (btn.get("type") or "").lower() not in {"submit", ""}:
+                continue
+            payload[name] = btn.get("value") or "submit"
+
+        password_field = None
+        for inp in inputs:
+            if (inp.get("type") or "").lower() == "password" and inp.get("name"):
+                password_field = inp.get("name")
+                break
+
+        username_field = None
+        for inp in inputs:
+            t = (inp.get("type") or "").lower()
+            n = (inp.get("name") or "").lower()
+            if inp.get("name") and (
+                n in {"username", "user", "userid", "account"}
+                or (t in {"text", "email"} and "user" in n)
+            ):
+                username_field = inp.get("name")
+                break
+
+        if not username_field:
+            for inp in inputs:
+                t = (inp.get("type") or "").lower()
+                if inp.get("name") and t in {"text", "email"}:
+                    username_field = inp.get("name")
+                    break
+
+        if not username_field:
+            username_field = "username"
+            payload.setdefault(username_field, "")
+
+        if not password_field:
+            password_field = "password"
+            payload.setdefault(password_field, "")
+
+        payload[username_field] = cas_account
+        payload[password_field] = cas_password
+
+        action = form.get("action")
+        if not action:
+            post_url = login_url
+        else:
+            action_url = httpx.URL(urljoin(str(login_url), action))
+            if (
+                action_url.host == login_url.host
+                and action_url.path == login_url.path
+                and "service" not in action_url.params
+                and "service" in login_url.params
+            ):
+                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+            post_url = action_url
+
+        r2 = await _request_with_retry(client, "POST", str(post_url), data=payload, label="cas.login.post")
+        r2.raise_for_status()
+
+        if "cas.sustech.edu.cn" in str(r2.url) and "/cas/login" in str(r2.url):
+            err_text = ""
+            page_title = ""
+            try:
+                s2 = BeautifulSoup(r2.text, "html.parser")
+                if s2.title:
+                    page_title = s2.title.get_text(" ", strip=True)
+                candidates = [
+                    s2.find(attrs={"role": "alert"}),
+                    s2.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
+                    s2.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
+                    s2.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+                ]
+                for node in candidates:
+                    if node:
+                        txt = node.get_text(" ", strip=True)
+                        if txt:
+                            err_text = txt
+                            break
+                if not err_text and re.search(r"captcha|验证码", r2.text, re.I):
+                    err_text = "captcha required"
+            except Exception:
+                err_text = ""
+
+            msg = "CAS authentication failed"
+            if page_title:
+                msg = f"{msg} ({page_title})"
+            if err_text:
+                msg = f"{msg}: {err_text}"
+            raise PermissionError(msg)
+
+        return
+
     post_headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9",
@@ -1266,6 +1385,19 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
             await asyncio.sleep(_backoff_seconds(attempt))
             continue
 
+        # TIS may occasionally return 403 right after CAS redirects; do a light warmup then retry.
+        if r2.status_code == 403 and "tis.sustech.edu.cn" in str(service_url):
+            await _request_with_retry(
+                client,
+                "GET",
+                f"{ACADEMIC_SYSTEM_BASE}/authentication/main",
+                label=f"tis.main.bounce{attempt}",
+            )
+            if attempt >= max_attempts:
+                break
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
+
         break
 
     # Check if we got a successful response
@@ -1309,6 +1441,10 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
 
         _bb_sink_dump(f"cas_login_{r2.status_code}")
         raise ConnectionError(f"CAS/SSO server error: status={r2.status_code} url={u2}")
+
+    if r2.status_code == 403 and "tis.sustech.edu.cn" in str(service_url):
+        _bb_sink_dump("tis_403")
+        raise ConnectionError(f"TIS forbidden after CAS login: status=403 url={u2}")
 
     r2.raise_for_status()
 
@@ -1977,7 +2113,7 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
     ) as client:
         r0 = await _request_with_retry(client, "GET", main_url, label="tis.main")
         if "cas.sustech.edu.cn" in str(r0.url):
-            await _cas_login_enhanced(client, cas_account, cas_password, service_url)
+            await _cas_login(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
 
         if r0.status_code >= 400:
@@ -2000,7 +2136,7 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
 
             r = await _request_with_retry(client, "POST", url, headers=req_headers, data=data or {}, label=label)
             if _tis_needs_auth_response(r):
-                await _cas_login_enhanced(client, cas_account, cas_password, service_url)
+                await _cas_login(client, cas_account, cas_password, service_url)
                 r = await _request_with_retry(
                     client,
                     "POST",
