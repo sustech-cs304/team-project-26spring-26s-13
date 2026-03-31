@@ -99,7 +99,7 @@ _bb_sink_var: contextvars.ContextVar[list[tuple[str, str, int, int, str]] | None
 
 
 def _log_file_path() -> Path:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     return root / "temp" / "log.txt"
 
 
@@ -152,7 +152,7 @@ def _bb_sink_dump(reason: str) -> None:
 
 
 def _test5_file_path() -> Path:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     return root / "test" / "result" / "test5.txt"
 
 
@@ -1046,6 +1046,23 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                 r1.status_code,
                 str(login_url),
             )
+
+            if "bb.sustech.edu.cn" in str(service_url):
+                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{attempt}")
+                r_sso = await _request_with_retry(client, "GET", str(service_url), label=f"bb.sso.warmup{attempt}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
+                    label=f"bb.defaultTab.warmup{attempt}",
+                )
+                if (
+                    r_sso.status_code < 500
+                    and "/cas/login" not in str(r_sso.url)
+                    and "/authentication/require" not in str(r_sso.url)
+                ):
+                    return
+
             if attempt >= max_attempts:
                 raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
             await asyncio.sleep(_backoff_seconds(attempt))
@@ -2338,3 +2355,22 @@ async def refresh(db, user) -> ScheduleData:
         fetch_course_schedule(cas_account, cas_password),
     )
     return detect_conflicts(deadlines, slots)
+
+# ---------------------------------------------------------------------------
+# Re-export public API from split modules (override in-file definitions)
+from .constants import Deadline, Course, CourseOccurrence
+from .fetch_bb import fetch_blackboard
+from .fetch_tis import fetch_course_schedule
+from .conflicts import detect_conflicts
+from .refresh import refresh
+
+__all__ = [
+    "Deadline",
+    "Course",
+    "CourseOccurrence",
+    "fetch_blackboard",
+    "fetch_course_schedule",
+    "detect_conflicts",
+    "refresh",
+]
+
