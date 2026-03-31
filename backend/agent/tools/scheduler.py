@@ -15,6 +15,7 @@ from pydantic_ai import RunContext
 from backend.agent.loop import AgentDeps, agent
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
 from backend.services import schedule_service
+from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY
 
 
 @agent.tool
@@ -85,7 +86,7 @@ async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
     except Exception:
         return "ERROR:ACADEMIC_SYSTEM_UNREACHABLE"
 
-    week1 = getattr(schedule_service, "_TIS_WEEK1_MONDAY", None)
+    week1 = _TIS_WEEK1_MONDAY
 
     grouped: dict[tuple[str, int, str, str, str], dict] = {}
     for o in occs:
@@ -189,9 +190,7 @@ async def detect_schedule_conflicts(
             )
         )
 
-    week1 = getattr(schedule_service, "_TIS_WEEK1_MONDAY", None)
-    if week1 is None:
-        return "ERROR:ACADEMIC_SYSTEM_UNREACHABLE"
+    week1 = _TIS_WEEK1_MONDAY
 
     course_slots: list[schedule_service.CourseOccurrence] = []
 

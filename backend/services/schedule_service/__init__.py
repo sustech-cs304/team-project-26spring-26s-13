@@ -1,5 +1,5 @@
 """
-backend/services/schedule_service.py
+backend/services/schedule_service/
 日程爬取与冲突检测业务逻辑。
 网络请求通过 httpx.AsyncClient，HTML 解析通过 BeautifulSoup。
 """
