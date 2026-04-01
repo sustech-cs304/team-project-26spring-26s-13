@@ -3,7 +3,7 @@ backend/api/schedule.py
 日程路由：手动触发重新爬取 Blackboard 和教务系统。
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User, get_db
@@ -30,5 +30,13 @@ async def refresh_schedule(
         424: CAS 登录失败（密码错误或网络不通）
         503: Blackboard/教务系统服务不可达
     """
-    # TODO: return await schedule_service.refresh(db, current_user)
-    raise NotImplementedError
+    _ = background_tasks
+
+    try:
+        return await schedule_service.refresh(db, current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=424, detail=str(exc) or "CAS login failed") from exc
+    except ConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc) or "Service unavailable") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Internal Server Error") from exc

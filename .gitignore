@@ -1,6 +1,7 @@
 # IDE
 .idea/
 .vscode/
+.claude/
 
 # Python
 __pycache__/
@@ -24,6 +25,10 @@ uploads/
 .venv/
 venv/
 env/
+
+# Tests
+temp/
+test/
 
 # OS
 .DS_Store
