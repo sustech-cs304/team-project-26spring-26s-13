@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -444,6 +444,46 @@ def _tis_meetings_to_occurrences(meetings: list[dict[str, object]]) -> list[Cour
     return occs
 
 
+def _apply_calendar_overrides(occs: list[CourseOccurrence]) -> list[CourseOccurrence]:
+    cancel_days = {
+        date(2026, 2, 23),
+        date(2026, 2, 24),
+        date(2026, 4, 6),
+        date(2026, 5, 1),
+        date(2026, 5, 4),
+        date(2026, 5, 5),
+    }
+
+    move_rules: list[tuple[date, date]] = [
+        (date(2026, 2, 23), date(2026, 2, 28)),
+        (date(2026, 5, 5), date(2026, 5, 9)),
+    ]
+
+    moved: list[CourseOccurrence] = []
+    for src, dst in move_rules:
+        delta_days = (dst - src).days
+        for o in occs:
+            if o.start_at.date() != src:
+                continue
+            moved.append(
+                CourseOccurrence(
+                    course_id=o.course_id,
+                    start_at=o.start_at + timedelta(days=delta_days),
+                    end_at=o.end_at + timedelta(days=delta_days),
+                    location=o.location,
+                    kind=o.kind,
+                    instructor=o.instructor,
+                    notes=o.notes,
+                )
+            )
+
+    override_days = {dst for _, dst in move_rules}
+    kept = [o for o in occs if o.start_at.date() not in cancel_days and o.start_at.date() not in override_days]
+    kept.extend(moved)
+    kept.sort(key=lambda x: (x.start_at, x.course_id))
+    return kept
+
+
 async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
     _ensure_file_logging()
 
@@ -555,4 +595,5 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
                 raise PermissionError("TIS authentication required")
             raise RuntimeError("Academic schedule empty or unparseable")
 
-        return _tis_meetings_to_occurrences(meetings)
+        occs = _tis_meetings_to_occurrences(meetings)
+        return _apply_calendar_overrides(occs)
