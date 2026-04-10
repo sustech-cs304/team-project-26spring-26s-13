@@ -6,6 +6,7 @@ backend/utils/document_parser.py
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 
 @dataclass
@@ -36,16 +37,13 @@ def parse_document(file_path: str, mime_type: str) -> ParsedDocument:
         ValueError: 不支持的 MIME 类型
         IOError:    文件不可读
     """
-    # TODO:
-    # if mime_type == "application/pdf":
-    #     return _parse_pdf(file_path)
-    # elif "presentation" in mime_type or "powerpoint" in mime_type:
-    #     return _parse_pptx(file_path)
-    # elif mime_type in ("text/markdown", "text/plain"):
-    #     return _parse_text(file_path, mime_type)
-    # else:
-    #     raise ValueError(f"Unsupported MIME type: {mime_type}")
-    raise NotImplementedError
+    if mime_type == "application/pdf":
+        return _parse_pdf(file_path)
+    if "presentation" in mime_type or "powerpoint" in mime_type:
+        return _parse_pptx(file_path)
+    if mime_type in ("text/markdown", "text/plain"):
+        return _parse_text(file_path, mime_type)
+    raise ValueError(f"Unsupported MIME type: {mime_type}")
 
 
 def _parse_pdf(file_path: str) -> ParsedDocument:
@@ -59,13 +57,37 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
     Returns:
         ParsedDocument
     """
-    # TODO:
-    # import fitz
-    # doc = fitz.open(file_path)
-    # pages = [page.get_text() for page in doc]
-    # text = "\n\n".join(p for p in pages if p.strip())
-    # return ParsedDocument(text=text, page_count=len(doc), file_type="application/pdf")
-    raise NotImplementedError
+    from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
+
+    import fitz  # type: ignore[import-not-found]
+
+    ocr_engine: PaddleOcrEngine | None = None
+
+    doc = fitz.open(file_path)
+    pages_text: list[str] = []
+    for page in doc:
+        t = (page.get_text("text") or "").strip()
+        if len(t) >= 20:
+            pages_text.append(t)
+            continue
+
+        if ocr_engine is None:
+            ocr_engine = PaddleOcrEngine()
+
+        mat = fitz.Matrix(2, 2)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+
+        import numpy as np  # type: ignore[import-not-found]
+
+        channels = 3
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, channels))
+        img = img[:, :, ::-1]
+        ocr_t = (ocr_engine.ocr_image_array(img) or "").strip()
+        if ocr_t:
+            pages_text.append(ocr_t)
+
+    text = _normalize_text("\n\n".join(pages_text))
+    return ParsedDocument(text=text, page_count=len(doc), file_type="application/pdf")
 
 
 def _parse_pptx(file_path: str) -> ParsedDocument:
@@ -79,15 +101,22 @@ def _parse_pptx(file_path: str) -> ParsedDocument:
     Returns:
         ParsedDocument
     """
-    # TODO:
-    # from pptx import Presentation
-    # prs = Presentation(file_path)
-    # slides_text = []
-    # for slide in prs.slides:
-    #     slide_texts = [shape.text for shape in slide.shapes if shape.has_text_frame]
-    #     slides_text.append("\n".join(slide_texts))
-    # return ParsedDocument(text="\n\n".join(slides_text), page_count=len(prs.slides), ...)
-    raise NotImplementedError
+    from pptx import Presentation  # type: ignore[import-not-found]
+
+    prs = Presentation(file_path)
+    slides_text: list[str] = []
+    for slide in prs.slides:
+        slide_texts: list[str] = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                txt = str(getattr(shape, "text", "") or "").strip()
+                if txt:
+                    slide_texts.append(txt)
+        if slide_texts:
+            slides_text.append("\n".join(slide_texts))
+
+    text = _normalize_text("\n\n".join(slides_text))
+    return ParsedDocument(text=text, page_count=len(prs.slides), file_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
 
 
 def _parse_text(file_path: str, mime_type: str) -> ParsedDocument:
@@ -101,7 +130,12 @@ def _parse_text(file_path: str, mime_type: str) -> ParsedDocument:
     Returns:
         ParsedDocument
     """
-    # TODO:
-    # text = Path(file_path).read_text(encoding="utf-8")
-    # return ParsedDocument(text=text, page_count=1, file_type=mime_type)
-    raise NotImplementedError
+    text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+    return ParsedDocument(text=_normalize_text(text), page_count=1, file_type=mime_type)
+
+
+def _normalize_text(text: str) -> str:
+    s = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    s = "\n".join(line.rstrip() for line in s.split("\n"))
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
