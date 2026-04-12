@@ -48,6 +48,7 @@ def _read_cached_overrides(path: Path, *, max_age: timedelta) -> CalendarOverrid
         return CalendarOverrides(
             cancel_days=set(cancel_days),
             move_rules=move_rules,
+            week1_monday=_parse_iso_date(data.get("week1_monday") or ""),
             source_url=data.get("source_url"),
             source_pdf_url=data.get("source_pdf_url"),
             source_pdf_path=data.get("source_pdf_path"),
@@ -63,6 +64,7 @@ def _write_cached_overrides(path: Path, overrides: CalendarOverrides) -> None:
     payload = asdict(overrides)
     payload["cancel_days"] = sorted([d.isoformat() for d in overrides.cancel_days])
     payload["move_rules"] = [[a.isoformat(), b.isoformat()] for a, b in overrides.move_rules]
+    payload["week1_monday"] = overrides.week1_monday.isoformat() if overrides.week1_monday else None
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

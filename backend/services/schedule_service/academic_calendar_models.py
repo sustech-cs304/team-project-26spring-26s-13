@@ -15,6 +15,7 @@ class CalendarPdfRef:
 class CalendarOverrides:
     cancel_days: set[date]
     move_rules: list[tuple[date, date]]
+    week1_monday: date | None = None
     source_url: str | None = None
     source_pdf_url: str | None = None
     source_pdf_path: str | None = None

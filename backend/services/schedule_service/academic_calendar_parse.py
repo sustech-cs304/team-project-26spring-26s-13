@@ -70,6 +70,7 @@ def parse_calendar_overrides(text: str, *, source_url: str | None = None, source
     s = _norm(raw)
     default_year = _infer_default_year(s)
     lines = [_norm(line) for line in raw.splitlines() if _norm(line)]
+    week1_monday = _infer_week1_monday(lines, default_year)
 
     cancel_days: set[date] = set()
     move_rules: list[tuple[date, date]] = []
@@ -161,6 +162,7 @@ def parse_calendar_overrides(text: str, *, source_url: str | None = None, source
     return CalendarOverrides(
         cancel_days=cancel_days,
         move_rules=move_rules,
+        week1_monday=week1_monday,
         source_url=source_url,
         source_pdf_url=source_pdf_url,
         source_pdf_path=source_pdf_path,
@@ -238,6 +240,21 @@ def _parse_makeup_weekday_line(line: str, default_year: int, cancel_days: set[da
 
 
 def _apply_term_start_cancellations(lines: list[str], default_year: int, cancel_days: set[date]) -> None:
+    monday = _infer_week1_monday(lines, default_year)
+    if monday is None:
+        return
+    starts = _extract_class_start_days(lines, default_year)
+    if not starts:
+        return
+    start = min(starts)
+    cur = monday
+    while cur < start:
+        if cur.weekday() < 5:
+            cancel_days.add(cur)
+        cur = cur + timedelta(days=1)
+
+
+def _extract_class_start_days(lines: list[str], default_year: int) -> list[date]:
     starts: list[date] = []
     for line in lines:
         m = _CLASS_START_RE.search(line)
@@ -246,15 +263,15 @@ def _apply_term_start_cancellations(lines: list[str], default_year: int, cancel_
         d0 = _mk_date(default_year, int(m.group("m")), int(m.group("d")))
         if d0:
             starts.append(d0)
+    return starts
+
+
+def _infer_week1_monday(lines: list[str], default_year: int) -> date | None:
+    starts = _extract_class_start_days(lines, default_year)
     if not starts:
-        return
+        return None
     start = min(starts)
-    monday = start - timedelta(days=start.weekday())
-    cur = monday
-    while cur < start:
-        if cur.weekday() < 5:
-            cancel_days.add(cur)
-        cur = cur + timedelta(days=1)
+    return start - timedelta(days=start.weekday())
 
 
 def _apply_substitute_holidays(explicit_holidays: set[date], cancel_days: set[date]) -> None:
