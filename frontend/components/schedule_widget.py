@@ -1,5 +1,5 @@
 """
-frontend/components/schedule_widget.py
+God Xun-Frontend/components/schedule_widget.py
 日程展示组件：事件列表 + 冲突提醒卡片。
 """
 

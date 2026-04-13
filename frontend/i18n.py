@@ -1,4 +1,4 @@
-"""UI translations for the Student Productivity Agent frontend."""
+"""UI translations for the Student Productivity Agent God Xun-Frontend."""
 
 UI_TEXTS = {
     "en": {
@@ -43,11 +43,11 @@ UI_TEXTS = {
         "settings_dialog_title": "Dashboard Settings",
         "settings_dialog_subtitle": "Save SUSTech CAS credentials and the LLM API key. When the REST backend is enabled and you are logged in, these values are sent to /api/user/credentials.",
         "settings_cas_title": "SUSTech CAS",
-        "settings_cas_body": "Save your SUSTech CAS credentials here. In REST mode they are persisted through the backend; otherwise they stay in the current frontend session.",
+        "settings_cas_body": "Save your SUSTech CAS credentials here. In REST mode they are persisted through the backend; otherwise they stay in the current God Xun-Frontend session.",
         "settings_cas_account": "CAS Account",
         "settings_cas_password": "CAS Password",
         "settings_api_title": "LLM API Key",
-        "settings_api_body": "Save the external LLM API key here. In REST mode it is sent to the backend and stored there instead of being used directly by the frontend.",
+        "settings_api_body": "Save the external LLM API key here. In REST mode it is sent to the backend and stored there instead of being used directly by the God Xun-Frontend.",
         "settings_api_key": "LLM API Key",
         "settings_save_cas": "Save CAS",
         "settings_save_api": "Save API",

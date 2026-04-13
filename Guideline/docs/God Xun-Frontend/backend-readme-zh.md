@@ -4,8 +4,8 @@
 
 配套字段契约请同时参考：
 
-- [backend-interface-contract-zh.md](./backend-interface-contract-zh.md)
-- [backend-interface-contract.md](./backend-interface-contract.md)
+- [backend-interface-contract-zh.md](backend-interface-contract-zh.md)
+- [backend-interface-contract.md](backend-interface-contract.md)
 
 ## 1. 当前联调背景
 
@@ -442,7 +442,7 @@ POST /api/agent/run
 
 ```bash
 export SPA_API_BASE_URL=http://127.0.0.1:8000
-python3 frontend/app.py
+python3 God Xun-Frontend/app.py
 ```
 
 如果不设置这个环境变量，前端会自动退回本地 mock，不会去访问后端。

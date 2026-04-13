@@ -1,5 +1,5 @@
 """
-frontend/api/client.py
+God Xun-Frontend/api/client.py
 封装所有后端 HTTP 调用，集中管理 API URL、认证 token 和错误处理。
 所有网络调用必须通过此模块，不得在 widget/view 中直接使用 requests。
 """
