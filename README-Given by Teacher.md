@@ -20,7 +20,7 @@ This repository now includes a `PyQt6` frontend prototype for the Student Produc
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 frontend/app.py
+python3 God Xun-Frontend/app.py
 ```
 
 ### Notes
@@ -30,7 +30,7 @@ python3 frontend/app.py
 
 ```bash
 export SPA_API_BASE_URL=http://127.0.0.1:8000
-python3 frontend/app.py
+python3 God Xun-Frontend/app.py
 ```
 
 - The frontend currently calls these REST endpoints when `SPA_API_BASE_URL` is set:
@@ -59,7 +59,7 @@ python3 frontend/app.py
 - Conversation history now syncs with `GET /api/agent/sessions`, `Delete Chat` uses `DELETE /api/agent/sessions/{session_id}`, and `Refresh Schedule` uses `POST /api/schedule/refresh`.
 - Dashboard bootstrap, auth, materials upload, sessions, schedule refresh, chat, encyclopedia, and HITL flows are wired to the current backend contract.
 - Current backend-facing docs:
-  - [docs/backend-interface-contract-zh.md](docs/backend-interface-contract-zh.md)
-  - [docs/backend-interface-contract.md](docs/backend-interface-contract.md)
-  - [docs/backend-readme-zh.md](docs/backend-readme-zh.md)
-  - [docs/frontend-api-connection-zh.md](docs/frontend-api-connection-zh.md)
+  - [docs/backend-interface-contract-zh.md](Guideline/docs/God Xun-Frontend/backend-interface-contract-zh.md)
+  - [docs/backend-interface-contract.md](Guideline/docs/God Xun-Frontend/backend-interface-contract.md)
+  - [docs/backend-readme-zh.md](Guideline/docs/God Xun-Frontend/backend-readme-zh.md)
+  - [docs/frontend-api-connection-zh.md](Guideline/docs/God Xun-Frontend/frontend-api-connection-zh.md)
