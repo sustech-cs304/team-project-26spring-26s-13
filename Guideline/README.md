@@ -195,7 +195,7 @@ team-project-26spring-26s-13/
 │   │   ├── auth_service.py          # 注册/登录/JWT 签发
 │   │   ├── user_service.py          # 用户 profile 更新
 │   │   ├── material_service.py      # 文件上传 + 向量化流程
-│   │   ├── schedule_service.py      # Blackboard/教务爬取 + 冲突检测
+│   │   ├── schedule_service/        # Blackboard/教务爬取 + 冲突检测（拆包）
 │   │   ├── rag_service.py           # RAG 学科剪枝 + 上下文格式化
 │   │   ├── dashboard_service.py     # Bootstrap 数据组装
 │   │   └── audit_service.py         # OS 操作审计日志写入
@@ -674,7 +674,7 @@ POST /api/agent/run
 
 | 文件 | 核心任务 |
 |------|---------|
-| `backend/services/schedule_service.py` | 实现 `fetch_blackboard()`、`fetch_course_schedule()`、`detect_conflicts()` |
+| `backend/services/schedule_service/` | 实现 `fetch_blackboard()`、`fetch_course_schedule()`、`detect_conflicts()`（对外入口在 `__init__.py`） |
 | `backend/agent/tools/scheduler.py` | 将 service 函数封装为 PydanticAI 工具（`@agent.tool` 装饰器） |
 | `backend/api/schedule.py` | 实现 `/api/schedule/refresh` 路由 |
 
