@@ -1,13 +1,12 @@
 """
-frontend/api/client.py
+God Xun-Frontend/api/client.py
 封装所有后端 HTTP 调用，集中管理 API URL、认证 token 和错误处理。
 所有网络调用必须通过此模块，不得在 widget/view 中直接使用 requests。
 """
 
-import requests
 from typing import Any
 
-from frontend.config import API_BASE_URL
+from frontend.api_client import BackendApiClient, BackendApiError
 
 
 class APIError(Exception):
@@ -25,19 +24,18 @@ class APIClient:
     """
 
     def __init__(self) -> None:
-        self._token: str | None = None
-        self._session = requests.Session()
-        self._session.headers.update({"Content-Type": "application/json"})
+        self._client = BackendApiClient.from_env()
+        self._token: str | None = self._client.token
 
     def set_token(self, token: str) -> None:
         """登录成功后调用，设置 Bearer token。"""
         self._token = token
-        self._session.headers.update({"Authorization": f"Bearer {token}"})
+        self._client.set_token(token)
 
     def clear_token(self) -> None:
         """登出时调用，清除 token。"""
         self._token = None
-        self._session.headers.pop("Authorization", None)
+        self._client.clear_token()
 
     # ── Auth ─────────────────────────────────────────────────────────────────
 
@@ -51,8 +49,14 @@ class APIClient:
         Raises:
             APIError: 400 username 已存在
         """
-        # TODO: return self._post("/api/auth/register", {...})
-        raise NotImplementedError
+        return self._wrap_error(
+            lambda: self._client.register(
+                username=username,
+                password=password,
+                display_name=display_name,
+                major=major,
+            )
+        )
 
     def login(self, username: str, password: str) -> dict:
         """
@@ -65,16 +69,16 @@ class APIClient:
         Raises:
             APIError: 401 认证失败
         """
-        # TODO:
-        # resp = self._post("/api/auth/login", {"username": username, "password": password})
-        # self.set_token(resp["token"])
-        # return resp
-        raise NotImplementedError
+        response = self._wrap_error(lambda: self._client.login(username=username, password=password))
+        token = str(response.get("token", "")).strip()
+        if token:
+            self.set_token(token)
+        return response
 
     def logout(self) -> None:
         """POST /api/auth/logout，然后清除本地 token。"""
-        # TODO: self._post("/api/auth/logout", {}); self.clear_token()
-        raise NotImplementedError
+        self._wrap_error(self._client.logout)
+        self.clear_token()
 
     # ── Dashboard ────────────────────────────────────────────────────────────
 
@@ -89,8 +93,7 @@ class APIClient:
         Raises:
             APIError: 401 未认证
         """
-        # TODO: return self._get("/api/dashboard/bootstrap")
-        raise NotImplementedError
+        return self._wrap_error(self._client.bootstrap_dashboard)
 
     # ── Agent ────────────────────────────────────────────────────────────────
 
@@ -120,15 +123,21 @@ class APIClient:
         Raises:
             APIError: 4xx/5xx
         """
-        # TODO: return self._post("/api/agent/run", {...})
-        raise NotImplementedError
+        return self._wrap_error(
+            lambda: self._client.run_agent(
+                session_id=session_id,
+                user_id=user_id,
+                message=message,
+                attachments=attachments or [],
+                hitl_reply=hitl_reply,
+            )
+        )
 
     # ── Materials ────────────────────────────────────────────────────────────
 
     def list_materials(self) -> list[dict]:
         """GET /api/materials，返回用户教材列表。"""
-        # TODO: return self._get("/api/materials")
-        raise NotImplementedError
+        return self._wrap_error(self._client.list_materials)
 
     def upload_material(self, file_path: str) -> dict:
         """
@@ -144,15 +153,11 @@ class APIClient:
         Raises:
             APIError: 400 不支持的格式，413 文件过大
         """
-        # TODO:
-        # with open(file_path, "rb") as f:
-        #     return self._post_file("/api/materials/upload", f)
-        raise NotImplementedError
+        return self._wrap_error(lambda: self._client.upload_material(file_path))
 
     def delete_material(self, file_id: str) -> None:
         """DELETE /api/materials/{file_id}"""
-        # TODO: self._delete(f"/api/materials/{file_id}")
-        raise NotImplementedError
+        self._wrap_error(lambda: self._client._request("DELETE", f"/api/materials/{file_id}"))
 
     # ── Schedule ─────────────────────────────────────────────────────────────
 
@@ -164,39 +169,22 @@ class APIClient:
         Returns:
             dict with keys: events, conflicts
         """
-        # TODO: return self._post("/api/schedule/refresh", {})
-        raise NotImplementedError
-
-    # ── 内部 HTTP 方法 ────────────────────────────────────────────────────────
-
-    def _get(self, path: str, params: dict | None = None) -> Any:
-        resp = self._session.get(f"{API_BASE_URL}{path}", params=params)
-        return self._handle(resp)
-
-    def _post(self, path: str, body: dict) -> Any:
-        resp = self._session.post(f"{API_BASE_URL}{path}", json=body)
-        return self._handle(resp)
-
-    def _post_file(self, path: str, file_obj) -> Any:
-        headers = {k: v for k, v in self._session.headers.items() if k != "Content-Type"}
-        resp = requests.post(f"{API_BASE_URL}{path}", files={"file": file_obj}, headers=headers)
-        return self._handle(resp)
-
-    def _delete(self, path: str) -> None:
-        resp = self._session.delete(f"{API_BASE_URL}{path}")
-        self._handle(resp)
+        return self._wrap_error(self._client.refresh_schedule)
 
     @staticmethod
-    def _handle(resp: requests.Response) -> Any:
-        if not resp.ok:
-            try:
-                detail = resp.json().get("detail", resp.text)
-            except Exception:
-                detail = resp.text
-            raise APIError(resp.status_code, detail)
-        if resp.status_code == 204:
-            return None
-        return resp.json()
+    def _wrap_error(fn) -> Any:
+        try:
+            return fn()
+        except BackendApiError as exc:
+            message = str(exc)
+            if message.startswith("HTTP "):
+                prefix, _, detail = message.partition(": ")
+                try:
+                    status_code = int(prefix.split()[1])
+                except (IndexError, ValueError):
+                    status_code = 500
+                raise APIError(status_code, detail or message) from exc
+            raise APIError(500, message) from exc
 
 
 # 全局单例，所有 widget/worker 直接 import 此对象
