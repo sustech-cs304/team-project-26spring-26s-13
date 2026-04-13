@@ -17,8 +17,13 @@ python-pptx>=0.6.23         # PPT parsing
 
 # Web scraping
 httpx>=0.27.0               # async HTTP (scraping + internal)
+aiohttp>=3.9.0              # async HTTP (unit-testable login flow)
 beautifulsoup4>=4.12.0
 selenium>=4.20.0
+
+# Testing HTTP mocks
+responses>=0.25.0
+aioresponses>=0.7.0
 
 # Security
 cryptography>=42.0.0        # Fernet encryption for CAS/API keys
