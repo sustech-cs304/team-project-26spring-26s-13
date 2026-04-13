@@ -59,7 +59,7 @@ python3 God Xun-Frontend/app.py
 - Conversation history now syncs with `GET /api/agent/sessions`, `Delete Chat` uses `DELETE /api/agent/sessions/{session_id}`, and `Refresh Schedule` uses `POST /api/schedule/refresh`.
 - Dashboard bootstrap, auth, materials upload, sessions, schedule refresh, chat, encyclopedia, and HITL flows are wired to the current backend contract.
 - Current backend-facing docs:
-  - [docs/backend-interface-contract-zh.md](Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md)
-  - [docs/backend-interface-contract.md](Guideline/docs/Frontend Relevant/backend-interface-contract.md)
-  - [docs/backend-readme-zh.md](Guideline/docs/Frontend Relevant/backend-readme-zh.md)
-  - [docs/frontend-api-connection-zh.md](Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md)
+  - [docs/backend-interface-contract-zh.md](docs/Frontend Relevant/backend-interface-contract-zh.md)
+  - [docs/backend-interface-contract.md](docs/Frontend Relevant/backend-interface-contract.md)
+  - [docs/backend-readme-zh.md](docs/Frontend Relevant/backend-readme-zh.md)
+  - [docs/frontend-api-connection-zh.md](docs/Frontend Relevant/frontend-api-connection-zh.md)

@@ -6,7 +6,7 @@ backend/agent/tools/study_copilot.py
 
 from pydantic_ai import RunContext
 
-from backend.agent.loop import AgentDeps, agent
+from backend.agent.core import AgentDeps, agent
 
 
 @agent.tool
