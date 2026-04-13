@@ -43,7 +43,6 @@
 | LLM | DeepSeek（OpenAI 兼容接口） | deepseek-chat |
 | 关系数据库 | PostgreSQL + SQLAlchemy (async) | ≥ 2.0.0 |
 | 向量数据库 | ChromaDB（进程内，无需独立服务） | ≥ 0.5.0 |
-| 数据库迁移 | Alembic | ≥ 1.13.0 |
 | 认证 | JWT (python-jose) + bcrypt | ≥ 3.3.0 |
 | 加密 | Fernet (cryptography) | ≥ 42.0.0 |
 | 网络爬虫 | httpx + BeautifulSoup4 + Selenium | ≥ 0.27.0 |
@@ -145,7 +144,8 @@ team-project-26spring-26s-13/
 │   │   └── schedule.py              # POST /api/schedule/refresh
 │   │
 │   ├── agent/                       # PydanticAI Agent 逻辑
-│   │   ├── loop.py                  # Agent 主循环（AgentDeps 定义，run_agent 实现）
+│   │   ├── core.py                  # Agent 单例 + AgentDeps 定义（循环导入隔离）
+│   │   ├── loop.py                  # Agent 主循环（run_agent 实现）
 │   │   ├── hitl.py                  # HITL 挂起状态管理（内存 HITLManager）
 │   │   ├── router.py                # 工具调用 → 前端 route 推断
 │   │   ├── prompt.py                # System prompt 模板
@@ -156,7 +156,7 @@ team-project-26spring-26s-13/
 │   │       └── os_automation.py     # Epic 6：文件系统工具（含 HITL）
 │   │
 │   ├── services/                    # 业务逻辑层
-│   │   ├── auth_service.py          # 注册/登录/JWT 签发
+│   │   ├── auth_service.py          # 注册/登录/JWT 签发（已实现）
 │   │   ├── user_service.py          # 用户 profile 更新
 │   │   ├── material_service.py      # 文件上传 + 向量化流程
 │   │   ├── rag_service.py           # RAG 学科剪枝 + 上下文格式化
@@ -200,7 +200,7 @@ team-project-26spring-26s-13/
 │   └── workers/
 │       └── agent_worker.py          # QThread：后台调用 /api/agent/run
 │
-├── alembic/                         # 数据库迁移文件
+├── alembic/                         # 数据库迁移文件（仅供参考，见注意事项）
 │   ├── env.py
 │   └── versions/
 │       └── d8ff1092fce2_init.py     # 初始建表迁移
@@ -250,8 +250,8 @@ conda activate software-engineering
 在项目根目录创建 `.env` 文件（**不要提交到 git**）：
 
 ```env
-# PostgreSQL 连接字符串
-POSTGRES_DSN=postgresql+asyncpg://postgres:yourpassword@localhost:5432/spa_db
+# PostgreSQL 连接字符串（数据库名 software-engineering）
+POSTGRES_DSN=postgresql+asyncpg://postgres:yourpassword@localhost:5432/software-engineering
 
 # Fernet 加密密钥（用于 CAS 密码 / API Key 加密存储）
 FERNET_KEY=your_fernet_key_here
@@ -272,15 +272,74 @@ print(Fernet.generate_key().decode())
 
 ### 4.4 初始化数据库
 
-确保 PostgreSQL 服务已启动并创建数据库 `spa_db`，然后执行迁移：
+> ⚠️ **注意**：`alembic upgrade head` 因异步驱动兼容问题无法自动建表，请使用以下方式手动建表。
 
-```bash
-# 应用初始建表迁移
-alembic upgrade head
+**第一步**：在 PostgreSQL 中创建数据库（DataGrip 或 psql）：
+```sql
+CREATE DATABASE "software-engineering";
+```
 
-# 如果修改了 ORM 模型，生成新的迁移文件
-alembic revision --autogenerate -m "your description"
-alembic upgrade head
+**第二步**：在 `software-engineering` 数据库中执行以下 SQL 建表：
+
+```sql
+-- 先建 alembic_version 表（记录迁移状态）
+CREATE TABLE IF NOT EXISTS alembic_version (
+    version_num VARCHAR(32) NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(256) NOT NULL,
+    display_name VARCHAR(128) NOT NULL,
+    major VARCHAR(128) NOT NULL,
+    cas_account VARCHAR(128),
+    cas_password_encrypted BYTEA,
+    llm_api_key_encrypted BYTEA,
+    preferences JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id VARCHAR(128) PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(user_id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id VARCHAR(128) NOT NULL REFERENCES chat_sessions(session_id),
+    role VARCHAR(16) NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS materials (
+    file_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(user_id),
+    file_name VARCHAR(256) NOT NULL,
+    file_type VARCHAR(64) NOT NULL,
+    file_path VARCHAR(512) NOT NULL,
+    subject_type VARCHAR(32) NOT NULL,
+    vectorized BOOLEAN NOT NULL DEFAULT FALSE,
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(user_id),
+    session_id VARCHAR(128) NOT NULL,
+    action_type VARCHAR(32) NOT NULL,
+    target_path VARCHAR(1024) NOT NULL,
+    description TEXT NOT NULL,
+    hitl_required BOOLEAN NOT NULL,
+    hitl_approved BOOLEAN,
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO alembic_version (version_num) VALUES ('d8ff1092fce2')
+ON CONFLICT DO NOTHING;
 ```
 
 ---
@@ -290,11 +349,7 @@ alembic upgrade head
 ### 5.1 启动后端服务
 
 ```bash
-# 方式一：作为模块运行（推荐，路径无歧义）
 python -m backend.main
-
-# 方式二：直接运行
-python backend/main.py
 ```
 
 后端启动后：
@@ -304,31 +359,28 @@ python backend/main.py
 
 ### 5.2 启动前端
 
-**方式一：完整模块化前端**（依赖后端运行）
-
-```bash
-python -m frontend.main
-```
-
-**方式二：单文件原型前端**（内置 Mock 模式，无需后端）
+**方式一：单文件原型前端**（内置 Mock 模式，无需后端）
 
 ```bash
 # 本地 Mock 模式（默认，无需后端）
 python frontend/app.py
 
-# 连接本地后端
-set SPA_API_BASE_URL=http://127.0.0.1:8000   # Windows
-export SPA_API_BASE_URL=http://127.0.0.1:8000  # Linux/macOS
+# 连接本地后端（Windows）
+$env:SPA_API_BASE_URL = "http://127.0.0.1:8000"
 python frontend/app.py
 ```
 
-> **提示**：当 `SPA_API_BASE_URL` 未设置时，前端自动使用 Mock 数据运行，适合 GUI 开发阶段独立调试。
+**方式二：模块化前端**（依赖后端运行）
+
+```bash
+python -m frontend.main
+```
 
 ### 5.3 完整开发环境启动顺序
 
 ```
 1. 启动 PostgreSQL 服务
-2. alembic upgrade head        # 确保数据库结构最新
+2. 确认数据库表已建好（见 4.4）
 3. python -m backend.main      # 启动后端（新终端）
 4. python frontend/app.py      # 启动前端（新终端）
 ```
@@ -375,7 +427,7 @@ python frontend/app.py
 
 `route` 枚举：`chat` | `scheduler` | `encyclopedia` | `os_automation`
 
-> 详细接口文档见 [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](docs/Frontend Relevant/backend-interface-contract-zh.md)
+> 详细接口文档见 [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md)
 
 ---
 
@@ -442,10 +494,10 @@ DELETE / RENAME 等高危操作 → 工具抛出 `HITLInterrupt` → `run_agent(
 | 文档 | 说明 |
 |------|------|
 | [`Guideline/README.md`](Guideline/README.md) | **开发必读**：详细框架说明、Epic 负责矩阵、设计约定（中文） |
-| [`Guideline/Task Trace.txt`](Task Trace.txt) | 已完成与待完成任务追踪 |
-| [`Guideline/environment.yml`](environment.yml) | conda 环境配置 |
-| [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](docs/Frontend Relevant/backend-interface-contract-zh.md) | 后端接口契约（中文） |
-| [`Guideline/docs/Frontend Relevant/backend-interface-contract.md`](docs/Frontend Relevant/backend-interface-contract.md) | Backend Interface Contract (English) |
-| [`Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md`](docs/Frontend Relevant/frontend-api-connection-zh.md) | 前端 API 对接说明 |
-| [`proposal-26s-13.md`](../proposal-26s-13.md) | 项目需求分析 |
+| [`Guideline/Task Trace.txt`](Guideline/Task%20Trace.txt) | 已完成与待完成任务追踪 |
+| [`Guideline/environment.yml`](Guideline/environment.yml) | conda 环境配置 |
+| [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md) | 后端接口契约（中文） |
+| [`Guideline/docs/Frontend Relevant/backend-interface-contract.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract.md) | Backend Interface Contract (English) |
+| [`Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md`](Guideline/docs/Frontend%20Relevant/frontend-api-connection-zh.md) | 前端 API 对接说明 |
+| [`proposal-26s-13.md`](proposal-26s-13.md) | 项目需求分析 |
 | `http://127.0.0.1:8000/docs` | FastAPI Swagger UI（后端运行后可访问） |
