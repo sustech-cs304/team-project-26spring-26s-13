@@ -1,5 +1,5 @@
 """
-frontend/workers/agent_worker.py
+God Xun-Frontend/workers/agent_worker.py
 QThread Worker：在后台线程中调用 /api/agent/run，避免阻塞 UI 主线程。
 结果和错误通过 Qt Signal 传递回主线程。
 

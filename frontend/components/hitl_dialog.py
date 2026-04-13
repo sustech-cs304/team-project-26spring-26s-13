@@ -1,5 +1,5 @@
 """
-frontend/components/hitl_dialog.py
+God Xun-Frontend/components/hitl_dialog.py
 HITL 高风险操作授权弹窗。
 收到后端返回的 hitl_request 时，由 DashboardPage 调用此弹窗。
 用户点击后，通过 Signal 将审批结果回传给调用方。

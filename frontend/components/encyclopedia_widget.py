@@ -1,5 +1,5 @@
 """
-frontend/components/encyclopedia_widget.py
+God Xun-Frontend/components/encyclopedia_widget.py
 校园百科结果展示组件：答案（Markdown 渲染）+ 引用列表。
 """
 

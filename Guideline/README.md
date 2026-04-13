@@ -90,7 +90,7 @@ python -m backend.main
 ### 2.5 启动前端
 
 ```bash
-python -m frontend.main
+python -m God Xun-Frontend.main
 ```
 
 ---

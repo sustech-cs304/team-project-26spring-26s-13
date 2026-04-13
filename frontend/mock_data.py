@@ -1,4 +1,4 @@
-"""Mock data used by the PyQt6 frontend prototype."""
+"""Mock data used by the PyQt6 God Xun-Frontend prototype."""
 
 APP_TITLE = {
     "en": "Student Productivity Agent",
