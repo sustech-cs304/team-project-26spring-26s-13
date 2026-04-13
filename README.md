@@ -1,0 +1,451 @@
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/py413vYq)
+
+# Student Productivity Agent
+
+> **Team 26s-13 · SUSTech Software Engineering Spring 2026**
+
+一个面向南科大学生的 AI 智能体桌面应用，集成日程管理、校园百科、学习辅助与文件自动化四大能力。
+
+---
+
+## 目录
+
+1. [项目概览](#1-项目概览)
+2. [整体架构](#2-整体架构)
+3. [目录结构](#3-目录结构)
+4. [快速开始](#4-快速开始)
+5. [运行说明](#5-运行说明)
+6. [API 接口速览](#6-api-接口速览)
+7. [数据库概览](#7-数据库概览)
+8. [开发规范](#8-开发规范)
+9. [参考文档](#9-参考文档)
+
+---
+
+## 1. 项目概览
+
+| Epic | 功能模块 | 状态 |
+|------|----------|------|
+| Epic 1 | **Agentic Loop** — PydanticAI 推理循环，驱动所有工具调用 | 框架已搭建，核心循环待实现 |
+| Epic 2 | **Intelligent GUI** — PyQt6 三列布局（侧边栏 / 聊天 / Thought Trace）+ HITL 弹窗 | 主体完成，API 连接待完善 |
+| Epic 3 | **Multi-Source Scheduler** — Blackboard DDL 爬取 + 教务课表 + 冲突检测 | 爬虫核心已完成 |
+| Epic 4 | **Campus Encyclopedia (RAG)** — 向量检索校园政策问答 | 数据库与服务已搭建 |
+| Epic 5 | **Study Copilot** — 教材上传、摘要生成、练习题 | 文件解析管道已搭建 |
+| Epic 6 | **OS Automation** — 自然语言驱动的文件系统操作（含 HITL 安全审批） | 工具框架已搭建 |
+| Epic 7 | **Client-Server Architecture** — FastAPI ↔ PyQt6 REST 全链路 | 路由与 Schema 完成 |
+
+**技术栈**
+
+| 层 | 技术 | 版本 |
+|----|------|------|
+| 后端框架 | FastAPI + Uvicorn | ≥ 0.111.0 |
+| Agent 编排 | PydanticAI | ≥ 0.0.13 |
+| LLM | DeepSeek（OpenAI 兼容接口） | deepseek-chat |
+| 关系数据库 | PostgreSQL + SQLAlchemy (async) | ≥ 2.0.0 |
+| 向量数据库 | ChromaDB（进程内，无需独立服务） | ≥ 0.5.0 |
+| 数据库迁移 | Alembic | ≥ 1.13.0 |
+| 认证 | JWT (python-jose) + bcrypt | ≥ 3.3.0 |
+| 加密 | Fernet (cryptography) | ≥ 42.0.0 |
+| 网络爬虫 | httpx + BeautifulSoup4 + Selenium | ≥ 0.27.0 |
+| 文档解析 | PyMuPDF + python-pptx | ≥ 1.24.0 |
+| 前端 GUI | PyQt6 | ≥ 6.7.0 |
+| Python | CPython | 3.10 |
+
+---
+
+## 2. 整体架构
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                       PyQt6 Frontend                         │
+│                                                              │
+│  ┌─────────────┐  ┌──────────────────┐  ┌────────────────┐  │
+│  │  Left Panel │  │  Center Panel    │  │  Right Panel   │  │
+│  │             │  │                  │  │                │  │
+│  │ 对话历史     │  │ Chat / Schedule  │  │ Thought Trace  │  │
+│  │ 教材列表     │  │ Encyclopedia     │  │   Panel        │  │
+│  │ 用户信息     │  │ (Tab 切换)       │  │                │  │
+│  └─────────────┘  └──────────────────┘  └────────────────┘  │
+│                          │  HTTP/REST (requests)              │
+└──────────────────────────┼───────────────────────────────────┘
+                           │
+                    REST API (JSON)
+                    localhost:8000
+                           │
+┌──────────────────────────┼───────────────────────────────────┐
+│                   FastAPI Backend                             │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │                    API Routers                        │   │
+│  │  /auth  /user  /agent/*  /materials  /dashboard       │   │
+│  │  /schedule                                            │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                            │                                  │
+│  ┌────────────────────────▼─────────────────────────────┐   │
+│  │             PydanticAI Agent Loop                     │   │
+│  │                                                       │   │
+│  │  Perception → Reasoning → Tool Use → Observation     │   │
+│  │                                                       │   │
+│  │  Tools: scheduler | rag | os_automation | copilot    │   │
+│  └────────────────────────┬─────────────────────────────┘   │
+│                            │                                  │
+│  ┌──────────┐  ┌──────────▼──────────┐  ┌───────────────┐  │
+│  │ DeepSeek │  │    PostgreSQL        │  │   ChromaDB    │  │
+│  │  LLM API │  │ users / sessions /  │  │ (21 学科向量  │  │
+│  │          │  │ materials / audit   │  │   Collection) │  │
+│  └──────────┘  └─────────────────────┘  └───────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**数据流**
+
+1. 用户在 PyQt6 发消息 → `ChatWidget` emit signal → `DashboardPage.send_message()`
+2. `AgentWorker`（QThread）调用 `POST /api/agent/run`，不阻塞 UI
+3. FastAPI 路由验证 JWT → 调用 `run_agent()`
+4. PydanticAI Agent 分析消息 → 选择工具 → 执行工具 → 收集 Trace
+5. `AgentResponse` 返回前端 → 分发给聊天区、Trace 面板、Schedule/Encyclopedia 标签
+6. 若遇到高危操作 → 工具抛出 `HITLInterrupt` → 返回 `hitl_request` → 前端弹出授权窗口
+
+---
+
+## 3. 目录结构
+
+```
+team-project-26spring-26s-13/
+│
+├── README.md                        # 本文件（项目总览 & 快速开始）
+├── README-Given by Teacher.md       # 教师提供的原始前端说明
+├── proposal-26s-13.md               # 项目需求分析文档
+├── requirements.txt                 # pip 依赖（前后端全部）
+├── alembic.ini                      # Alembic 迁移配置
+├── .env                             # 本地环境变量（不提交 git）
+│
+├── backend/                         # FastAPI 后端
+│   ├── main.py                      # 应用入口，注册路由，配置 CORS
+│   ├── config.py                    # 全局配置（读取 .env）
+│   │
+│   ├── database/
+│   │   ├── postgres.py              # SQLAlchemy 异步引擎 + ORM 模型（5 张表）
+│   │   └── chromadb.py              # ChromaDB 客户端 + CRUD（21 个 Collection）
+│   │
+│   ├── schemas/                     # Pydantic 请求/响应模型
+│   │   ├── agent.py                 # AgentRequest / AgentResponse（核心 schema）
+│   │   ├── auth.py                  # 注册/登录
+│   │   ├── dashboard.py             # Bootstrap 响应
+│   │   ├── material.py              # 教材文件信息
+│   │   └── user.py                  # 用户 profile
+│   │
+│   ├── api/                         # HTTP 路由（仅参数校验 + 调用 service）
+│   │   ├── deps.py                  # JWT 鉴权 dependency（get_current_user）
+│   │   ├── auth.py                  # POST /api/auth/*
+│   │   ├── user.py                  # GET/PUT /api/user/*
+│   │   ├── agent.py                 # POST /api/agent/run（核心入口）
+│   │   ├── materials.py             # GET/POST/DELETE /api/materials/*
+│   │   ├── dashboard.py             # GET /api/dashboard/bootstrap
+│   │   └── schedule.py              # POST /api/schedule/refresh
+│   │
+│   ├── agent/                       # PydanticAI Agent 逻辑
+│   │   ├── loop.py                  # Agent 主循环（AgentDeps 定义，run_agent 实现）
+│   │   ├── hitl.py                  # HITL 挂起状态管理（内存 HITLManager）
+│   │   ├── router.py                # 工具调用 → 前端 route 推断
+│   │   ├── prompt.py                # System prompt 模板
+│   │   └── tools/
+│   │       ├── scheduler.py         # Epic 3：Blackboard/教务爬取工具
+│   │       ├── rag.py               # Epic 4：RAG 检索工具
+│   │       ├── study_copilot.py     # Epic 5：摘要/练习题生成工具
+│   │       └── os_automation.py     # Epic 6：文件系统工具（含 HITL）
+│   │
+│   ├── services/                    # 业务逻辑层
+│   │   ├── auth_service.py          # 注册/登录/JWT 签发
+│   │   ├── user_service.py          # 用户 profile 更新
+│   │   ├── material_service.py      # 文件上传 + 向量化流程
+│   │   ├── rag_service.py           # RAG 学科剪枝 + 上下文格式化
+│   │   ├── dashboard_service.py     # Bootstrap 数据组装
+│   │   ├── audit_service.py         # OS 操作审计日志
+│   │   └── schedule_service/        # 日程爬取与冲突检测（拆包）
+│   │       ├── fetch_bb.py          # Blackboard CAS 登录 + DDL 爬取（~834 行）
+│   │       ├── fetch_tis.py         # 教务系统课表爬取（~558 行）
+│   │       ├── conflicts.py         # 冲突检测算法
+│   │       ├── constants.py         # 课程时间常量映射
+│   │       ├── personal.py          # 个人日程管理
+│   │       └── refresh.py           # 刷新入口
+│   │
+│   └── utils/
+│       ├── crypto.py                # Fernet 加解密（CAS 密码 / API Key）
+│       └── document_parser.py       # PDF / PPT / MD 文本提取
+│
+├── frontend/                        # PyQt6 客户端
+│   ├── app.py                       # 完整单文件原型（Teacher 版前端）
+│   ├── main.py                      # 模块化入口（健康检查 → HomePage）
+│   ├── config.py                    # API_BASE_URL 配置
+│   ├── i18n.py                      # 中英双语文本
+│   ├── mock_data.py                 # 本地 Mock 数据
+│   ├── styles.py                    # 全局 QSS 样式
+│   │
+│   ├── api/
+│   │   └── client.py                # HTTP 客户端（所有 API 调用封装）
+│   │
+│   ├── views/
+│   │   ├── auth_page.py             # 登录/注册页
+│   │   └── dashboard_page.py        # 主界面协调器
+│   │
+│   ├── components/
+│   │   ├── chat_widget.py           # 聊天消息列表 + 输入框
+│   │   ├── trace_widget.py          # Thought Trace 面板
+│   │   ├── schedule_widget.py       # 日程展示
+│   │   ├── encyclopedia_widget.py   # 百科结果展示
+│   │   ├── materials_widget.py      # 教材列表（上传/删除）
+│   │   └── hitl_dialog.py           # 高危操作授权弹窗
+│   │
+│   └── workers/
+│       └── agent_worker.py          # QThread：后台调用 /api/agent/run
+│
+├── alembic/                         # 数据库迁移文件
+│   ├── env.py
+│   └── versions/
+│       └── d8ff1092fce2_init.py     # 初始建表迁移
+│
+└── Guideline/                       # 项目文档与规范（开发参考）
+    ├── README.md                    # 详细框架说明（中文，开发必读）
+    ├── environment.yml              # conda 环境配置
+    ├── 整体架构图.jpg
+    ├── Task Trace.txt               # 任务完成情况追踪
+    ├── Github Information/
+    │   └── Student Productivity Agent Project View.tsv
+    └── docs/Frontend Relevant/
+        ├── backend-interface-contract.md
+        ├── backend-interface-contract-zh.md
+        ├── backend-readme-zh.md
+        └── frontend-api-connection-zh.md
+```
+
+---
+
+## 4. 快速开始
+
+### 4.1 克隆仓库
+
+```bash
+git clone https://github.com/sustech-cs304/team-project-26spring-26s-13.git
+cd team-project-26spring-26s-13
+```
+
+### 4.2 创建 conda 虚拟环境
+
+```bash
+# 一键安装所有依赖（推荐）
+conda env create -f Guideline/environment.yml
+
+# 激活环境
+conda activate software-engineering
+```
+
+> 或者使用 pip：
+> ```bash
+> pip install -r requirements.txt
+> ```
+
+### 4.3 配置环境变量
+
+在项目根目录创建 `.env` 文件（**不要提交到 git**）：
+
+```env
+# PostgreSQL 连接字符串
+POSTGRES_DSN=postgresql+asyncpg://postgres:yourpassword@localhost:5432/spa_db
+
+# Fernet 加密密钥（用于 CAS 密码 / API Key 加密存储）
+FERNET_KEY=your_fernet_key_here
+
+# JWT 签名密钥
+SECRET_KEY=your_jwt_secret_here
+
+# DeepSeek API（可选，用户也可在 GUI 中填写）
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+生成 Fernet Key：
+```python
+from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+```
+
+### 4.4 初始化数据库
+
+确保 PostgreSQL 服务已启动并创建数据库 `spa_db`，然后执行迁移：
+
+```bash
+# 应用初始建表迁移
+alembic upgrade head
+
+# 如果修改了 ORM 模型，生成新的迁移文件
+alembic revision --autogenerate -m "your description"
+alembic upgrade head
+```
+
+---
+
+## 5. 运行说明
+
+### 5.1 启动后端服务
+
+```bash
+# 方式一：作为模块运行（推荐，路径无歧义）
+python -m backend.main
+
+# 方式二：直接运行
+python backend/main.py
+```
+
+后端启动后：
+- API 服务：`http://127.0.0.1:8000`
+- Swagger 文档：`http://127.0.0.1:8000/docs`
+- 健康检查：`http://127.0.0.1:8000/health`
+
+### 5.2 启动前端
+
+**方式一：完整模块化前端**（依赖后端运行）
+
+```bash
+python -m frontend.main
+```
+
+**方式二：单文件原型前端**（内置 Mock 模式，无需后端）
+
+```bash
+# 本地 Mock 模式（默认，无需后端）
+python frontend/app.py
+
+# 连接本地后端
+set SPA_API_BASE_URL=http://127.0.0.1:8000   # Windows
+export SPA_API_BASE_URL=http://127.0.0.1:8000  # Linux/macOS
+python frontend/app.py
+```
+
+> **提示**：当 `SPA_API_BASE_URL` 未设置时，前端自动使用 Mock 数据运行，适合 GUI 开发阶段独立调试。
+
+### 5.3 完整开发环境启动顺序
+
+```
+1. 启动 PostgreSQL 服务
+2. alembic upgrade head        # 确保数据库结构最新
+3. python -m backend.main      # 启动后端（新终端）
+4. python frontend/app.py      # 启动前端（新终端）
+```
+
+---
+
+## 6. API 接口速览
+
+所有接口均需 `Authorization: Bearer <token>` Header，**除了** `/api/auth/register` 和 `/api/auth/login`。
+
+| Method | Path | 描述 |
+|--------|------|------|
+| POST | `/api/auth/register` | 注册新用户 |
+| POST | `/api/auth/login` | 登录，返回 JWT token |
+| POST | `/api/auth/logout` | 登出 |
+| GET | `/api/user/profile` | 获取用户 profile |
+| PUT | `/api/user/profile` | 更新 display_name / major / preferences |
+| PUT | `/api/user/credentials` | 更新 CAS 账号密码 / LLM API Key |
+| GET | `/api/dashboard/bootstrap` | 一次性拉取主界面初始数据 |
+| **POST** | **`/api/agent/run`** | **Agent 核心入口（对话 + HITL 审批）** |
+| GET | `/api/agent/sessions` | 历史会话列表 |
+| DELETE | `/api/agent/sessions/{id}` | 删除会话 |
+| GET | `/api/materials` | 获取教材列表 |
+| POST | `/api/materials/upload` | 上传教材（触发自动向量化） |
+| DELETE | `/api/materials/{file_id}` | 删除教材 |
+| POST | `/api/schedule/refresh` | 手动刷新日程（触发 Blackboard 爬取） |
+
+**Agent 核心响应结构**：
+
+```json
+{
+  "session_id": "sess_20260413_a1b2c3",
+  "assistant_message": { "role": "assistant", "content": "...", "timestamp": "..." },
+  "trace": [
+    { "phase": "Observation", "title": "分析用户目标", "status": "done", "timestamp": "..." },
+    { "phase": "Tool Use",    "title": "fetch_blackboard_deadlines", "status": "done", "timestamp": "..." }
+  ],
+  "route": "scheduler",
+  "ui_payload": { "schedule": { "events": [...], "conflicts": [] }, "encyclopedia": null },
+  "hitl_request": null,
+  "error": null
+}
+```
+
+`route` 枚举：`chat` | `scheduler` | `encyclopedia` | `os_automation`
+
+> 详细接口文档见 [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md)
+
+---
+
+## 7. 数据库概览
+
+### PostgreSQL（5 张表）
+
+| 表名 | 用途 | 关键字段 |
+|------|------|----------|
+| `users` | 用户账号与配置 | `user_id`, `username`, `cas_password_encrypted`, `llm_api_key_encrypted` |
+| `chat_sessions` | 对话会话 | `session_id`, `user_id`, `updated_at` |
+| `chat_messages` | 对话消息 | `message_id`, `session_id`, `role`, `content` |
+| `materials` | 上传教材 | `file_id`, `subject_type`, `vectorized`, `file_path` |
+| `audit_logs` | OS 操作审计 | `action_type`, `target_path`, `hitl_required`, `hitl_approved` |
+
+> **安全约定**：`cas_password_encrypted` 和 `llm_api_key_encrypted` 必须通过 `backend/utils/crypto.py` 的 `encrypt()`/`decrypt()` 读写，禁止明文存储。
+
+### ChromaDB（21 个 Collection）
+
+按学科分集合：`cs` / `electronics` / `materials` / `math` / `physics` / `chemistry` / `biology` / `geography` / `philosophy` / `history` / `literature` / `politics` / `finance` / `statistics` / `ocean` / `economics` / `law` / `management` / `medicine` / `policy` / `other`
+
+RAG 查询策略：LLM 判断学科 → 查对应集合 + `other`（`other` 集合每次必查）
+
+---
+
+## 8. 开发规范
+
+### 分层原则
+
+```
+API 路由层（api/）        → 只做参数校验 + 调用 Service
+Service 层（services/）  → 业务逻辑 + 数据库操作
+Agent 工具层（tools/）   → 调用 Service + 格式化返回给 LLM
+```
+
+### 前端线程规范
+
+```python
+# 正确：所有 HTTP 调用必须在 QThread 中执行
+class AgentWorker(QThread):
+    response_ready = pyqtSignal(dict)
+    def run(self):
+        data = api_client.agent_run(request)   # 可阻塞
+        self.response_ready.emit(data)
+
+# 错误：直接在主线程/槽函数中调用（会冻结 UI）
+def _on_button_click(self):
+    data = api_client.agent_run(request)   # ❌ 禁止
+```
+
+### 错误返回约定
+
+- **工具函数内**：以字符串 `"ERROR:XXX"` 返回给 LLM，让 LLM 自行处理，不抛异常
+- **API 路由层**：通过 `HTTPException` 返回 HTTP 状态码
+
+### HITL 高危操作流程
+
+DELETE / RENAME 等高危操作 → 工具抛出 `HITLInterrupt` → `run_agent()` 捕获 → 返回 `hitl_request` → 前端弹出授权窗 → 用户审批后再次调用 `POST /api/agent/run` 携带 `hitl_reply`
+
+---
+
+## 9. 参考文档
+
+| 文档 | 说明 |
+|------|------|
+| [`Guideline/README.md`](Guideline/README.md) | **开发必读**：详细框架说明、Epic 负责矩阵、设计约定（中文） |
+| [`Guideline/Task Trace.txt`](Guideline/Task%20Trace.txt) | 已完成与待完成任务追踪 |
+| [`Guideline/environment.yml`](Guideline/environment.yml) | conda 环境配置 |
+| [`Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md) | 后端接口契约（中文） |
+| [`Guideline/docs/Frontend Relevant/backend-interface-contract.md`](Guideline/docs/Frontend%20Relevant/backend-interface-contract.md) | Backend Interface Contract (English) |
+| [`Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md`](Guideline/docs/Frontend%20Relevant/frontend-api-connection-zh.md) | 前端 API 对接说明 |
+| [`proposal-26s-13.md`](proposal-26s-13.md) | 项目需求分析 |
+| `http://127.0.0.1:8000/docs` | FastAPI Swagger UI（后端运行后可访问） |

@@ -1,5 +1,5 @@
 """
-God Xun-Frontend/components/trace_widget.py
+Frontend Relevant/components/trace_widget.py
 Thought Trace 面板：实时展示 Agent 的推理步骤。
 """
 
