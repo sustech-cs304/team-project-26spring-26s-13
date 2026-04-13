@@ -1,55 +1,18 @@
+"""Preferred entrypoint for the desktop frontend on the main branch.
+
+The current product UI lives in ``frontend.app``. The earlier module-oriented
+``views/`` skeleton is still present in the repository for future refactors,
+but this entrypoint now launches the working desktop application directly so
+``python3 frontend/main.py`` is reliable for teammates.
 """
-frontend/main.py
-PyQt6 应用入口。
-启动顺序：健康检查后端 → 显示 HomePage → 跳转 AuthPage → 跳转 DashboardPage
-"""
 
-import sys
-import time
-
-import requests
-from PyQt6.QtWidgets import QApplication, QMessageBox
-
-from frontend.config import API_BASE_URL
-from frontend.views.home_page import HomePage
+from frontend.app import main as run_desktop_frontend
 
 
-def wait_for_backend(timeout: int = 10) -> bool:
-    """
-    轮询后端 /health 接口，等待 FastAPI 服务就绪。
-
-    Args:
-        timeout: 最大等待秒数
-
-    Returns:
-        True 表示后端已就绪，False 表示超时
-    """
-    # TODO:
-    # deadline = time.time() + timeout
-    # while time.time() < deadline:
-    #     try:
-    #         r = requests.get(f"{API_BASE_URL}/health", timeout=1)
-    #         if r.ok: return True
-    #     except Exception:
-    #         pass
-    #     time.sleep(0.5)
-    # return False
-    raise NotImplementedError
-
-
-def main() -> None:
-    app = QApplication(sys.argv)
-
-    # TODO:
-    # if not wait_for_backend():
-    #     QMessageBox.critical(None, "Error", "Cannot connect to backend. Please start the server first.")
-    #     sys.exit(1)
-
-    # home = HomePage()
-    # home.show()
-    # sys.exit(app.exec())
-    raise NotImplementedError
+def main() -> int:
+    """Launch the working desktop frontend and return the Qt exit code."""
+    return run_desktop_frontend()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

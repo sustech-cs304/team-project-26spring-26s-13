@@ -20,7 +20,7 @@ This repository now includes a `PyQt6` frontend prototype for the Student Produc
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 frontend/app.py
+python3 frontend/main.py
 ```
 
 ### Notes
@@ -30,7 +30,7 @@ python3 frontend/app.py
 
 ```bash
 export SPA_API_BASE_URL=http://127.0.0.1:8000
-python3 frontend/app.py
+python3 frontend/main.py
 ```
 
 - The frontend currently calls these REST endpoints when `SPA_API_BASE_URL` is set:

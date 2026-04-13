@@ -58,18 +58,16 @@ class AgentWorker(QThread):
         在后台线程中执行，调用 API 后 emit 对应 signal。
         不要在此方法中更新任何 UI 组件（Qt 要求 UI 操作在主线程）。
         """
-        # TODO:
-        # try:
-        #     response = self._client.agent_run(
-        #         session_id=self.session_id,
-        #         user_id=self.user_id,
-        #         message=self.message,
-        #         attachments=self.attachments,
-        #         hitl_reply=self.hitl_reply,
-        #     )
-        #     self.response_ready.emit(response)
-        # except APIError as e:
-        #     self.error_occurred.emit(f"API Error {e.status_code}: {e.detail}")
-        # except Exception as e:
-        #     self.error_occurred.emit(str(e))
-        raise NotImplementedError
+        try:
+            response = self._client.agent_run(
+                session_id=self.session_id,
+                user_id=self.user_id,
+                message=self.message,
+                attachments=self.attachments,
+                hitl_reply=self.hitl_reply,
+            )
+            self.response_ready.emit(response)
+        except APIError as exc:
+            self.error_occurred.emit(f"API Error {exc.status_code}: {exc.detail}")
+        except Exception as exc:  # noqa: BLE001
+            self.error_occurred.emit(str(exc))
