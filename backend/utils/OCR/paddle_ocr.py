@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import re
 import sys
 from typing import Any
 
@@ -19,23 +20,19 @@ class PaddleOcrSettings:
 class PaddleOcrEngine:
     def __init__(self, settings: PaddleOcrSettings | None = None) -> None:
         self._settings = settings or _load_settings_from_env()
-        self._ocr = _create_paddle_ocr(self._settings)
+        self._langs = _split_langs(self._settings.lang)
+        self._ocrs = [_create_paddle_ocr(_settings_for_lang(self._settings, lang)) for lang in self._langs]
 
     def ocr_image_array(self, img: Any) -> str:
-        ocr_fn = getattr(self._ocr, "ocr", None)
-        if callable(ocr_fn):
-            try:
-                result = ocr_fn(img, cls=self._settings.use_angle_cls)
-            except TypeError:
-                result = ocr_fn(img)
-            return _flatten_ocr_result(result)
-
-        predict_fn = getattr(self._ocr, "predict", None)
-        if callable(predict_fn):
-            result = predict_fn(img)
-            return _flatten_ocr_result(result)
-
-        raise TypeError(f"Unsupported PaddleOCR API: {type(self._ocr).__name__}")
+        best = ""
+        best_score = (-1, -1)
+        for ocr in self._ocrs:
+            text = _ocr_with_instance(ocr, img, self._settings)
+            score = _score_ocr_text(text)
+            if score > best_score:
+                best = text
+                best_score = score
+        return best
 
 
 def _load_settings_from_env() -> PaddleOcrSettings:
@@ -109,6 +106,47 @@ def _create_paddle_ocr(settings: PaddleOcrSettings):
     if last_exc is not None:
         raise last_exc
     return PaddleOCR(**kwargs)
+
+
+def _split_langs(raw_lang: str) -> list[str]:
+    text = (raw_lang or "").strip() or "ch"
+    parts = re.split(r"[,+/|]", text)
+    langs = [part.strip() for part in parts if part.strip()]
+    return langs or ["ch"]
+
+
+def _settings_for_lang(settings: PaddleOcrSettings, lang: str) -> PaddleOcrSettings:
+    return PaddleOcrSettings(
+        use_angle_cls=settings.use_angle_cls,
+        lang=lang,
+        det_model_dir=settings.det_model_dir,
+        rec_model_dir=settings.rec_model_dir,
+        cls_model_dir=settings.cls_model_dir,
+        use_gpu=settings.use_gpu,
+    )
+
+
+def _ocr_with_instance(ocr: Any, img: Any, settings: PaddleOcrSettings) -> str:
+    ocr_fn = getattr(ocr, "ocr", None)
+    if callable(ocr_fn):
+        try:
+            result = ocr_fn(img, cls=settings.use_angle_cls)
+        except TypeError:
+            result = ocr_fn(img)
+        return _flatten_ocr_result(result)
+
+    predict_fn = getattr(ocr, "predict", None)
+    if callable(predict_fn):
+        result = predict_fn(img)
+        return _flatten_ocr_result(result)
+
+    raise TypeError(f"Unsupported PaddleOCR API: {type(ocr).__name__}")
+
+
+def _score_ocr_text(text: str) -> tuple[int, int]:
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    useful_chars = sum(1 for ch in text if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
+    return useful_chars, len(lines)
 
 
 def _flatten_ocr_result(result: Any) -> str:
