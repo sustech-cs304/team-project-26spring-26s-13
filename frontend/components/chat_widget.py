@@ -1,5 +1,5 @@
 """
-frontend/components/chat_widget.py
+Frontend Relevant/components/chat_widget.py
 主聊天区组件：展示对话历史，提供消息输入框。
 """
 

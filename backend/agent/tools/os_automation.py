@@ -19,7 +19,8 @@ from pathlib import Path
 
 from pydantic_ai import RunContext
 
-from backend.agent.loop import AgentDeps, agent, HITLInterrupt
+from backend.agent.core import AgentDeps, agent
+from backend.agent.loop import HITLInterrupt
 from backend.agent.hitl import hitl_manager
 from backend.services import audit_service
 

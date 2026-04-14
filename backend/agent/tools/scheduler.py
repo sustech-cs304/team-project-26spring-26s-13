@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from pydantic_ai import RunContext
 
-from backend.agent.loop import AgentDeps, agent
+from backend.agent.core import AgentDeps, agent
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
 from backend.services import schedule_service
 from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY

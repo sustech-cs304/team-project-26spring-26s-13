@@ -442,7 +442,7 @@ POST /api/agent/run
 
 ```bash
 export SPA_API_BASE_URL=http://127.0.0.1:8000
-python3 frontend/app.py
+python3 frontend/main.py
 ```
 
 如果不设置这个环境变量，前端会自动退回本地 mock，不会去访问后端。

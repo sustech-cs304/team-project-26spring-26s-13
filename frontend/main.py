@@ -1,5 +1,5 @@
 """
-frontend/main.py
+Frontend Relevant/main.py
 PyQt6 应用入口。
 启动顺序：健康检查后端 → 显示 HomePage → 跳转 AuthPage → 跳转 DashboardPage
 """

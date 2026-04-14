@@ -13,7 +13,7 @@ RAG 检索工具：根据查询内容进行学科剪枝后查询向量数据库�
 
 from pydantic_ai import RunContext
 
-from backend.agent.loop import AgentDeps, agent
+from backend.agent.core import AgentDeps, agent
 from backend.services import rag_service
 from backend.database.chromadb import SubjectType
 

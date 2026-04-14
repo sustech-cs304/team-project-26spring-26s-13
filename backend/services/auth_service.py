@@ -25,13 +25,30 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     Raises:
         ValueError: username 已被注册
     """
-    # TODO:
-    # 1. SELECT username → 若存在 raise ValueError("username already exists")
-    # 2. user = User(username=body.username, password_hash=pwd_context.hash(body.password), ...)
-    # 3. db.add(user); await db.commit(); await db.refresh(user)
-    # 4. token = _create_token(str(user.user_id))
-    # 5. return AuthResponse(user_id=str(user.user_id), ..., token=token)
-    raise NotImplementedError
+    # 1. 检查用户名唯一性
+    existing = await db.scalar(select(User).where(User.username == body.username))
+    if existing:
+        raise ValueError("username already exists")
+
+    # 2. 创建用户
+    user = User(
+        username=body.username,
+        password_hash=pwd_context.hash(body.password),
+        display_name=body.display_name,
+        major=body.major,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    # 3. 签发 token
+    token = _create_token(str(user.user_id))
+    return AuthResponse(
+        user_id=str(user.user_id),
+        display_name=user.display_name,
+        major=user.major,
+        token=token,
+    )
 
 
 async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
@@ -41,13 +58,17 @@ async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
     Raises:
         ValueError: 用户名不存在或密码错误
     """
-    # TODO:
-    # user = await db.scalar(select(User).where(User.username == body.username))
-    # if not user or not pwd_context.verify(body.password, user.password_hash):
-    #     raise ValueError("invalid credentials")
-    # token = _create_token(str(user.user_id))
-    # return AuthResponse(...)
-    raise NotImplementedError
+    user = await db.scalar(select(User).where(User.username == body.username))
+    if not user or not pwd_context.verify(body.password, user.password_hash):
+        raise ValueError("invalid credentials")
+
+    token = _create_token(str(user.user_id))
+    return AuthResponse(
+        user_id=str(user.user_id),
+        display_name=user.display_name,
+        major=user.major,
+        token=token,
+    )
 
 
 def decode_token(token: str) -> str:
@@ -57,10 +78,8 @@ def decode_token(token: str) -> str:
     Raises:
         JWTError: token 无效或已过期
     """
-    # TODO:
-    # payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    # return payload["sub"]
-    raise NotImplementedError
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    return payload["sub"]
 
 
 def _create_token(user_id: str) -> str:
@@ -73,8 +92,6 @@ def _create_token(user_id: str) -> str:
     Returns:
         JWT token 字符串
     """
-    # TODO:
-    # expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # payload = {"sub": user_id, "exp": expire}
-    # return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    raise NotImplementedError
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": user_id, "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
