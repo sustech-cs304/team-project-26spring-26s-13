@@ -1,5 +1,5 @@
 """
-God Xun-Frontend/views/auth_page.py
+Frontend Relevant/views/auth_page.py
 登录/注册页面。
 认证成功后 emit authenticated signal，MainWindow 切换到 DashboardPage。
 """

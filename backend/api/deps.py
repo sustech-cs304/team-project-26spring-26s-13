@@ -6,6 +6,7 @@ FastAPI 公共依赖项（Dependencies）。
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User, get_db
@@ -24,11 +25,22 @@ async def get_current_user(
 
     Raises:
         401: token 缺失、格式错误或已过期
-        404: token 合法但用户已被删除（极少见）
+        404: token 合法但用户已被删除
     """
-    # TODO:
-    # 1. auth_service.decode_token(credentials.credentials) → user_id
-    # 2. db.get(User, user_id) → user
-    # 3. 若 user 为 None，raise HTTPException(401)
-    # 4. return user
-    raise NotImplementedError
+    try:
+        user_id = auth_service.decode_token(credentials.credentials)
+    except (JWTError, KeyError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="user not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user

@@ -11,45 +11,19 @@ PydanticAI Agent 主循环。
 """
 
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from pydantic_ai import Agent, RunContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.database.postgres import User
 from backend.schemas.agent import (
-    AgentRequest, AgentResponse, AgentResponse,
+    AgentRequest, AgentResponse,
     AssistantMessage, TraceItem, UIPayload, RouteType
 )
 from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.router import determine_route
-from backend.agent import tools  # 注册所有 @agent.tool（见 tools/__init__.py）
-
-
-# ── Agent 依赖上下文 ───────────────────────────────────────────────────────────
-
-@dataclass
-class AgentDeps:
-    """
-    注入给所有工具函数的运行时依赖。
-    工具通过 ctx.deps 访问这些字段，严禁工具直接持有全局状态。
-    """
-    db: AsyncSession
-    user: User
-    session_id: str
-    llm_api_key: str              # 解密后的 DeepSeek API Key（工具调用外部服务时使用）
-    cas_account: str | None       # 解密后的 CAS 账号（爬虫工具使用）
-    cas_password: str | None      # 解密后的 CAS 密码（爬虫工具使用）
-
-
-# ── PydanticAI Agent 实例 ─────────────────────────────────────────────────────
-
-# TODO: 初始化时需要指定 model。DeepSeek 通过 OpenAI-compatible API 接入。
-#       参考 PydanticAI 文档配置 OpenAIModel with base_url=settings.DEEPSEEK_BASE_URL
-#       system_prompt 从 backend/agent/prompt.py 导入
-agent: Agent[AgentDeps, str] = None  # type: ignore  # TODO: 替换为实际初始化
+from backend.agent.core import AgentDeps, agent  # AgentDeps 与 agent 实例统一从 core 导入
 
 
 # ── HITL 异常 ─────────────────────────────────────────────────────────────────
@@ -122,3 +96,9 @@ def _build_trace(raw_messages: list) -> list[TraceItem]:
     #   - ToolCallPart → phase="Tool Use", status="done"/"error"
     #   - ModelResponse → phase="Reasoning", status="done"
     raise NotImplementedError
+
+
+# ── 工具注册 ──────────────────────────────────────────────────────────────────
+# 必须在 agent 实例（core.py）定义之后、tools 模块使用 @agent.tool 之前导入。
+# 放在文件末尾可避免与上方 loop.py 自身的导入形成循环。
+from backend.agent import tools  # noqa: E402, F401

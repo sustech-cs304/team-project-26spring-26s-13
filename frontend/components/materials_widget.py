@@ -1,5 +1,5 @@
 """
-God Xun-Frontend/components/materials_widget.py
+Frontend Relevant/components/materials_widget.py
 左侧教材列表组件：展示已上传文件，支持上传和删除操作。
 """
 

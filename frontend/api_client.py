@@ -1,4 +1,4 @@
-"""REST client helpers for the Student Productivity Agent desktop God Xun-Frontend."""
+"""REST client helpers for the Student Productivity Agent desktop Frontend Relevant."""
 
 from __future__ import annotations
 

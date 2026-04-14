@@ -1,5 +1,5 @@
 """
-God Xun-Frontend/views/dashboard_page.py
+Frontend Relevant/views/dashboard_page.py
 主界面：三栏布局（左侧边栏 / 中间主区 / 右侧 Trace 面板）。
 负责协调所有子组件，处理 AgentWorker 返回的数据并分发给对应组件。
 """

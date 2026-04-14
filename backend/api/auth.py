@@ -24,8 +24,10 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
     Raises:
         400: username 已存在
     """
-    # TODO: return await auth_service.register(db, body)
-    raise NotImplementedError
+    try:
+        return await auth_service.register(db, body)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -38,16 +40,19 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> AuthR
     Raises:
         401: 用户名或密码错误
     """
-    # TODO: return await auth_service.login(db, body)
-    raise NotImplementedError
+    try:
+        return await auth_service.login(db, body)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="incorrect username or password",
+        )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout() -> None:
     """
     登出（客户端丢弃 token 即可）。
-    当前为无状态 JWT，服务端无需操作；
-    后续如需 token 黑名单，在此添加 Redis 写入逻辑。
+    当前为无状态 JWT，服务端无需操作。
     """
-    # TODO: 可选：将 token jti 加入黑名单
     return
