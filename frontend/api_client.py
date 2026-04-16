@@ -24,7 +24,7 @@ class BackendApiClient:
 
     @classmethod
     def from_env(cls) -> "BackendApiClient":
-        base_url = os.getenv("SPA_API_BASE_URL", "").strip().rstrip("/")
+        base_url = os.getenv("SPA_API_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
         timeout_text = os.getenv("SPA_API_TIMEOUT", "8").strip()
         token = os.getenv("SPA_API_TOKEN", "").strip()
         try:
