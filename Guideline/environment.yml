@@ -6,41 +6,50 @@ dependencies:
   - python=3.10
   - pip
   - pip:
-    # Web Framework
-    - fastapi>=0.111.0
-    - uvicorn[standard]>=0.29.0
+      # Web Framework
+      - fastapi>=0.111.0
+      - uvicorn[standard]>=0.29.0
 
-    # Pydantic & Settings
-    - pydantic>=2.7.0
-    - pydantic-settings>=2.0.0       # BaseSettings for config.py
-    - pydantic-ai>=0.0.13            # Agentic loop framework
+      # Pydantic & Settings
+      - pydantic>=2.7.0
+      - pydantic-settings>=2.0.0 # BaseSettings for config.py
+      - pydantic-ai>=0.0.13 # Agentic loop framework
 
-    # Database
-    - sqlalchemy>=2.0.0
-    - asyncpg>=0.29.0                # async PostgreSQL driver
-    - alembic>=1.13.0                # DB migrations
-    - chromadb>=0.5.0                # vector DB
+      # Database
+      - sqlalchemy>=2.0.0
+      - asyncpg>=0.29.0 # async PostgreSQL driver
+      - alembic>=1.13.0 # DB migrations
+      - chromadb>=0.5.0 # vector DB
 
-    # File Upload & Parsing
-    - python-multipart>=0.0.9        # multipart upload in FastAPI
-    - pymupdf>=1.24.0                # PDF parsing (import fitz)
-    - python-pptx>=0.6.23            # PPT/PPTX parsing
+      # File Upload & Parsing
+      - python-multipart>=0.0.9 # multipart upload in FastAPI
+      - pymupdf>=1.24.0 # PDF parsing (import fitz)
+      - python-pptx>=0.6.23 # PPT/PPTX parsing
+      # ── File Upload & Parsing ────────────────────────────
+      - python-multipart>=0.0.9 # multipart upload in FastAPI
+      - pymupdf>=1.24.0 # PDF parsing (import fitz)
+      - python-docx>=1.1.2 # DOCX parsing
+      - python-pptx>=0.6.23 # PPT/PPTX parsing
+      - numpy>=1.26.0,<2.0
+      - pillow>=10.0.0 # image OCR / parsing
+      - paddleocr==2.7.3
+      - paddlepaddle==2.6.2
 
-    # Web Scraping
-    - httpx>=0.27.0                  # async HTTP client
-    - aiohttp>=3.9.0                 # async HTTP (unit-testable login flow)
-    - beautifulsoup4>=4.12.0
-    - selenium>=4.20.0
+      # Web Scraping
+      - httpx>=0.27.0 # async HTTP client
+      - aiohttp>=3.9.0 # async HTTP (unit-testable login flow)
+      - beautifulsoup4>=4.12.0
+      - selenium>=4.20.0
 
-    # Testing HTTP Mocks
-    - responses>=0.25.0              # mock for requests
-    - aioresponses>=0.7.0            # mock for aiohttp
+      # Testing HTTP Mocks
+      - responses>=0.25.0 # mock for requests
+      - aioresponses>=0.7.0 # mock for aiohttp
 
-    # Security
-    - cryptography>=42.0.0           # Fernet encryption for CAS/API keys
-    - passlib[bcrypt]>=1.7.4         # bcrypt password hashing
-    - python-jose[cryptography]>=3.3.0  # JWT tokens
+      # Security
+      - cryptography>=42.0.0 # Fernet encryption for CAS/API keys
+      - passlib[bcrypt]>=1.7.4 # bcrypt password hashing
+      - python-jose[cryptography]>=3.3.0 # JWT tokens
 
-    # Frontend
-    - PyQt6>=6.7.0
-    - requests>=2.31.0               # sync HTTP for PyQt6 workers
+      # Frontend
+      - PyQt6>=6.7.0
+      - requests>=2.31.0 # sync HTTP for PyQt6 workers
