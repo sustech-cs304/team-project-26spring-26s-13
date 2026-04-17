@@ -35,8 +35,14 @@ async def log(
     Returns:
         None
     """
-    # TODO:
-    # record = AuditLog(user_id=user_id, session_id=session_id, action_type=action_type, ...)
-    # db.add(record)
-    # await db.commit()
-    raise NotImplementedError
+    record = AuditLog(
+        user_id=user_id,
+        session_id=session_id,
+        action_type=action_type,
+        target_path=target_path,
+        description=description,
+        hitl_required=hitl_required,
+        hitl_approved=hitl_approved,
+    )
+    db.add(record)
+    await db.commit()

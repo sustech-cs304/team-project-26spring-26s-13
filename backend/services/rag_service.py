@@ -22,12 +22,10 @@ def resolve_collections(subject_hint: str) -> list[SubjectType]:
     Returns:
         要查询的 Collection 名称列表（去重）
     """
-    # TODO:
-    # if subject_hint == "unknown" or subject_hint not in ALL_SUBJECT_TYPES:
-    #     return list(ALL_SUBJECT_TYPES)
-    # collections = {subject_hint, "other"}  # other 必查
-    # return list(collections)
-    raise NotImplementedError
+    if subject_hint == "unknown" or subject_hint not in ALL_SUBJECT_TYPES:
+        return list(ALL_SUBJECT_TYPES)
+    collections: set[SubjectType] = {subject_hint, "other"}  # type: ignore[arg-type]
+    return list(collections)
 
 
 def format_rag_context(chunks: list[dict], max_tokens: int = 4000) -> str:
@@ -43,12 +41,12 @@ def format_rag_context(chunks: list[dict], max_tokens: int = 4000) -> str:
         格式化后的上下文字符串，每个 chunk 带来源标注：
         "[Source: {file_name}]\n{text}\n\n"
     """
-    # TODO:
-    # result = []
-    # budget = max_tokens * 4  # 字符预算
-    # for chunk in sorted(chunks, key=lambda c: c["distance"]):
-    #     entry = f"[Source: {chunk['file_name']}]\n{chunk['text']}\n\n"
-    #     if len(entry) > budget: break
-    #     result.append(entry); budget -= len(entry)
-    # return "".join(result)
-    raise NotImplementedError
+    result: list[str] = []
+    budget = max_tokens * 4  # 字符预算（1 token ≈ 4 chars）
+    for chunk in sorted(chunks, key=lambda c: c["distance"]):
+        entry = f"[Source: {chunk['file_name']}]\n{chunk['text']}\n\n"
+        if len(entry) > budget:
+            break
+        result.append(entry)
+        budget -= len(entry)
+    return "".join(result)
