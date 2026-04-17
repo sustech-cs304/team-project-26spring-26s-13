@@ -7,7 +7,7 @@ import mimetypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib import error, request
 from uuid import uuid4
 
@@ -155,6 +155,72 @@ class BackendApiClient:
         if not isinstance(payload, dict):
             raise BackendApiError("Agent response must be a JSON object.")
         return payload
+
+    def run_agent_stream(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        message: str,
+        attachments: list[dict[str, Any]] | None = None,
+        hitl_reply: dict[str, Any] | None = None,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """
+        流式调用 /api/agent/run/stream（NDJSON）。
+        on_event 会收到每一行 JSON 事件。
+        """
+        if not self.enabled or not self.base_url:
+            raise BackendApiError("REST backend is disabled. Set SPA_API_BASE_URL to enable it.")
+
+        url = f"{self.base_url}/api/agent/run/stream"
+        headers = {
+            "Accept": "application/x-ndjson",
+            "Content-Type": "application/json",
+        }
+        if self.authenticated and self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        body = json.dumps(
+            {
+                "user_id": user_id,
+                "session_id": session_id,
+                "message": message,
+                "attachments": attachments or [],
+                "hitl_reply": hitl_reply,
+            }
+        ).encode("utf-8")
+
+        req = request.Request(url, data=body, headers=headers, method="POST")
+
+        try:
+            with request.urlopen(req, timeout=self.timeout) as response:
+                final_payload: dict[str, Any] | None = None
+                for raw in response:
+                    line = raw.decode("utf-8", errors="ignore").strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if on_event is not None:
+                        on_event(event)
+                    if event.get("event") == "error":
+                        detail = event.get("data", {}).get("message", "stream error")
+                        raise BackendApiError(str(detail))
+                    if event.get("event") == "final":
+                        data = event.get("data")
+                        if isinstance(data, dict):
+                            final_payload = data
+                if final_payload is None:
+                    raise BackendApiError("Stream ended without final response payload.")
+                return final_payload
+        except error.HTTPError as exc:
+            detail = self._parse_http_error(exc)
+            raise BackendApiError(f"HTTP {exc.code}: {detail}") from exc
+        except error.URLError as exc:
+            raise BackendApiError(f"Network error: {exc.reason}") from exc
 
     def list_sessions(self) -> list[dict[str, Any]]:
         payload = self._request("GET", "/api/agent/sessions")

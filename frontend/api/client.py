@@ -4,7 +4,7 @@ Frontend Relevant/api/client.py
 所有网络调用必须通过此模块，不得在 widget/view 中直接使用 requests。
 """
 
-from typing import Any
+from typing import Any, Callable
 
 from frontend.api_client import BackendApiClient, BackendApiError
 
@@ -130,6 +130,29 @@ class APIClient:
                 message=message,
                 attachments=attachments or [],
                 hitl_reply=hitl_reply,
+            )
+        )
+
+    def agent_run_stream(
+        self,
+        session_id: str,
+        user_id: str,
+        message: str,
+        attachments: list[dict] | None = None,
+        hitl_reply: dict | None = None,
+        on_event: Callable[[dict], None] | None = None,
+    ) -> dict:
+        """
+        POST /api/agent/run/stream（NDJSON 流式）
+        """
+        return self._wrap_error(
+            lambda: self._client.run_agent_stream(
+                session_id=session_id,
+                user_id=user_id,
+                message=message,
+                attachments=attachments or [],
+                hitl_reply=hitl_reply,
+                on_event=on_event,
             )
         )
 

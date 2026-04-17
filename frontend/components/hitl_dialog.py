@@ -47,23 +47,45 @@ class HITLDialog(QDialog):
           ├── QListWidget (payload 子操作列表，只读)
           └── QDialogButtonBox (批准 / 拒绝)
         """
-        # TODO:
-        # self.setWindowTitle("Action Authorization Required")
-        # layout = QVBoxLayout()
-        # ... 构建 UI ...
-        # buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No)
-        # buttons.accepted.connect(self._on_approve)
-        # buttons.rejected.connect(self._on_reject)
-        # layout.addWidget(buttons)
-        # self.setLayout(layout)
-        raise NotImplementedError
+        self.setWindowTitle("Action Authorization Required")
+        layout = QVBoxLayout(self)
+
+        risk = str(req.get("risk", "medium")).lower()
+        risk_label = QLabel(f"Risk: {risk}", self)
+        if risk == "high":
+            risk_label.setStyleSheet("color: #d9534f; font-weight: 600;")
+        layout.addWidget(risk_label)
+
+        action = str(req.get("action", ""))
+        reason = str(req.get("reason", ""))
+        layout.addWidget(QLabel(f"Action: {action}", self))
+        layout.addWidget(QLabel(f"Reason: {reason}", self))
+
+        payload_list = QListWidget(self)
+        for line in req.get("payload", []) or []:
+            payload_list.addItem(str(line))
+        layout.addWidget(payload_list)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No,
+            self,
+        )
+        yes_btn = buttons.button(QDialogButtonBox.StandardButton.Yes)
+        no_btn = buttons.button(QDialogButtonBox.StandardButton.No)
+        if yes_btn is not None:
+            yes_btn.setText("Approve")
+        if no_btn is not None:
+            no_btn.setText("Reject")
+        buttons.accepted.connect(self._on_approve)
+        buttons.rejected.connect(self._on_reject)
+        layout.addWidget(buttons)
 
     def _on_approve(self) -> None:
         """用户点击批准：emit approved signal，关闭弹窗。"""
-        # TODO: self.approved.emit(self._request_id); self.accept()
-        raise NotImplementedError
+        self.approved.emit(self._request_id)
+        self.accept()
 
     def _on_reject(self) -> None:
         """用户点击拒绝：emit rejected signal，关闭弹窗。"""
-        # TODO: self.rejected.emit(self._request_id); self.reject()
-        raise NotImplementedError
+        self.rejected.emit(self._request_id)
+        self.reject()
