@@ -20,11 +20,13 @@ def to_profile(user: User) -> UserProfile:
     Returns:
         UserProfile
     """
-    # TODO:
-    # prefs = UserPreferences(**user.preferences) if user.preferences else UserPreferences()
-    # return UserProfile(user_id=str(user.user_id), display_name=user.display_name,
-    #                    major=user.major, preferences=prefs)
-    raise NotImplementedError
+    prefs = UserPreferences(**user.preferences) if user.preferences else UserPreferences()
+    return UserProfile(
+        user_id=str(user.user_id),
+        display_name=user.display_name,
+        major=user.major,
+        preferences=prefs,
+    )
 
 
 async def update_profile(
@@ -39,13 +41,15 @@ async def update_profile(
     Returns:
         更新后的 UserProfile
     """
-    # TODO:
-    # if body.display_name: user.display_name = body.display_name
-    # if body.major: user.major = body.major
-    # if body.preferences: user.preferences = body.preferences.model_dump()
-    # await db.commit(); await db.refresh(user)
-    # return to_profile(user)
-    raise NotImplementedError
+    if body.display_name is not None:
+        user.display_name = body.display_name
+    if body.major is not None:
+        user.major = body.major
+    if body.preferences is not None:
+        user.preferences = body.preferences.model_dump()
+    await db.commit()
+    await db.refresh(user)
+    return to_profile(user)
 
 
 async def update_credentials(
@@ -58,9 +62,10 @@ async def update_credentials(
     明文值在写入前通过 utils/crypto.encrypt 加密。
     body 中为 None 的字段不修改。
     """
-    # TODO:
-    # if body.cas_account is not None: user.cas_account = body.cas_account
-    # if body.cas_password is not None: user.cas_password_encrypted = encrypt(body.cas_password)
-    # if body.llm_api_key is not None: user.llm_api_key_encrypted = encrypt(body.llm_api_key)
-    # await db.commit()
-    raise NotImplementedError
+    if body.cas_account is not None:
+        user.cas_account = body.cas_account
+    if body.cas_password is not None:
+        user.cas_password_encrypted = encrypt(body.cas_password)
+    if body.llm_api_key is not None:
+        user.llm_api_key_encrypted = encrypt(body.llm_api_key)
+    await db.commit()

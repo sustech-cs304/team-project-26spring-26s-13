@@ -23,8 +23,7 @@ async def get_profile(
     获取当前用户的 profile（用于前端用户卡片）。
     不含任何敏感字段（CAS 密码、API Key 等）。
     """
-    # TODO: return user_service.to_profile(current_user)
-    raise NotImplementedError
+    return user_service.to_profile(current_user)
 
 
 @router.put("/profile", response_model=UserProfile)
@@ -37,8 +36,7 @@ async def update_profile(
     更新 display_name、major、preferences 等非敏感字段。
     传 null 的字段保持不变。
     """
-    # TODO: return await user_service.update_profile(db, current_user, body)
-    raise NotImplementedError
+    return await user_service.update_profile(db, current_user, body)
 
 
 @router.put("/credentials", status_code=204)
@@ -52,5 +50,4 @@ async def update_credentials(
     所有值在写入前通过 utils/crypto.py Fernet 加密。
     传 null 的字段保持不变。
     """
-    # TODO: await user_service.update_credentials(db, current_user, body)
-    raise NotImplementedError
+    await user_service.update_credentials(db, current_user, body)

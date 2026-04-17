@@ -28,5 +28,4 @@ async def bootstrap(
 
     缺失数据时字段返回空列表/空对象，不允许 null 或缺字段。
     """
-    # TODO: return await dashboard_service.build_bootstrap(db, current_user)
-    raise NotImplementedError
+    return await dashboard_service.build_bootstrap(db, current_user)
