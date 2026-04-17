@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pydantic_ai import RunContext
 
 from backend.agent.core import AgentDeps, agent
+from backend.agent.tools.base import safe_tool
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
 from backend.services import schedule_service
 from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY
@@ -32,6 +33,7 @@ async def _get_week1_monday() -> datetime:
 
 
 @agent.tool
+@safe_tool
 async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
     """
     爬取 Blackboard 上当前用户的所有未完成作业/考试截止时间。
@@ -72,6 +74,7 @@ async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
 
 
 @agent.tool
+@safe_tool
 async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
     """
     爬取教务系统当前学期的完整课表（固定时间段的课程安排）。
@@ -138,6 +141,7 @@ async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
 
 
 @agent.tool
+@safe_tool
 async def detect_schedule_conflicts(
     ctx: RunContext[AgentDeps],
     deadlines_json: str,

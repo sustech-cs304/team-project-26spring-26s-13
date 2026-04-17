@@ -24,6 +24,9 @@ class AgentWorker(QThread):
     # 成功时 emit，携带完整的 AgentResponse dict
     response_ready = pyqtSignal(dict)
 
+    # 流式推送 trace item，供右侧 Thought Trace 实时更新
+    trace_streamed = pyqtSignal(dict)
+
     # 失败时 emit，携带错误描述字符串
     error_occurred = pyqtSignal(str)
 
@@ -34,6 +37,7 @@ class AgentWorker(QThread):
         message: str,
         attachments: list[dict] | None = None,
         hitl_reply: dict | None = None,
+        stream_trace: bool = True,
         client: APIClient | None = None,
     ) -> None:
         """
@@ -51,6 +55,7 @@ class AgentWorker(QThread):
         self.message = message
         self.attachments = attachments or []
         self.hitl_reply = hitl_reply
+        self.stream_trace = stream_trace
         self._client = client or api_client
 
     def run(self) -> None:
@@ -59,13 +64,29 @@ class AgentWorker(QThread):
         不要在此方法中更新任何 UI 组件（Qt 要求 UI 操作在主线程）。
         """
         try:
-            response = self._client.agent_run(
-                session_id=self.session_id,
-                user_id=self.user_id,
-                message=self.message,
-                attachments=self.attachments,
-                hitl_reply=self.hitl_reply,
-            )
+            if self.stream_trace:
+                def on_event(event: dict) -> None:
+                    if event.get("event") == "trace":
+                        data = event.get("data")
+                        if isinstance(data, dict):
+                            self.trace_streamed.emit(data)
+
+                response = self._client.agent_run_stream(
+                    session_id=self.session_id,
+                    user_id=self.user_id,
+                    message=self.message,
+                    attachments=self.attachments,
+                    hitl_reply=self.hitl_reply,
+                    on_event=on_event,
+                )
+            else:
+                response = self._client.agent_run(
+                    session_id=self.session_id,
+                    user_id=self.user_id,
+                    message=self.message,
+                    attachments=self.attachments,
+                    hitl_reply=self.hitl_reply,
+                )
             self.response_ready.emit(response)
         except APIError as exc:
             self.error_occurred.emit(f"API Error {exc.status_code}: {exc.detail}")

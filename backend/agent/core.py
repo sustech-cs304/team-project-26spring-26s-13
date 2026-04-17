@@ -12,8 +12,10 @@ Agent 单例与 AgentDeps 的定义。
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -22,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database.postgres import User
 from backend.agent.prompt import SYSTEM_PROMPT
 from backend.config import settings
-
 
 @dataclass
 class AgentDeps:
@@ -36,9 +37,24 @@ class AgentDeps:
     llm_api_key: str          # 解密后的 DeepSeek API Key
     cas_account: str | None   # 解密后的 CAS 账号（爬虫工具使用）
     cas_password: str | None  # 解密后的 CAS 密码（爬虫工具使用）
+    
+    #[新增] 用于收集 Agent 的状态流转和工具调用轨迹，最终返回给前端 Thought Trace 面板
+    trace_log: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _make_agent() -> Agent[AgentDeps, str]:
+# [新增] 强制 LLM 的输出遵循此结构，从而实现自然语言与界面的联动 (Intelligent GUI)
+class FinalResponse(BaseModel):
+    """强制 LLM 输出的最终数据结构"""
+    content: str = Field(
+        description="回复给用户的自然语言内容。如果执行了操作，告诉用户结果；如果是提问，给出解答。"
+    )
+    route: str = Field(
+        description="决定前端界面展示侧重哪个面板的路由。严格限于以下四个值: 'chat', 'scheduler', 'encyclopedia', 'os_automation'",
+        pattern="^(chat|scheduler|encyclopedia|os_automation)$"
+    )
+
+
+def _make_agent() -> Agent[AgentDeps, FinalResponse]:
     """
     创建 PydanticAI Agent 实例。
     使用占位 API Key 初始化 model；运行时 run_agent() 会用用户自己的 Key 覆盖。
@@ -52,13 +68,13 @@ def _make_agent() -> Agent[AgentDeps, str]:
         model_name=settings.DEEPSEEK_MODEL,
         provider=provider,
     )
+    
     return Agent(
         model=model,
         deps_type=AgentDeps,
-        output_type=str,
+        output_type=FinalResponse,  # [修改] 从原本的 str 改为强制输出 FinalResponse 结构
         system_prompt=SYSTEM_PROMPT,
     )
 
-
 # 模块加载时立即初始化，tools/*.py 的 @agent.tool 装饰器可在导入时正常注册。
-agent: Agent[AgentDeps, str] = _make_agent()
+agent: Agent[AgentDeps, FinalResponse] = _make_agent()

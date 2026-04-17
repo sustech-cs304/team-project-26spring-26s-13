@@ -14,7 +14,7 @@ class TraceWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        # TODO: self._setup_ui()
+        self._setup_ui()
 
     def _setup_ui(self) -> None:
         """
@@ -23,8 +23,11 @@ class TraceWidget(QWidget):
           ├── QLabel "Thought Trace"（标题）
           └── QListWidget（trace 步骤列表，只读）
         """
-        # TODO
-        raise NotImplementedError
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Thought Trace"))
+        self._list = QListWidget(self)
+        self._list.setAlternatingRowColors(True)
+        layout.addWidget(self._list)
 
     def update_trace(self, trace_items: list[dict]) -> None:
         """
@@ -35,16 +38,25 @@ class TraceWidget(QWidget):
             trace_items: AgentResponse.trace 列表，每项包含
                          phase, title, detail, status, timestamp
         """
-        # TODO:
-        # self._list.clear()
-        # for item in trace_items:
-        #     text = f"[{item['phase']}] {item['title']} ({item['status']})"
-        #     list_item = QListWidgetItem(text)
-        #     list_item.setToolTip(item.get("detail", ""))
-        #     self._list.addItem(list_item)
-        raise NotImplementedError
+        self._list.clear()
+        for item in trace_items:
+            self.append_trace(item)
+
+    def append_trace(self, trace_item: dict) -> None:
+        """
+        追加一条 trace（流式模式）。
+        """
+        phase = str(trace_item.get("phase", "Observation"))
+        title = str(trace_item.get("title", ""))
+        status = str(trace_item.get("status", "pending"))
+        detail = str(trace_item.get("detail", ""))
+        text = f"[{phase}] {title} ({status})"
+        item = QListWidgetItem(text)
+        if detail:
+            item.setToolTip(detail)
+        self._list.addItem(item)
+        self._list.scrollToBottom()
 
     def clear(self) -> None:
         """清空 trace 面板（发送新消息时调用）。"""
-        # TODO: self._list.clear()
-        raise NotImplementedError
+        self._list.clear()

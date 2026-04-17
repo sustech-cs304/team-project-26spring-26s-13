@@ -112,7 +112,6 @@
 ```
 team-project-26spring-26s-13/
 │
-├── README.md                        # 本文件（项目总览 & 快速开始）
 ├── README-Given by Teacher.md       # 教师提供的原始前端说明
 ├── proposal-26s-13.md               # 项目需求分析文档
 ├── requirements.txt                 # pip 依赖（前后端全部）
@@ -206,7 +205,7 @@ team-project-26spring-26s-13/
 │       └── d8ff1092fce2_init.py     # 初始建表迁移
 │
 └── Guideline/                       # 项目文档与规范（开发参考）
-    ├── README.md                    # 详细框架说明（中文，开发必读）
+    ├── README.md                    # 详细框架说明（本文件）
     ├── environment.yml              # conda 环境配置
     ├── 整体架构图.jpg
     ├── Task Trace.txt               # 任务完成情况追踪
