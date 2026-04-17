@@ -23,7 +23,7 @@ class ChatWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        # TODO: self._setup_ui()
+        self._setup_ui()
 
     def _setup_ui(self) -> None:
         """
@@ -32,8 +32,19 @@ class ChatWidget(QWidget):
           ├── QListWidget  (消息历史，只读，自动滚动到底部)
           └── QHBoxLayout  (输入框 + 附件按钮 + 发送按钮)
         """
-        # TODO
-        raise NotImplementedError
+        layout = QVBoxLayout(self)
+        self._list = QListWidget(self)
+        layout.addWidget(self._list)
+
+        input_row = QHBoxLayout()
+        self._input = QLineEdit(self)
+        self._input.setPlaceholderText("Type your message...")
+        self._input.returnPressed.connect(self._on_send)
+        self._send_btn = QPushButton("Send", self)
+        self._send_btn.clicked.connect(self._on_send)
+        input_row.addWidget(self._input)
+        input_row.addWidget(self._send_btn)
+        layout.addLayout(input_row)
 
     def add_message(self, role: str, content: str) -> None:
         """
@@ -44,8 +55,10 @@ class ChatWidget(QWidget):
             role:    "user" 或 "assistant"
             content: 消息文本（支持简单 Markdown，或使用 QLabel 渲染）
         """
-        # TODO
-        raise NotImplementedError
+        prefix = "You" if role == "user" else "Agent"
+        item = QListWidgetItem(f"{prefix}: {content}")
+        self._list.addItem(item)
+        self._list.scrollToBottom()
 
     def load_history(self, messages: list[dict]) -> None:
         """
@@ -54,13 +67,16 @@ class ChatWidget(QWidget):
         Args:
             messages: chat_history list，每项包含 role, content
         """
-        # TODO: for msg in messages: self.add_message(msg["role"], msg["content"])
-        raise NotImplementedError
+        self._list.clear()
+        for msg in messages:
+            role = str(msg.get("role", "assistant"))
+            content = str(msg.get("content", ""))
+            self.add_message(role, content)
 
     def set_input_enabled(self, enabled: bool) -> None:
         """等待 Agent 响应时禁用输入框和发送按钮，响应返回后恢复。"""
-        # TODO
-        raise NotImplementedError
+        self._input.setEnabled(enabled)
+        self._send_btn.setEnabled(enabled)
 
     def _on_send(self) -> None:
         """
@@ -70,5 +86,10 @@ class ChatWidget(QWidget):
         3. 清空输入框，禁用输入
         4. emit message_submitted
         """
-        # TODO
-        raise NotImplementedError
+        text = self._input.text().strip()
+        if not text:
+            return
+        self.add_message("user", text)
+        self._input.clear()
+        self.set_input_enabled(False)
+        self.message_submitted.emit(text, [])
