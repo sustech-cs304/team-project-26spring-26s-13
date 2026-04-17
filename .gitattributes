@@ -1,0 +1,12 @@
+# 所有文本文件统一用 LF
+* text=auto eol=lf
+
+# Python 文件强制 LF
+*.py text eol=lf
+
+# Markdown 强制 LF
+*.md text eol=lf
+
+# Windows bat/cmd 文件保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
