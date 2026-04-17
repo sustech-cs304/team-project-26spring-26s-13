@@ -1,11 +1,16 @@
 """
 backend/services/audit_service.py
 OS 操作审计日志服务，供 os_automation 工具调用。
+
+每当 os_automation 工具（可能是某个 AI Agent 或自动化脚本）
+在服务器上执行文件操作（如创建、删除、修改）时，这个服务就会把
+“谁在什么时候做了什么”记录到数据库中
 """
 
 import uuid
+#导入 SQLAlchemy 的异步 Session 类型。这表明该服务支持并发处理，不会因为等待数据库响应而阻塞整个程序
 from sqlalchemy.ext.asyncio import AsyncSession
-
+#from backend.database.postgres import AuditLog: 导入定义的数据库模型类 AuditLog。这个类映射到数据库中的某张审计日志表
 from backend.database.postgres import AuditLog
 
 
@@ -35,8 +40,14 @@ async def log(
     Returns:
         None
     """
-    # TODO:
-    # record = AuditLog(user_id=user_id, session_id=session_id, action_type=action_type, ...)
-    # db.add(record)
-    # await db.commit()
-    raise NotImplementedError
+    record = AuditLog(
+        user_id=user_id,
+        session_id=session_id,
+        action_type=action_type,
+        target_path=target_path,
+        description=description,
+        hitl_required=hitl_required,
+        hitl_approved=hitl_approved,
+    )
+    db.add(record)
+    await db.commit()

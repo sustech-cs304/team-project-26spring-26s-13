@@ -21,25 +21,24 @@ def determine_route(tool_names_called: list[str]) -> RouteType:
     Returns:
         RouteType: "chat" | "scheduler" | "encyclopedia" | "os_automation"
     """
-    tool_to_route: dict[str, RouteType] = {
-        "fetch_blackboard_deadlines": "scheduler",
-        "fetch_course_schedule": "scheduler",
-        "detect_schedule_conflicts": "scheduler",
-        "query_rag": "encyclopedia",
-        "classify_subject": "encyclopedia",
-        "generate_summary": "chat",
-        "generate_quiz": "chat",
-        "extract_key_concepts": "chat",
-        "file_create": "os_automation",
-        "file_read": "os_automation",
-        "file_update": "os_automation",
-        "file_delete": "os_automation",
-        "batch_rename": "os_automation",
-    }
-    priority: list[RouteType] = ["os_automation", "scheduler", "encyclopedia", "chat"]
-
-    called_routes = {tool_to_route.get(name, "chat") for name in tool_names_called}
-    for route in priority:
-        if route in called_routes:
-            return route
-    return "chat"
+    # TODO:
+    # TOOL_TO_ROUTE = {
+    #     "fetch_blackboard_deadlines": "scheduler",
+    #     "fetch_course_schedule":      "scheduler",
+    #     "detect_schedule_conflicts":  "scheduler",
+    #     "query_rag":                  "encyclopedia",
+    #     "generate_summary":           "chat",
+    #     "generate_quiz":              "chat",
+    #     "file_create":                "os_automation",
+    #     "file_read":                  "os_automation",
+    #     "file_update":                "os_automation",
+    #     "file_delete":                "os_automation",
+    #     "batch_rename":               "os_automation",
+    # }
+    # PRIORITY = ["os_automation", "scheduler", "encyclopedia", "chat"]
+    # routes_called = {TOOL_TO_ROUTE.get(t, "chat") for t in tool_names_called}
+    # for r in PRIORITY:
+    #     if r in routes_called:
+    #         return r
+    # return "chat"
+    raise NotImplementedError

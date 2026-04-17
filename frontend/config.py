@@ -1,5 +1,5 @@
 """
-Frontend Relevant/config.py
+God Xun-Frontend/config.py
 前端配置：后端 API 地址，通过环境变量覆盖。
 """
 

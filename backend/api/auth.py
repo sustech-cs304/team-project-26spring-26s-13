@@ -1,6 +1,9 @@
 """
 backend/api/auth.py
-认证路由：注册、登录、登出。
+认证路由：注册、
+登录、登出。
+
+
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -43,16 +46,15 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> AuthR
     try:
         return await auth_service.login(db, body)
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="incorrect username or password",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout() -> None:
     """
     登出（客户端丢弃 token 即可）。
-    当前为无状态 JWT，服务端无需操作。
+    当前为无状态 JWT，服务端无需操作；
+    后续如需 token 黑名单，在此添加 Redis 写入逻辑。
     """
+    # TODO: 可选：将 token jti 加入黑名单
     return

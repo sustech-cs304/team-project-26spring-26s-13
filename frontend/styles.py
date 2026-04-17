@@ -1,4 +1,4 @@
-"""Shared style sheet for the Student Productivity Agent Frontend Relevant."""
+"""Shared style sheet for the Student Productivity Agent God Xun-Frontend."""
 
 APP_STYLE = """
 QMainWindow, QWidget#AppRoot {

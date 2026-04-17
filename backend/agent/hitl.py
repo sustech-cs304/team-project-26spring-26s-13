@@ -81,16 +81,12 @@ class HITLManager:
         Returns:
             新创建的 HITLPendingState
         """
-        state = HITLPendingState(
-            request_id=request_id,
-            session_id=session_id,
-            action=action,
-            risk=risk,
-            resume_callback=resume_callback,
-        )
-        with self._lock:
-            self._pending[request_id] = state
-        return state
+        # TODO:
+        # state = HITLPendingState(request_id=..., ...)
+        # with self._lock:
+        #     self._pending[request_id] = state
+        # return state
+        raise NotImplementedError
 
     def get(self, request_id: str) -> HITLPendingState | None:
         """根据 request_id 查询挂起状态，不存在返回 None。"""
@@ -108,13 +104,15 @@ class HITLManager:
         Returns:
             True 表示成功解决，False 表示 request_id 不存在（已超时清理）
         """
-        with self._lock:
-            state = self._pending.get(request_id)
-        if state is None:
-            return False
-        state.approved = approved
-        state.event.set()
-        return True
+        # TODO:
+        # with self._lock:
+        #     state = self._pending.get(request_id)
+        # if state is None:
+        #     return False
+        # state.approved = approved
+        # state.event.set()
+        # return True
+        raise NotImplementedError
 
     def remove(self, request_id: str) -> None:
         """操作完成后从内存中清理挂起状态。"""
@@ -133,13 +131,8 @@ class HITLManager:
         Returns:
             HITLRequest（可直接放入 AgentResponse.hitl_request）
         """
-        return HITLRequest(
-            request_id=state.request_id,
-            action=state.action,
-            risk=state.risk,
-            reason=reason,
-            payload=payload,
-        )
+        # TODO: 构造并返回 HITLRequest(...)
+        raise NotImplementedError
 
 
 # 全局单例，所有模块直接 import 此对象

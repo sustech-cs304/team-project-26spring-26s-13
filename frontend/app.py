@@ -1,4 +1,4 @@
-"""PyQt6 desktop Frontend Relevant prototype for the Student Productivity Agent project."""
+"""PyQt6 desktop God Xun-Frontend prototype for the Student Productivity Agent project."""
 
 from __future__ import annotations
 

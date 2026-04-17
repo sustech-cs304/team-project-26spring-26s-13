@@ -25,16 +25,13 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     Raises:
         ValueError: username 已被注册
     """
-    # 1. 检查用户名唯一性
     existing = await db.scalar(select(User).where(User.username == body.username))
     if existing:
         raise ValueError("username already exists")
 
-    # 2. 创建用户（bcrypt 限制 72 字节，截断以避免报错）
-    safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     user = User(
         username=body.username,
-        password_hash=pwd_context.hash(safe_password),
+        password_hash=pwd_context.hash(body.password),
         display_name=body.display_name,
         major=body.major,
     )
@@ -42,7 +39,6 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     await db.commit()
     await db.refresh(user)
 
-    # 3. 签发 token
     token = _create_token(str(user.user_id))
     return AuthResponse(
         user_id=str(user.user_id),
@@ -60,8 +56,7 @@ async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
         ValueError: 用户名不存在或密码错误
     """
     user = await db.scalar(select(User).where(User.username == body.username))
-    safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    if not user or not pwd_context.verify(safe_password, user.password_hash):
+    if not user or not pwd_context.verify(body.password, user.password_hash):
         raise ValueError("invalid credentials")
 
     token = _create_token(str(user.user_id))
@@ -81,7 +76,10 @@ def decode_token(token: str) -> str:
         JWTError: token 无效或已过期
     """
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    return payload["sub"]
+    user_id: str | None = payload.get("sub")
+    if user_id is None:
+        raise JWTError("token missing 'sub' claim")
+    return user_id
 
 
 def _create_token(user_id: str) -> str:

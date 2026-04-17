@@ -15,7 +15,6 @@ from backend.database.postgres import Material, User
 from backend.database.chromadb import SubjectType, add_chunks, delete_file_chunks
 from backend.schemas.material import MaterialInfo
 from backend.utils.document_parser import parse_document
-from backend.agent.tools.rag import classify_subject   # 直接调用分类逻辑（非 tool 调用）
 
 
 ALLOWED_MIME_TYPES = {
@@ -38,10 +37,12 @@ async def list_materials(db: AsyncSession, user_id: uuid.UUID) -> list[MaterialI
     Returns:
         list[MaterialInfo]，可为空列表
     """
-    # TODO:
-    # rows = await db.scalars(select(Material).where(Material.user_id == user_id).order_by(Material.uploaded_at.desc()))
-    # return [_to_schema(m) for m in rows]
-    raise NotImplementedError
+    rows = await db.scalars(
+        select(Material)
+        .where(Material.user_id == user_id)
+        .order_by(Material.uploaded_at.desc())
+    )
+    return [_to_schema(m) for m in rows]
 
 
 async def upload_and_vectorize(
@@ -72,8 +73,47 @@ async def upload_and_vectorize(
     Raises:
         ValueError: 不支持的文件类型或超出大小限制
     """
-    # TODO: 实现上述 7 步流程
-    raise NotImplementedError
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_MIME_TYPES:
+        raise ValueError(f"Unsupported file type: {content_type}")
+
+    file_bytes = await file.read()
+    size_mb = len(file_bytes) / (1024 * 1024)
+    if size_mb > settings.MAX_UPLOAD_SIZE_MB:
+        raise ValueError(f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB")
+
+    file_id = uuid.uuid4()
+    suffix = Path(file.filename or "file").suffix
+    user_dir = Path(settings.UPLOAD_DIR) / str(user.user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    file_path = user_dir / f"{file_id}{suffix}"
+    file_path.write_bytes(file_bytes)
+
+    material = Material(
+        file_id=file_id,
+        user_id=user.user_id,
+        file_name=file.filename or "unknown",
+        file_type=content_type,
+        file_path=str(file_path.resolve()),
+        subject_type="other",
+        vectorized=False,
+    )
+    db.add(material)
+    await db.commit()
+    await db.refresh(material)
+
+    try:
+        parsed = parse_document(str(file_path), content_type)
+        chunks = _chunk_text(parsed.text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
+        if chunks:
+            add_chunks("other", str(file_id), material.file_name, chunks)
+        material.vectorized = True
+        await db.commit()
+        await db.refresh(material)
+    except Exception:
+        pass
+
+    return _to_schema(material)
 
 
 async def delete_material(
@@ -93,12 +133,20 @@ async def delete_material(
         PermissionError: file_id 不属于 user_id
         FileNotFoundError: file_id 不存在
     """
-    # TODO:
-    # 1. 查询 Material，验证 user_id 归属
-    # 2. delete_file_chunks(str(file_id), material.subject_type)
-    # 3. Path(material.file_path).unlink(missing_ok=True)
-    # 4. await db.delete(material); await db.commit()
-    raise NotImplementedError
+    material = await db.get(Material, file_id)
+    if material is None:
+        raise FileNotFoundError(f"Material {file_id} not found")
+    if material.user_id != user_id:
+        raise PermissionError("Not your file")
+
+    try:
+        delete_file_chunks(str(file_id), material.subject_type)
+    except Exception:
+        pass
+
+    Path(material.file_path).unlink(missing_ok=True)
+    await db.delete(material)
+    await db.commit()
 
 
 def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
@@ -113,11 +161,24 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     Returns:
         list[str]（至少一个元素）
     """
-    # TODO: 滑动窗口切分
-    raise NotImplementedError
+    if not text:
+        return [text]
+    chunks: list[str] = []
+    start = 0
+    while start < len(text):
+        end = start + chunk_size
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
+    return chunks if chunks else [text]
 
 
 def _to_schema(material: Material) -> MaterialInfo:
     """将 ORM Material 对象转换为 MaterialInfo Pydantic schema。"""
-    # TODO: return MaterialInfo(file_id=str(material.file_id), ...)
-    raise NotImplementedError
+    return MaterialInfo(
+        file_id=str(material.file_id),
+        file_name=material.file_name,
+        file_type=material.file_type,
+        subject_type=material.subject_type,
+        vectorized=material.vectorized,
+        uploaded_at=material.uploaded_at,
+    )

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=64, description="登录用户名，全局唯一")
-    password: str = Field(..., min_length=6, description="明文密码，后端负责 bcrypt 哈希")
+    password: str = Field(..., min_length=8, description="明文密码，后端负责 bcrypt 哈希")
     display_name: str = Field(..., max_length=128, description="界面显示名")
     major: str = Field(..., max_length=128, description="专业，例如 'Software Engineering'")
 

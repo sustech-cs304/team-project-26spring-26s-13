@@ -1,13 +1,11 @@
 import json
 import re
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 import httpx
 
-from .academic_calendar_models import CalendarOverrides
-from .academic_calendar_provider import get_calendar_overrides
 from .constants import (
     ACADEMIC_SYSTEM_BASE,
     CourseOccurrence,
@@ -18,6 +16,7 @@ from .constants import (
     _request_with_retry,
     logger,
 )
+
 
 def _test5_file_path() -> Path:
     root = Path(__file__).resolve().parents[3]
@@ -408,11 +407,7 @@ def _tis_extract_meetings(payload: object) -> list[dict[str, object]]:
     return meetings
 
 
-def _tis_meetings_to_occurrences(
-    meetings: list[dict[str, object]],
-    *,
-    week1_monday: datetime = _TIS_WEEK1_MONDAY,
-) -> list[CourseOccurrence]:
+def _tis_meetings_to_occurrences(meetings: list[dict[str, object]]) -> list[CourseOccurrence]:
     occs: list[CourseOccurrence] = []
 
     for m in meetings:
@@ -428,7 +423,7 @@ def _tis_meetings_to_occurrences(
         end_hhmm = _SUSTECH_CLASS_PERIODS[end_sec][1]
 
         for w in weeks:
-            day0 = week1_monday + timedelta(days=(w - 1) * 7 + (weekday - 1))
+            day0 = _TIS_WEEK1_MONDAY + timedelta(days=(w - 1) * 7 + (weekday - 1))
             start_at = _tis_dt(day0, start_hhmm)
             end_at = _tis_dt(day0, end_hhmm)
             if end_at <= start_at:
@@ -447,86 +442,6 @@ def _tis_meetings_to_occurrences(
 
     occs.sort(key=lambda x: (x.start_at, x.course_id))
     return occs
-
-
-_FALLBACK_CANCEL_DAYS = {
-    date(2026, 2, 23),
-    date(2026, 2, 24),
-    date(2026, 4, 6),
-    date(2026, 5, 1),
-    date(2026, 5, 4),
-    date(2026, 5, 5),
-}
-
-_FALLBACK_MOVE_RULES: list[tuple[date, date]] = [
-    (date(2026, 2, 23), date(2026, 2, 28)),
-    (date(2026, 5, 5), date(2026, 5, 9)),
-]
-
-
-def _filter_relevant_override_rules(
-    occs: list[CourseOccurrence],
-    cancel_days: set[date],
-    move_rules: list[tuple[date, date]],
-) -> tuple[set[date], list[tuple[date, date]]]:
-    if not occs:
-        return cancel_days, move_rules
-    occ_days = {o.start_at.date() for o in occs}
-    filtered_cancel = {d for d in cancel_days if d in occ_days}
-    filtered_moves = [(src, dst) for src, dst in move_rules if src in occ_days]
-    return filtered_cancel, filtered_moves
-
-
-async def _load_calendar_overrides() -> CalendarOverrides:
-    cancel_days = set(_FALLBACK_CANCEL_DAYS)
-    move_rules = list(_FALLBACK_MOVE_RULES)
-    week1_monday = _TIS_WEEK1_MONDAY.date()
-
-    try:
-        overrides = await get_calendar_overrides()
-        cancel_days.update(overrides.cancel_days)
-        move_rules.extend(overrides.move_rules)
-        if overrides.week1_monday is not None:
-            week1_monday = overrides.week1_monday
-    except Exception:
-        logger.exception("tis.calendar: failed to load dynamic calendar overrides, using fallback only")
-
-    return CalendarOverrides(
-        cancel_days=cancel_days,
-        move_rules=list(dict.fromkeys(move_rules)),
-        week1_monday=week1_monday,
-    )
-
-
-def _apply_calendar_overrides(
-    occs: list[CourseOccurrence],
-    *,
-    cancel_days: set[date],
-    move_rules: list[tuple[date, date]],
-) -> list[CourseOccurrence]:
-    moved: list[CourseOccurrence] = []
-    for src, dst in move_rules:
-        delta_days = (dst - src).days
-        for o in occs:
-            if o.start_at.date() != src:
-                continue
-            moved.append(
-                CourseOccurrence(
-                    course_id=o.course_id,
-                    start_at=o.start_at + timedelta(days=delta_days),
-                    end_at=o.end_at + timedelta(days=delta_days),
-                    location=o.location,
-                    kind=o.kind,
-                    instructor=o.instructor,
-                    notes=o.notes,
-                )
-            )
-
-    override_days = {dst for _, dst in move_rules}
-    kept = [o for o in occs if o.start_at.date() not in cancel_days and o.start_at.date() not in override_days]
-    kept.extend(moved)
-    kept.sort(key=lambda x: (x.start_at, x.course_id))
-    return kept
 
 
 async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
@@ -640,12 +555,4 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
                 raise PermissionError("TIS authentication required")
             raise RuntimeError("Academic schedule empty or unparseable")
 
-        overrides = await _load_calendar_overrides()
-        week1_monday = datetime(
-            overrides.week1_monday.year,
-            overrides.week1_monday.month,
-            overrides.week1_monday.day,
-        )
-        occs = _tis_meetings_to_occurrences(meetings, week1_monday=week1_monday)
-        cancel_days, move_rules = _filter_relevant_override_rules(occs, overrides.cancel_days, overrides.move_rules)
-        return _apply_calendar_overrides(occs, cancel_days=cancel_days, move_rules=move_rules)
+        return _tis_meetings_to_occurrences(meetings)
