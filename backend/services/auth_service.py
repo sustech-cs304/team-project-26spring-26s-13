@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from backend.config import settings
 from backend.database.postgres import User
 from backend.schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 
 async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
@@ -34,7 +34,7 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     user = User(
         username=body.username,
-        password_hash=pwd_context.hash(safe_password),
+        password_hash=bcrypt.hashpw(safe_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
         display_name=body.display_name,
         major=body.major,
     )
@@ -61,7 +61,7 @@ async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
     """
     user = await db.scalar(select(User).where(User.username == body.username))
     safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    if not user or not pwd_context.verify(safe_password, user.password_hash):
+    if not user or not bcrypt.checkpw(safe_password.encode('utf-8'), user.password_hash.encode('utf-8')):
         raise ValueError("invalid credentials")
 
     token = _create_token(str(user.user_id))
