@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # ── Database ────────────────────────────────────────
-    POSTGRES_DSN: str = "postgresql+asyncpg://user:password@localhost:5432/spa_db"
+    POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@localhost:5432/software-engineering"
     CHROMA_PERSIST_DIR: str = "./data/chromadb"
 
     # ── Security ────────────────────────────────────────

@@ -16,8 +16,6 @@ from backend.database.postgres import User
 from backend.schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 
 
-
-
 async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     """
     注册新用户，写入 users 表，返回 JWT token。
@@ -30,11 +28,17 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
     if existing:
         raise ValueError("username already exists")
 
-    # 2. 创建用户（bcrypt 限制 72 字节，截断以避免报错）
-    safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    # 2. 创建用户（进行绝对安全的截断）
+    password_bytes = body.password.encode("utf-8")
+    
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        
+    hashed_password = bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
+    
     user = User(
         username=body.username,
-        password_hash=bcrypt.hashpw(safe_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+        password_hash=hashed_password,
         display_name=body.display_name,
         major=body.major,
     )
@@ -60,8 +64,12 @@ async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
         ValueError: 用户名不存在或密码错误
     """
     user = await db.scalar(select(User).where(User.username == body.username))
-    safe_password = body.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    if not user or not bcrypt.checkpw(safe_password.encode('utf-8'), user.password_hash.encode('utf-8')):
+    
+    password_bytes = body.password.encode("utf-8")
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        
+    if not user or not bcrypt.checkpw(password_bytes, user.password_hash.encode("utf-8")):
         raise ValueError("invalid credentials")
 
     token = _create_token(str(user.user_id))
