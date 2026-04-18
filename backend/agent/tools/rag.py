@@ -11,11 +11,16 @@ RAG 检索工具：根据查询内容进行学科剪枝后查询向量数据库�
   - 若无法判断，则查全部集合
 """
 
+import json
+
+import httpx
 from pydantic_ai import RunContext
 
 from backend.agent.core import AgentDeps, agent
+from backend.config import settings
 from backend.services import rag_service
-from backend.database.chromadb import SubjectType
+from backend.database import chromadb as chromadb_module
+from backend.database.chromadb import ALL_SUBJECT_TYPES, SubjectType
 
 
 @agent.tool
@@ -47,11 +52,26 @@ async def query_rag(
         chunks 已按 distance 升序排列（最相关在前）。
         若无匹配结果，chunks 为空列表。
     """
-    # TODO:
-    # collections = rag_service.resolve_collections(subject_hint)
-    # results = chromadb_module.query_collections(query, collections)
-    # return json.dumps({"chunks": results, "collections_queried": [c for c in collections]})
-    raise NotImplementedError
+    collections = rag_service.resolve_collections(subject_hint)
+    try:
+        results = chromadb_module.query_collections(query, collections)
+    except Exception:
+        results = []
+    return json.dumps(
+        {
+            "chunks": [
+                {
+                    "text": r["text"],
+                    "file_name": r["file_name"],
+                    "subject_type": r["subject_type"],
+                    "distance": r["distance"],
+                }
+                for r in results
+            ],
+            "collections_queried": collections,
+        },
+        ensure_ascii=False,
+    )
 
 
 @agent.tool
@@ -75,7 +95,51 @@ async def classify_subject(
         "literature" | "politics" | "finance" | "statistics" | "ocean" |
         "economics" | "law" | "management" | "medicine" | "policy" | "other"
     """
-    # TODO:
-    # 使用轻量 LLM 调用（few-shot prompt）分类
-    # 若置信度低则返回 "other"
-    raise NotImplementedError
+    valid_subjects = ", ".join(ALL_SUBJECT_TYPES)
+    few_shot_prompt = f"""你是一个学科分类助手。根据输入文本，判断它属于哪个学科分类。
+只能返回以下分类中的一个，不要输出任何其他内容：
+{valid_subjects}
+
+示例：
+输入：二叉树的层序遍历算法
+输出：cs
+
+输入：南科大挂科政策是什么
+输出：policy
+
+输入：线性代数矩阵乘法
+输出：math
+
+输入：有机化学反应机理
+输出：chemistry
+
+输入：如何分析股票估值
+输出：finance
+
+输入：{text[:500]}
+输出："""
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {ctx.deps.llm_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.DEEPSEEK_MODEL,
+                    "messages": [{"role": "user", "content": few_shot_prompt}],
+                    "max_tokens": 16,
+                    "temperature": 0.0,
+                },
+            )
+        resp.raise_for_status()
+        result = resp.json()
+        subject = result["choices"][0]["message"]["content"].strip().lower()
+        if subject in ALL_SUBJECT_TYPES:
+            return subject
+    except Exception:
+        pass
+
+    return "other"
