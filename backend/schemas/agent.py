@@ -143,5 +143,14 @@ class AgentResponse(BaseModel):
 class SessionSummary(BaseModel):
     """GET /api/agent/sessions 的列表项。"""
     session_id: str
-    preview: str          # 最近一条消息的截断文本
+    title: str            # 会话标题，优先取首条用户消息
+    preview: str          # 最近一条用户消息或 assistant 回答的截断文本
     updated_at: datetime
+
+
+class SessionDetail(BaseModel):
+    """GET /api/agent/sessions/{session_id} 的响应体。"""
+    session_id: str
+    title: str
+    updated_at: datetime
+    messages: list[ChatMessage]

@@ -17,6 +17,7 @@ class BootstrapResponse(BaseModel):
     缺失数据返回空列表/空对象，不允许缺字段。
     """
     user_profile: UserProfile
-    chat_history: list[ChatMessage]       # 最近 N 条历史消息（N 由后端决定，建议 50）
+    active_session_id: str | None = None  # 最近活跃会话；无历史时为 null
+    chat_history: list[ChatMessage]       # 当前活跃会话的完整历史消息
     materials: list[MaterialInfo]
     local_schedule: ScheduleData          # 上次缓存的日程数据；无数据时返回 events=[], conflicts=[]

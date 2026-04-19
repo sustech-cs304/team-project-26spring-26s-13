@@ -19,6 +19,19 @@ from backend.services import schedule_service
 from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY
 
 
+async def _get_week1_monday() -> datetime:
+    try:
+        from backend.services.schedule_service.academic_calendar_provider import get_calendar_overrides
+
+        overrides = await get_calendar_overrides()
+        if overrides.week1_monday is not None:
+            d = overrides.week1_monday
+            return datetime(d.year, d.month, d.day)
+    except Exception:
+        return _TIS_WEEK1_MONDAY
+    return _TIS_WEEK1_MONDAY
+
+
 @agent.tool
 @safe_tool
 async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
@@ -89,7 +102,7 @@ async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
     except Exception:
         return "ERROR:ACADEMIC_SYSTEM_UNREACHABLE"
 
-    week1 = _TIS_WEEK1_MONDAY
+    week1 = await _get_week1_monday()
 
     grouped: dict[tuple[str, int, str, str, str], dict] = {}
     for o in occs:
@@ -194,7 +207,7 @@ async def detect_schedule_conflicts(
             )
         )
 
-    week1 = _TIS_WEEK1_MONDAY
+    week1 = await _get_week1_monday()
 
     course_slots: list[schedule_service.CourseOccurrence] = []
 

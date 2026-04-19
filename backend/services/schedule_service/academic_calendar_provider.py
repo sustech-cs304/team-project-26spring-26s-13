@@ -6,7 +6,10 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import httpx
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover
+    httpx = None  # type: ignore[assignment]
 
 from backend.services.schedule_service.academic_calendar_extract import extract_calendar_text_from_pdf
 from backend.services.schedule_service.academic_calendar_fetch import download_calendar_asset
@@ -115,14 +118,14 @@ async def get_calendar_overrides(
     if not page_url:
         raise ValueError("page_url is required")
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(30.0), trust_env=False) as client:
+    if httpx is None:
         if is_calendar_asset_url(page_url):
             pdf_ref = CalendarPdfRef(url=page_url, title="direct")
         else:
-            pdfs = await discover_calendar_pdfs(page_url=page_url, client=client)
+            pdfs = await discover_calendar_pdfs(page_url=page_url, client=None)
             pdf_ref = _pick_best_pdf(pdfs)
 
-        pdf_path = await download_calendar_asset(pdf_ref.url, client=client, force=force_refresh)
+        pdf_path = await download_calendar_asset(pdf_ref.url, client=None, force=force_refresh)
         extracted = await extract_calendar_text_from_pdf(pdf_path)
         overrides = parse_calendar_overrides(
             extracted.text,
@@ -131,6 +134,23 @@ async def get_calendar_overrides(
             source_pdf_path=str(pdf_path),
             extracted_pages=extracted.page_count,
         )
+    else:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(30.0), trust_env=False) as client:  # type: ignore[union-attr]
+            if is_calendar_asset_url(page_url):
+                pdf_ref = CalendarPdfRef(url=page_url, title="direct")
+            else:
+                pdfs = await discover_calendar_pdfs(page_url=page_url, client=client)
+                pdf_ref = _pick_best_pdf(pdfs)
+
+            pdf_path = await download_calendar_asset(pdf_ref.url, client=client, force=force_refresh)
+            extracted = await extract_calendar_text_from_pdf(pdf_path)
+            overrides = parse_calendar_overrides(
+                extracted.text,
+                source_url=page_url,
+                source_pdf_url=pdf_ref.url,
+                source_pdf_path=str(pdf_path),
+                extracted_pages=extracted.page_count,
+            )
 
     _write_cached_overrides(cache_path, overrides)
     logger.info("calendar.provider: overrides_cached path=%s", cache_path)

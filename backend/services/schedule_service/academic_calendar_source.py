@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+import urllib.request
 from urllib.parse import urljoin, urlparse
 
-import httpx
-from bs4 import BeautifulSoup
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover
+    httpx = None  # type: ignore[assignment]
+
+try:
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:  # pragma: no cover
+    BeautifulSoup = None  # type: ignore[assignment]
 
 from backend.services.schedule_service.academic_calendar_models import CalendarPdfRef
 from backend.services.schedule_service.constants import logger
@@ -36,36 +44,48 @@ def _guess_media_type(url: str) -> str | None:
 async def discover_calendar_pdfs(
     *,
     page_url: str,
-    client: httpx.AsyncClient | None = None,
+    client: "httpx.AsyncClient | None" = None,
 ) -> list[CalendarPdfRef]:
     if not page_url:
         raise ValueError("page_url is required")
 
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(20.0), trust_env=False)
+        if httpx is None:
+            client = None
+        else:
+            client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(20.0), trust_env=False)  # type: ignore[union-attr]
 
     try:
-        assert client is not None
-        r = await client.get(page_url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"})
-        r.raise_for_status()
-        html = r.text or ""
+        if client is not None:
+            r = await client.get(page_url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"})
+            r.raise_for_status()
+            html = r.text or ""
+        else:
+            req = urllib.request.Request(
+                page_url,
+                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
     finally:
-        if own_client and client is not None:
+        if own_client and client is not None and hasattr(client, "aclose"):
             await client.aclose()
 
-    soup = BeautifulSoup(html, "html.parser")
     pdfs: list[CalendarPdfRef] = []
 
-    for a in soup.find_all("a"):
-        href = a.get("href")
-        if not href:
-            continue
-        if ".pdf" not in href.lower():
-            continue
-        url = urljoin(page_url, href)
-        title = (a.get_text(" ", strip=True) or "").strip() or None
-        pdfs.append(CalendarPdfRef(url=url, title=title, media_type=_guess_media_type(url)))
+    if BeautifulSoup is not None:
+        soup = BeautifulSoup(html, "html.parser")
+        for a in soup.find_all("a"):
+            href = a.get("href")
+            if not href:
+                continue
+            if ".pdf" not in href.lower() and not any(ext in href.lower() for ext in (".jpg", ".jpeg", ".png", ".webp")):
+                continue
+            url = urljoin(page_url, href)
+            title = (a.get_text(" ", strip=True) or "").strip() or None
+            pdfs.append(CalendarPdfRef(url=url, title=title, media_type=_guess_media_type(url)))
 
     if not pdfs:
         for m in _PDF_RE.finditer(html):

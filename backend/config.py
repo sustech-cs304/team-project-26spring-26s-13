@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # ── LLM ─────────────────────────────────────────────
     DEEPSEEK_MODEL: str = "deepseek-chat"          # model ID passed to PydanticAI
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_API_KEY: str = ""                     # optional fallback when user has not saved a personal key
 
     # ── File Storage ────────────────────────────────────
     UPLOAD_DIR: str = "./data/uploads"             # raw uploaded files

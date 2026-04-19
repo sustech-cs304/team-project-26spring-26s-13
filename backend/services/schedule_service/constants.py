@@ -12,8 +12,15 @@ from datetime import datetime, timedelta
 from typing import Literal
 from urllib.parse import urljoin
 
-import httpx
-from bs4 import BeautifulSoup
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover
+    httpx = None  # type: ignore[assignment]
+
+try:
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:  # pragma: no cover
+    BeautifulSoup = None  # type: ignore[assignment]
 
 
 @dataclass
