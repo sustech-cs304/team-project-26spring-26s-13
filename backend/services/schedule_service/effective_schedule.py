@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time
 
 from .academic_calendar_models import CalendarOverrides
 from .constants import CourseOccurrence
@@ -21,6 +21,15 @@ class EffectiveScheduleDay:
     resolution: TeachingDayResolution
     courses: list[CourseOccurrence]
     overrides: CalendarOverrides
+
+
+@dataclass(frozen=True)
+class EffectiveScheduleConflict:
+    resolution: TeachingDayResolution
+    activity_start: datetime
+    activity_end: datetime
+    day_courses: list[CourseOccurrence]
+    conflicting_courses: list[CourseOccurrence]
 
 
 def resolve_teaching_day(calendar_date: date, overrides: CalendarOverrides) -> TeachingDayResolution:
@@ -118,4 +127,30 @@ async def query_effective_schedule_for_date(
         resolution=resolution,
         courses=courses,
         overrides=context.overrides,
+    )
+
+
+async def query_effective_schedule_conflicts(
+    cas_account: str,
+    cas_password: str,
+    target_date: date,
+    activity_start_time: time,
+    activity_end_time: time,
+) -> EffectiveScheduleConflict:
+    effective_day = await query_effective_schedule_for_date(cas_account, cas_password, target_date)
+    activity_start = datetime.combine(target_date, activity_start_time)
+    activity_end = datetime.combine(target_date, activity_end_time)
+
+    conflicting_courses = [
+        course
+        for course in effective_day.courses
+        if course.start_at < activity_end and course.end_at > activity_start
+    ]
+
+    return EffectiveScheduleConflict(
+        resolution=effective_day.resolution,
+        activity_start=activity_start,
+        activity_end=activity_end,
+        day_courses=effective_day.courses,
+        conflicting_courses=conflicting_courses,
     )

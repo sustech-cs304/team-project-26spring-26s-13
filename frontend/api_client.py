@@ -141,7 +141,7 @@ class BackendApiClient:
         attachments: list[dict[str, Any]] | None = None,
         hitl_reply: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        agent_timeout = max(self.timeout, 90.0)
+        agent_timeout = max(self.timeout, 300.0)
         payload = self._request(
             "POST",
             "/api/agent/run",
@@ -194,7 +194,7 @@ class BackendApiClient:
         ).encode("utf-8")
 
         req = request.Request(url, data=body, headers=headers, method="POST")
-        agent_timeout = max(self.timeout, 90.0)
+        agent_timeout = max(self.timeout, 300.0)
 
         try:
             with request.urlopen(req, timeout=agent_timeout) as response:
