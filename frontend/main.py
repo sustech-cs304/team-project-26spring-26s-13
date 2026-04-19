@@ -11,8 +11,6 @@ import requests
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from frontend.config import API_BASE_URL
-from frontend.views.home_page import HomePage
-
 
 def wait_for_backend(timeout: int = 10) -> bool:
     """
