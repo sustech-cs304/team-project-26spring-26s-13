@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#fcfcfc"/>
+  <rect x="40" y="40" width="1320" height="820" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
+  <text x="80" y="95" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Multi-Source Scheduler Wireframe</text>
+  <rect x="70" y="125" width="1260" height="3" fill="#222222"/>
+
+  <rect x="80" y="150" width="250" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="105" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Sources and Filters</text>
+  <rect x="105" y="220" width="200" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="285" width="200" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="350" width="200" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="430" width="200" height="45" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="490" width="200" height="45" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="550" width="200" height="45" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="105" y="655" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Blackboard, calendar, tasks, priorities</text>
+
+  <rect x="360" y="150" width="670" height="680" rx="18" fill="#f9f9f9" stroke="#333333" stroke-width="2"/>
+  <text x="390" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Timeline / Agenda View</text>
+  <rect x="390" y="220" width="610" height="60" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <line x1="430" y1="320" x2="960" y2="320" stroke="#555555" stroke-width="2"/>
+  <line x1="430" y1="410" x2="960" y2="410" stroke="#555555" stroke-width="2"/>
+  <line x1="430" y1="500" x2="960" y2="500" stroke="#555555" stroke-width="2"/>
+  <line x1="430" y1="590" x2="960" y2="590" stroke="#555555" stroke-width="2"/>
+  <line x1="430" y1="680" x2="960" y2="680" stroke="#555555" stroke-width="2"/>
+  <rect x="500" y="295" width="170" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="700" y="385" width="190" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="560" y="565" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="470" y="655" width="220" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="390" y="770" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Visual comparison between classes, deadlines, and personal plans</text>
+
+  <rect x="1060" y="150" width="260" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="1085" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Conflicts and Suggestions</text>
+  <rect x="1085" y="220" width="210" height="120" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1085" y="360" width="210" height="120" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1085" y="500" width="210" height="120" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1085" y="660" width="210" height="50" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="1085" y="760" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Conflict warning + optimized plan card</text>
+</svg>

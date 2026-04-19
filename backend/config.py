@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # ── Database ────────────────────────────────────────
-    POSTGRES_DSN: str = "postgresql+asyncpg://user:password@localhost:5432/spa_db"
+    POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@localhost:5432/software-engineering"
     CHROMA_PERSIST_DIR: str = "./data/chromadb"
 
     # ── Security ────────────────────────────────────────
@@ -44,6 +44,5 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-
 
 settings = Settings()

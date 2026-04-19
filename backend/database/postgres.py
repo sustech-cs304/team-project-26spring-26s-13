@@ -71,6 +71,7 @@ class User(Base):
     sessions: Mapped[list["ChatSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     materials: Mapped[list["Material"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    personal_tasks: Mapped[list["PersonalTask"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class ChatSession(Base):
@@ -135,6 +136,30 @@ class Material(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="materials")
+
+
+class PersonalTask(Base):
+    """
+    个人事务清单表。
+    由 Agent 在对话中提取用户意图后写入，用于日程冲突检测。
+    """
+    __tablename__ = "personal_tasks"
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)        # 事务标题，如"组会"
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)   # 详细说明（可选）
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="personal_tasks")
 
 
 class AuditLog(Base):
