@@ -13,6 +13,7 @@ from .constants import (
     CourseOccurrence,
     _SUSTECH_CLASS_PERIODS,
     _TIS_WEEK1_MONDAY,
+    _apply_cached_cas_cookies,
     _cas_login,
     _ensure_file_logging,
     _request_with_retry,
@@ -532,11 +533,11 @@ def _apply_calendar_overrides(
 async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
     _ensure_file_logging()
 
-    service_url = f"{ACADEMIC_SYSTEM_BASE}/cas"
     main_url = f"{ACADEMIC_SYSTEM_BASE}/authentication/main"
+    service_url = main_url
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         "Accept-Language": "zh-CN,zh;q=0.9",
     }
 
@@ -546,8 +547,14 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
         headers=headers,
         trust_env=False,
     ) as client:
+        _apply_cached_cas_cookies(client, cas_account)
         r0 = await _request_with_retry(client, "GET", main_url, label="tis.main")
-        if "cas.sustech.edu.cn" in str(r0.url):
+        if r0.status_code == 403 or "cas.sustech.edu.cn" in str(r0.url) or "/session/invalid" in str(r0.url):
+            if r0.status_code == 403 or "/session/invalid" in str(r0.url):
+                from .constants import _clear_cas_cookie_cache
+                _clear_cas_cookie_cache(cas_account)
+                client.cookies.clear()
+            
             await _cas_login(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
 

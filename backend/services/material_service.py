@@ -15,7 +15,7 @@ from backend.database.postgres import Material, User
 from backend.database.chromadb import SubjectType, add_chunks, delete_file_chunks
 from backend.schemas.material import MaterialInfo
 from backend.utils.document_parser import parse_document
-from backend.agent.tools.rag import classify_subject   # 直接调用分类逻辑（非 tool 调用）
+from backend.agent.tools.rag import classify_subject_standalone   # 这里的独立逻辑不需要 ctx 传参
 
 
 ALLOWED_MIME_TYPES = {
@@ -64,6 +64,11 @@ async def upload_and_vectorize(
     7. 更新 materials 表 vectorized=True
     """
     content_type = file.content_type or ""
+    if not content_type or content_type == "application/octet-stream":
+        import mimetypes
+        guessed, _ = mimetypes.guess_type(file.filename or "")
+        content_type = guessed or content_type
+    
     if content_type not in ALLOWED_MIME_TYPES:
         raise ValueError(f"Unsupported file type: {content_type}")
 
@@ -100,7 +105,7 @@ async def upload_and_vectorize(
         subject_type: SubjectType = "other"
         try:
             snippet = parsed.text[:2000]
-            subject_type = await classify_subject(snippet)
+            subject_type = await classify_subject_standalone(snippet)
             material.subject_type = subject_type
         except Exception:
             pass

@@ -6,6 +6,7 @@ PydanticAI Agent 主循环。
 
 from __future__ import annotations
 
+import json
 import time
 import inspect
 from collections.abc import Awaitable, Callable
@@ -34,6 +35,7 @@ from backend.schemas.agent import (
     RiskLevel,
     TraceItem,
     UIPayload,
+    EncyclopediaResult,
 )
 from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.core import AgentDeps, agent, FinalResponse
@@ -112,7 +114,7 @@ async def run_agent(
         )
     )
 
-    llm_api_key = decrypt(user.llm_api_key_encrypted) if user.llm_api_key_encrypted else settings.DEEPSEEK_API_KEY
+    llm_api_key = decrypt(user.llm_api_key_encrypted) if user.llm_api_key_encrypted else getattr(settings, "DEEPSEEK_API_KEY", "")
     cas_account = user.cas_account
     cas_password = decrypt(user.cas_password_encrypted) if user.cas_password_encrypted else None
 
@@ -171,6 +173,28 @@ async def run_agent(
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
 
+        # 尝试从工具返回结果中提取结构化 UI 数据
+        ui_payload = UIPayload()
+        for msg in raw_messages:
+            if isinstance(msg, ModelRequest):
+                for part in msg.parts:
+                    if isinstance(part, ToolReturnPart) and isinstance(part.content, str):
+                        try:
+                            data = json.loads(part.content)
+                            if part.tool_name == "query_rag":
+                                if "chunks" in data:
+                                    # 构造百科结果
+                                    ui_payload.encyclopedia = EncyclopediaResult(
+                                        query=user_prompt[:100], # 简化处理
+                                        answer_markdown=final_data.content,
+                                        citations=[c["file_name"] for c in data.get("chunks", []) if "file_name" in c]
+                                    )
+                            elif part.tool_name == "refresh_schedule_tool": # 假设有这个工具
+                                # 填充日程数据
+                                pass
+                        except Exception:
+                            continue
+
         # 持久化会话与消息
         stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
         chat_session = (await db.execute(stmt_session)).scalar_one_or_none()
@@ -203,7 +227,7 @@ async def run_agent(
             ),
             trace=traces,
             route=chosen_route,
-            ui_payload=UIPayload(),
+            ui_payload=ui_payload,
             hitl_request=None,
             error=None,
         )

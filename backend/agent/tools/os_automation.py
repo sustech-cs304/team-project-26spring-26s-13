@@ -25,68 +25,75 @@ from backend.agent.hitl import hitl_manager
 from backend.services import audit_service
 
 
+def _get_workspace(user_id) -> Path:
+    """获取用户的安全工作区目录。"""
+    path = Path.home() / "spa_workspace" / str(user_id)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _safe_path(workspace: Path, target: str) -> Path:
     """
-    验证 target 路径在 workspace 内，防止路径穿越攻击（../../../etc/passwd 等）。
-
-    Args:
-        workspace: 用户工作区根目录的绝对 Path
-        target:    用户/LLM 提供的目标路径（相对或绝对）
-
-    Returns:
-        解析后的绝对 Path（保证在 workspace 内）
-
-    Raises:
-        PermissionError: 路径在 workspace 外
+    验证 target 路径在 workspace 内，防止路径穿越攻击。
     """
-    # TODO:
-    # resolved = (workspace / target).resolve()
-    # if not resolved.is_relative_to(workspace):
-    #     raise PermissionError(f"Path '{target}' is outside the workspace.")
-    # return resolved
-    raise NotImplementedError
+    try:
+        # 兼容相对路径和绝对路径
+        if os.path.isabs(target):
+            resolved = Path(target).resolve()
+        else:
+            resolved = (workspace / target).resolve()
+            
+        if not str(resolved).startswith(str(workspace)):
+            raise PermissionError(f"Path '{target}' is outside the workspace.")
+        return resolved
+    except Exception as e:
+        raise PermissionError(f"Invalid path '{target}': {e}")
 
 
 @agent.tool
 async def file_read(ctx: RunContext[AgentDeps], path: str) -> str:
     """
     读取 workspace 内指定文件的文本内容。
-    不触发 HITL（只读操作）。
-
-    Args:
-        path: 相对于 workspace 的文件路径
-
-    Returns:
-        文件文本内容（截断至前 10000 字符以避免 token 爆炸）
-        若文件不存在，返回 "ERROR:FILE_NOT_FOUND"
     """
-    # TODO:
-    # safe = _safe_path(workspace, path)
-    # return safe.read_text(encoding="utf-8")[:10000]
-    raise NotImplementedError
+    workspace = _get_workspace(ctx.deps.user.user_id)
+    try:
+        safe = _safe_path(workspace, path)
+        if not safe.exists():
+            return "ERROR:FILE_NOT_FOUND"
+        if not safe.is_file():
+            return "ERROR:NOT_A_FILE"
+        return safe.read_text(encoding="utf-8")[:10000]
+    except Exception as e:
+        return f"ERROR:{str(e)}"
 
 
 @agent.tool
 async def file_create(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     """
     在 workspace 内创建新文件（若已存在则报错，不覆盖）。
-    不触发 HITL。写入后记录 audit_log。
-
-    Args:
-        path:    相对于 workspace 的目标路径（含文件名）
-        content: 文件文本内容
-
-    Returns:
-        "OK:FILE_CREATED:{path}" 或 "ERROR:FILE_EXISTS"
     """
-    # TODO:
-    # safe = _safe_path(workspace, path)
-    # if safe.exists(): return "ERROR:FILE_EXISTS"
-    # safe.parent.mkdir(parents=True, exist_ok=True)
-    # safe.write_text(content, encoding="utf-8")
-    # await audit_service.log(db, user_id, "create", str(safe), hitl_required=False)
-    # return f"OK:FILE_CREATED:{path}"
-    raise NotImplementedError
+    workspace = _get_workspace(ctx.deps.user.user_id)
+    try:
+        safe = _safe_path(workspace, path)
+        if safe.exists():
+            return "ERROR:FILE_EXISTS"
+        
+        safe.parent.mkdir(parents=True, exist_ok=True)
+        safe.write_text(content, encoding="utf-8")
+        
+        # 记录审计日志
+        await audit_service.log(
+            db=ctx.deps.db,
+            user_id=ctx.deps.user.user_id,
+            session_id=ctx.deps.session_id,
+            action_type="create",
+            target_path=str(safe),
+            description=f"Created file: {path}",
+            hitl_required=False
+        )
+        return f"OK:FILE_CREATED:{path}"
+    except Exception as e:
+        return f"ERROR:{str(e)}"
 
 
 @agent.tool

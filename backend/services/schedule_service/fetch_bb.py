@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from .constants import (
     BLACKBOARD_BASE,
     Deadline,
+    _apply_cached_cas_cookies,
     _backoff_seconds,
     _bb_sink_dump,
     _bb_sink_var,
@@ -629,10 +630,11 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
         async with httpx.AsyncClient(
             follow_redirects=True,
             headers=headers,
-            timeout=10.0,
+            timeout=20.0,
             trust_env=False,
             cookies=cookies,
         ) as client:
+            _apply_cached_cas_cookies(client, cas_account)
 
             async def _bb_warmup(label_suffix: str) -> None:
                 await _request_with_retry(client, "GET", service_url, label=f"bb.sso{label_suffix}")

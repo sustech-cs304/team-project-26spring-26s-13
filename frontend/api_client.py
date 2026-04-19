@@ -19,18 +19,18 @@ class BackendApiError(RuntimeError):
 @dataclass
 class BackendApiClient:
     base_url: str | None = None
-    timeout: float = 8.0
+    timeout: float = 20.0
     token: str | None = None
 
     @classmethod
     def from_env(cls) -> "BackendApiClient":
         base_url = os.getenv("SPA_API_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
-        timeout_text = os.getenv("SPA_API_TIMEOUT", "8").strip()
+        timeout_text = os.getenv("SPA_API_TIMEOUT", "20").strip()
         token = os.getenv("SPA_API_TOKEN", "").strip()
         try:
             timeout = float(timeout_text)
         except ValueError:
-            timeout = 8.0
+            timeout = 20.0
         return cls(base_url=base_url or None, timeout=timeout, token=token or None)
 
     @property
@@ -232,7 +232,12 @@ class BackendApiClient:
         self._request("DELETE", f"/api/agent/sessions/{session_id}")
 
     def refresh_schedule(self) -> dict[str, Any]:
-        payload = self._request("POST", "/api/schedule/refresh", json_body={})
+        payload = self._request(
+            "POST",
+            "/api/schedule/refresh",
+            json_body={},
+            timeout=max(self.timeout, 300.0),
+        )
         if not isinstance(payload, dict):
             raise BackendApiError("Schedule response must be a JSON object.")
         return payload
@@ -244,6 +249,7 @@ class BackendApiClient:
         *,
         json_body: dict[str, Any] | None = None,
         file_upload: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> Any:
         if not self.enabled or not self.base_url:
             raise BackendApiError("REST backend is disabled. Set SPA_API_BASE_URL to enable it.")
@@ -264,7 +270,7 @@ class BackendApiClient:
         req = request.Request(url, data=data, headers=headers, method=method)
 
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
+            with request.urlopen(req, timeout=timeout or self.timeout) as response:
                 body = response.read().decode("utf-8", errors="ignore")
         except error.HTTPError as exc:
             detail = self._parse_http_error(exc)

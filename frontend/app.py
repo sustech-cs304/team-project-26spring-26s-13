@@ -38,43 +38,151 @@ from PyQt6.QtWidgets import (
 try:
     from .api_client import BackendApiClient, BackendApiError
     from .i18n import UI_TEXTS
-    from .mock_data import (
-        APP_TITLE,
-        AUTH_DEMO_ACCOUNTS,
-        AUTH_FEATURES,
-        CHAT_MESSAGES,
-        CONFLICTS,
-        ENCYCLOPEDIA_RESULTS,
-        HITL_REQUEST,
-        HOME_BANNER,
-        HOME_CORE_FEATURES,
-        HOME_SKILLS,
-        PROFILE,
-        RESOURCE_FILES,
-        SCHEDULE_EVENTS,
-        TRACE_EVENTS,
-    )
     from .styles import APP_STYLE
 except ImportError:
     from api_client import BackendApiClient, BackendApiError  # type: ignore
     from i18n import UI_TEXTS  # type: ignore
-    from mock_data import (  # type: ignore
-        APP_TITLE,
-        AUTH_DEMO_ACCOUNTS,
-        AUTH_FEATURES,
-        CHAT_MESSAGES,
-        CONFLICTS,
-        ENCYCLOPEDIA_RESULTS,
-        HITL_REQUEST,
-        HOME_BANNER,
-        HOME_CORE_FEATURES,
-        HOME_SKILLS,
-        PROFILE,
-        RESOURCE_FILES,
-        SCHEDULE_EVENTS,
-        TRACE_EVENTS,
-    )
     from styles import APP_STYLE  # type: ignore
+
+# ── UI Constants ─────────────────────────────────────────────────────────────
+
+HOME_CORE_FEATURES = [
+    {
+        "title": {"en": "Agentic Loop", "zh": "智能体循环"},
+        "detail": {
+            "en": "Turn natural language goals into reasoning, tool use, observation, and self-correction.",
+            "zh": "把自然语言目标转成推理、工具调用、观察反馈和自我修正流程。",
+        },
+    },
+    {
+        "title": {"en": "Schedule Intelligence", "zh": "日程智能"},
+        "detail": {
+            "en": "Sync schedules and plans, then surface conflicts before they hurt your week.",
+            "zh": "同步课表与计划，提前发现冲突，帮助您高效安排每一周。",
+        },
+    },
+    {
+        "title": {"en": "Campus Knowledge", "zh": "校园知识检索"},
+        "detail": {
+            "en": "Search handbook content with RAG answers and a fast student-friendly interface.",
+            "zh": "用 RAG 检索校园手册内容，返回带引用的答案，呈现最相关的校园信息。",
+        },
+    },
+]
+
+HOME_SKILLS = [
+    {
+        "icon": "CHAT",
+        "title": {"en": "Main Chat", "zh": "主聊天区"},
+        "detail": {
+            "en": "A chat-first workspace for tasks, questions, and tool-driven execution.",
+            "zh": "围绕任务、提问和工具执行组织的聊天式主工作区。",
+        },
+    },
+    {
+        "icon": "TRACE",
+        "title": {"en": "Thought Trace", "zh": "思维追踪"},
+        "detail": {
+            "en": "See observation, planning, and tool calls without flooding the main conversation.",
+            "zh": "把观察、规划和工具调用独立展示，避免主对话区信息过载。",
+        },
+    },
+    {
+        "icon": "HITL",
+        "title": {"en": "Safe Approval", "zh": "安全授权"},
+        "detail": {
+            "en": "Intercept high-risk file and schedule actions before the agent executes them.",
+            "zh": "在智能体执行高风险文件或日程操作前先进行人工授权。",
+        },
+    },
+    {
+        "icon": "SYNC",
+        "title": {"en": "Scheduler", "zh": "日程同步"},
+        "detail": {
+            "en": "Combine Blackboard, campus events, and personal TODO items into one dashboard.",
+            "zh": "把 Blackboard、校历事件和个人 TODO 汇总到一个日程仪表盘中。",
+        },
+    },
+    {
+        "icon": "RAG",
+        "title": {"en": "Campus QA", "zh": "校园问答"},
+        "detail": {
+            "en": "Use handbook retrieval and citations to answer degree, dorm, and policy questions.",
+            "zh": "通过手册检索和引用回答学分、宿舍、政策等校园问题。",
+        },
+    },
+    {
+        "icon": "FILES",
+        "title": {"en": "Study Copilot", "zh": "学习辅助"},
+        "detail": {
+            "en": "Prepare for uploaded notes, slides, and documents to become future study tools.",
+            "zh": "为讲义、课件和文档解析提供支持，全方位辅助您的学习过程。",
+        },
+    },
+]
+
+HOME_BANNER = {
+    "title": {
+        "en": "Plan, search, and act from one student workspace",
+        "zh": "在一个学生工作台里完成计划、检索与执行",
+    },
+    "detail": {
+        "en": "Sign in to your dashboard built for agent workflows instead of a generic chat box.",
+        "zh": "登录您的专属工作台，体验围绕智能体流程设计的任务管理与执行功能。",
+    },
+}
+
+AUTH_FEATURES = [
+    {
+        "title": {"en": "Agent Chat", "zh": "智能聊天"},
+        "detail": {
+            "en": "A chat-first workspace for the main planning and execution loop.",
+            "zh": "以聊天为中心的主工作区，用于承载规划与执行流程。",
+        },
+    },
+    {
+        "title": {"en": "Thought Trace", "zh": "思维追踪"},
+        "detail": {
+            "en": "Real-time visibility into observation, reasoning, and tool usage.",
+            "zh": "实时查看观察、推理和工具调用过程。",
+        },
+    },
+    {
+        "title": {"en": "Safe Actions", "zh": "安全操作"},
+        "detail": {
+            "en": "Human-in-the-Loop approval before risky file or schedule changes.",
+            "zh": "在高风险文件或日程修改前要求人工授权。",
+        },
+    },
+    {
+        "title": {"en": "Campus Support", "zh": "校园支持"},
+        "detail": {
+            "en": "Schedule conflict detection and handbook-based campus QA in one place.",
+            "zh": "在同一个界面里完成日程冲突检测和基于手册的校园问答。",
+        },
+    },
+]
+
+
+AUTH_DEMO_ACCOUNTS = [
+    {
+        "username": "student",
+        "password": "password",
+        "display_name": {"en": "Student", "zh": "学生"},
+        "major": {"en": "Software Engineering", "zh": "软件工程"},
+    }
+]
+
+ENCYCLOPEDIA_RESULTS = {
+    "default": {
+        "query": {"en": "handbook", "zh": "手册"},
+        "answer": {
+            "en": "Search results will appear here from the RAG backend.",
+            "zh": "RAG 后端的搜索结果及其引用将显示在这里。",
+        },
+        "citations": {"en": ["Handbook"], "zh": ["校园手册"]},
+    }
+}
 
 
 class ApiWorker(QThread):
@@ -355,11 +463,12 @@ class HitlDialog(QDialog):
         layout.setContentsMargins(22, 22, 22, 22)
         layout.setSpacing(14)
 
-        title = QLabel(str(request_payload["action"]))
+        title = QLabel(str(request_payload.get("action", "Requested Action")))
         title.setObjectName("TitleLabel")
-        risk = QLabel(texts["risk_level"].format(risk=request_payload["risk"]))
+        risk_val = request_payload.get("risk", "Medium")
+        risk = QLabel(texts["risk_level"].format(risk=risk_val))
         risk.setObjectName("SubtitleLabel")
-        reason = QLabel(str(request_payload["reason"]))
+        reason = QLabel(str(request_payload.get("reason", "No reason provided.")))
         reason.setObjectName("BodyText")
         reason.setWordWrap(True)
 
@@ -372,7 +481,11 @@ class HitlDialog(QDialog):
         payload_title.setObjectName("SectionTitle")
         payload_layout.addWidget(payload_title)
 
-        for item in request_payload["payload"]:
+        payload_items = request_payload.get("payload", [])
+        if not isinstance(payload_items, list):
+            payload_items = [str(payload_items)] if payload_items else []
+
+        for item in payload_items:
             bullet = QLabel(f"- {item}")
             bullet.setObjectName("BodyText")
             bullet.setWordWrap(True)
@@ -509,15 +622,12 @@ class MainWindow(QMainWindow):
         self.current_user_id_value: str | None = None
         self.remote_profile: dict[str, str] | None = None
         self.pending_hitl_request: dict[str, Any] | None = None
-        self.registered_users = {
-            account["username"]: {
-                "password": account["password"],
-                "display_name": account.get("display_name", account["username"]),
-                "major": account["major"],
-            }
-            for account in AUTH_DEMO_ACCOUNTS
+        self.registered_users = {}
+        self.current_user = {
+            "name": "User",
+            "major": "Unknown",
+            "focus": "Productivity Agent Dashboard",
         }
-        self.current_user = self._default_user_profile()
         self.cas_settings = {
             "username": "",
             "password": "",
@@ -532,7 +642,7 @@ class MainWindow(QMainWindow):
         self.mode_button: QPushButton | None = None
         self.mode_menu: QMenu | None = None
         self.mode_actions: dict[str, Any] = {}
-        self.resource_files = list(RESOURCE_FILES)
+        self.resource_files = []
         self.conversations: list[dict[str, Any]] = []
         self.active_conversation_id: str | None = None
         self.session_id = self._new_session_id()
@@ -575,7 +685,7 @@ class MainWindow(QMainWindow):
         return localized(value, self.language)
 
     def app_title(self) -> str:
-        return self.local(APP_TITLE)
+        return self.local({"en": "Student Productivity Agent", "zh": "学生生产力助手"})
 
     def backend_status_text(self) -> str:
         if self.api_client.enabled and self.api_client.base_url:
@@ -752,9 +862,9 @@ class MainWindow(QMainWindow):
 
     def _default_user_profile(self) -> dict[str, str]:
         return {
-            "name": self.local(PROFILE["name"]),
-            "major": self.local(PROFILE["major"]),
-            "focus": self.local(PROFILE["focus"]),
+            "name": self.local({"en": "User", "zh": "用户"}),
+            "major": self.local({"en": "Unknown", "zh": "未知专业"}),
+            "focus": self.local({"en": "Productivity", "zh": "生产力助手"}),
         }
 
     def _build_localized_chat_messages(self) -> list[dict[str, Any]]:
@@ -764,11 +874,11 @@ class MainWindow(QMainWindow):
                 "sender": item["sender"],
                 "text": self.local(item["text"]),
             }
-            for item in CHAT_MESSAGES
+            for item in []
         ]
 
     def _build_new_chat_messages(self) -> list[dict[str, Any]]:
-        for item in CHAT_MESSAGES:
+        for item in []:
             if item["sender"] == "agent":
                 return [{"kind": "text", "sender": "agent", "text": self.local(item["text"])}]
         return []
@@ -816,77 +926,8 @@ class MainWindow(QMainWindow):
             },
         }
 
-    def _generate_mock_response(self, prompt: str) -> dict[str, Any]:
-        lowered = prompt.lower()
-        route = "chat"
-        assistant_text = self.ui("reply_generic")
-        trace: list[dict[str, Any]] = [
-            {
-                "phase": self.local({"en": "Reasoning", "zh": "推理"}),
-                "title": self.ui("trace_responded_main_chat_title"),
-                "detail": self.ui(
-                    "trace_responded_main_chat_detail",
-                    prompt=prompt[:72] + ("..." if len(prompt) > 72 else ""),
-                ),
-                "status": "done",
-            }
-        ]
-        ui_payload: dict[str, Any] = {"schedule": None, "encyclopedia": None}
-        hitl_request: dict[str, Any] | None = None
-
-        if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
-            route = "os_automation"
-            assistant_text = self.ui("reply_hitl")
-            trace = [
-                {
-                    "phase": self.local({"en": "Tool Use", "zh": "工具调用"}),
-                    "title": self.ui("trace_hitl_update_title"),
-                    "detail": self.ui("trace_hitl_pending"),
-                    "status": "pending",
-                }
-            ]
-            hitl_request = self._build_localized_hitl_request()
-            hitl_request["request_id"] = f"hitl_mock_{uuid4().hex[:10]}"
-        elif self.selected_mode == "scheduler":
-            route = "scheduler"
-            assistant_text = self.ui("reply_schedule")
-            ui_payload["schedule"] = {
-                "events": [dict(item) for item in self.schedule_events],
-                "conflicts": [dict(item) for item in self.conflicts],
-            }
-        elif self.selected_mode == "encyclopedia":
-            route = "encyclopedia"
-            if "dorm" in lowered or "宿舍" in lowered:
-                key = "dorm"
-            elif "credit" in lowered or "学分" in lowered:
-                key = "credit"
-            else:
-                key = "default"
-            payload = ENCYCLOPEDIA_RESULTS.get(key, ENCYCLOPEDIA_RESULTS["default"])
-            assistant_text = self.ui("reply_encyclopedia")
-            ui_payload["encyclopedia"] = {
-                "query": self.local(payload["query"]),
-                "answer_markdown": self.local(payload["answer"]),
-                "citations": self.local(payload["citations"]),
-            }
-            trace.append(
-                {
-                    "phase": self.local({"en": "Observation", "zh": "观察"}),
-                    "title": self.ui("trace_rendered_encyclopedia_title"),
-                    "detail": self.ui("trace_rendered_encyclopedia_detail", query=self.local(payload["query"])),
-                    "status": "done",
-                }
-            )
-
-        return {
-            "session_id": self.session_id,
-            "assistant_message": {"role": "assistant", "content": assistant_text},
-            "trace": trace,
-            "route": route,
-            "ui_payload": ui_payload,
-            "hitl_request": hitl_request,
-            "error": None,
-        }
+    def _build_localized_hitl_request(self) -> dict[str, Any]:
+        return {}
 
     def _build_response_cards(self, response: dict[str, Any]) -> list[dict[str, Any]]:
         cards: list[dict[str, Any]] = []
@@ -1047,7 +1088,7 @@ class MainWindow(QMainWindow):
                 "detail": self.local(item["detail"]),
                 "status": item["status"],
             }
-            for item in TRACE_EVENTS
+            for item in []
         ]
 
     def _build_localized_schedule_events(self) -> list[dict[str, str]]:
@@ -1058,7 +1099,7 @@ class MainWindow(QMainWindow):
                 "source": self.local(item["source"]),
                 "detail": self.local(item["detail"]),
             }
-            for item in SCHEDULE_EVENTS
+            for item in []
         ]
 
     def _build_localized_conflicts(self) -> list[dict[str, str]]:
@@ -1067,16 +1108,8 @@ class MainWindow(QMainWindow):
                 "title": self.local(item["title"]),
                 "detail": self.local(item["detail"]),
             }
-            for item in CONFLICTS
+            for item in []
         ]
-
-    def _build_localized_hitl_request(self) -> dict[str, str | list[str]]:
-        return {
-            "action": self.local(HITL_REQUEST["action"]),
-            "risk": self.local(HITL_REQUEST["risk"]),
-            "reason": self.local(HITL_REQUEST["reason"]),
-            "payload": self.local(HITL_REQUEST["payload"]),
-        }
 
     def _normalize_backend_trace_events(self, events: list[dict[str, Any]]) -> list[dict[str, str]]:
         normalized = []
@@ -1226,15 +1259,15 @@ class MainWindow(QMainWindow):
 
         if self.remote_profile:
             self.current_user = {
-                "name": str(self.remote_profile.get("name", self.current_username or self.local(PROFILE["name"]))),
-                "major": str(self.remote_profile.get("major", self.local(PROFILE["major"]))),
+                "name": str(self.remote_profile.get("name", self.current_username or self.local({"en": "User", "zh": "用户"}))),
+                "major": str(self.remote_profile.get("major", self.local({"en": "Unknown", "zh": "未知专业"}))),
                 "focus": self.ui("authenticated_focus"),
             }
             return
 
         if self.current_username:
             record = self.registered_users.get(self.current_username)
-            major = self.local(record["major"]) if record else self.local(PROFILE["major"])
+            major = self.local(record["major"]) if record else self.local({"en": "Unknown", "zh": "未知专业"})
             self.current_user = {
                 "name": str(self.local(record["display_name"])) if record and "display_name" in record else self.current_username,
                 "major": major,
@@ -1674,24 +1707,17 @@ class MainWindow(QMainWindow):
         lang_button.clicked.connect(self.toggle_language)
         settings_button = QPushButton(self.ui("settings_button"))
         settings_button.clicked.connect(self.open_settings_dialog)
-        refresh_button = QPushButton(self.ui("refresh_mock"))
-        refresh_button.clicked.connect(self.refresh_mock_content)
+
         refresh_schedule_button = QPushButton(self.ui("refresh_schedule"))
         refresh_schedule_button.clicked.connect(self.refresh_schedule_data)
-        simulate_button = QPushButton(self.ui("simulate_hitl"))
-        simulate_button.setObjectName("PrimaryButton")
-        simulate_button.clicked.connect(self.open_hitl_dialog)
         logout_button = QPushButton(self.ui("log_out"))
         logout_button.clicked.connect(self.logout)
-
         layout.addLayout(title_group, 1)
         layout.addWidget(self.backend_mode_label)
         layout.addWidget(self.header_user_label)
         layout.addWidget(lang_button)
         layout.addWidget(settings_button)
-        layout.addWidget(refresh_button)
         layout.addWidget(refresh_schedule_button)
-        layout.addWidget(simulate_button)
         layout.addWidget(logout_button)
         return layout
 
@@ -2098,7 +2124,7 @@ class MainWindow(QMainWindow):
         if display_name or major:
             self.remote_profile = {
                 "name": display_name or username,
-                "major": major or self.local(PROFILE["major"]),
+                "major": major or self.local({"en": "Unknown", "zh": "未知专业"}),
             }
         else:
             self.remote_profile = None
@@ -2137,8 +2163,8 @@ class MainWindow(QMainWindow):
     def _apply_bootstrap_payload(self, payload: dict[str, Any]) -> None:
         self._flush_response_stream(open_dialog=False)
         user_profile = payload.get("user_profile", {})
-        display_name = str(user_profile.get("display_name") or self.current_username or self.local(PROFILE["name"]))
-        major = str(user_profile.get("major") or self.local(PROFILE["major"]))
+        display_name = str(user_profile.get("display_name") or self.current_username or self.local({"en": "User", "zh": "用户"}))
+        major = str(user_profile.get("major") or self.local({"en": "Unknown", "zh": "未知专业"}))
         self.current_user_id_value = str(user_profile.get("user_id") or self.current_user_id())
         self.remote_profile = {
             "name": display_name,
@@ -2285,7 +2311,7 @@ class MainWindow(QMainWindow):
 
         if self.api_client.enabled:
             _username = username
-            _default_major = self.local(PROFILE["major"])
+            _default_major = self.local({"en": "Unknown", "zh": "未知专业"})
 
             def _call():
                 return self.api_client.login(_username, password)
@@ -2438,7 +2464,7 @@ class MainWindow(QMainWindow):
         self.remote_profile = None
         self.pending_hitl_request = None
         self.material_records = []
-        self.resource_files = list(RESOURCE_FILES)
+        self.resource_files = []
         self.session_id = self._new_session_id()
         self._reset_dynamic_state()
         self._build_root()
@@ -2454,11 +2480,8 @@ class MainWindow(QMainWindow):
         self.chat_messages.append(self._create_text_message("user", text))
         self._move_active_conversation_to_top()
         self._load_chat_messages(self.chat_messages)
-        if self._run_remote_agent(message=text, attachments=attachments):
-            self.message_input.clear()
-            return
-
-        self._apply_agent_response(self._generate_mock_response(text))
+        if not self._run_remote_agent(message=text, attachments=attachments):
+             QMessageBox.warning(self, "Disconnected", "The backend is not available. Please start the backend to use the agent.")
         self.message_input.clear()
 
     def _append_trace(self, phase: str, title: str, detail: str, status: str) -> None:

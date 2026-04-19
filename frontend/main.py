@@ -11,44 +11,43 @@ import requests
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from frontend.config import API_BASE_URL
-from frontend.views.home_page import HomePage
 
 
-def wait_for_backend(timeout: int = 10) -> bool:
+from frontend.app import MainWindow, APP_STYLE
+
+
+def wait_for_backend(timeout: int = 15) -> bool:
     """
     轮询后端 /health 接口，等待 FastAPI 服务就绪。
-
-    Args:
-        timeout: 最大等待秒数
-
-    Returns:
-        True 表示后端已就绪，False 表示超时
     """
-    # TODO:
-    # deadline = time.time() + timeout
-    # while time.time() < deadline:
-    #     try:
-    #         r = requests.get(f"{API_BASE_URL}/health", timeout=1)
-    #         if r.ok: return True
-    #     except Exception:
-    #         pass
-    #     time.sleep(0.5)
-    # return False
-    raise NotImplementedError
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            r = requests.get(f"{API_BASE_URL}/health", timeout=1)
+            if r.ok:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
 
 def main() -> None:
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    app.setStyleSheet(APP_STYLE)
 
-    # TODO:
-    # if not wait_for_backend():
-    #     QMessageBox.critical(None, "Error", "Cannot connect to backend. Please start the server first.")
-    #     sys.exit(1)
+    if not wait_for_backend():
+        QMessageBox.critical(
+            None,
+            "Backend Unreachable",
+            f"Cannot connect to backend at {API_BASE_URL}.\n\nPlease ensure the FastAPI server is running."
+        )
+        sys.exit(1)
 
-    # home = HomePage()
-    # home.show()
-    # sys.exit(app.exec())
-    raise NotImplementedError
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

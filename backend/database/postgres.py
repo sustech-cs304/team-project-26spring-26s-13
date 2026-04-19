@@ -121,17 +121,7 @@ class Material(Base):
     file_name: Mapped[str] = mapped_column(String(256), nullable=False)
     file_type: Mapped[str] = mapped_column(String(64), nullable=False)   # MIME type, e.g. "application/pdf"
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)  # 服务器本地绝对路径
-    subject_type: Mapped[str] = mapped_column(
-        Enum(
-            "cs", "electronics", "materials", "math", "physics",
-            "chemistry", "biology", "geography", "philosophy", "history",
-            "literature", "politics", "finance", "statistics", "ocean",
-            "economics", "law", "management", "medicine", "policy", "other",
-            name="subject_type"
-        ),
-        nullable=False,
-        default="other"
-    )
+    subject_type: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     vectorized: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
