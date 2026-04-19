@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 from typing import Any
@@ -632,6 +633,20 @@ class MainWindow(QMainWindow):
             return 12
         return 8
 
+    def _scroll_chat_to_bottom(self) -> None:
+        if not hasattr(self, "chat_scroll_area"):
+            return
+
+        def _do_scroll() -> None:
+            bar = self.chat_scroll_area.verticalScrollBar()
+            bar.setValue(bar.maximum())
+
+        # The chat bubble height can continue growing after layout rebuilds,
+        # especially while the typewriter effect is still revealing content.
+        QTimer.singleShot(0, _do_scroll)
+        QTimer.singleShot(30, _do_scroll)
+        QTimer.singleShot(120, _do_scroll)
+
     def _finalize_response_stream(self, *, open_dialog: bool) -> None:
         state = self.response_stream_state or {}
         self.response_stream_timer.stop()
@@ -702,6 +717,7 @@ class MainWindow(QMainWindow):
 
         if chat_changed:
             self._load_chat_messages(self.chat_messages)
+            self._scroll_chat_to_bottom()
         if trace_changed:
             self._load_trace_events(self.trace_events)
 
@@ -939,14 +955,16 @@ class MainWindow(QMainWindow):
         pending_hitl_request: dict[str, Any] | None = None,
         title: str | None = None,
         remote_updated_at: str | None = None,
+        messages_loaded: bool = True,
     ) -> dict[str, Any]:
         return {
             "session_id": session_id or self._new_session_id(),
-            "messages": list(messages or self._build_new_chat_messages()),
+            "messages": list(messages) if messages is not None else self._build_new_chat_messages(),
             "trace": list(trace or []),
             "pending_hitl_request": pending_hitl_request,
             "title": title,
             "remote_updated_at": remote_updated_at,
+            "messages_loaded": messages_loaded,
         }
 
     def _derive_conversation_title(self, conversation: dict[str, Any]) -> str:
@@ -970,11 +988,36 @@ class MainWindow(QMainWindow):
         )
 
     def _format_remote_timestamp(self, value: str) -> str:
-        if "T" in value:
-            value = value.replace("T", " ")
-        if "+" in value:
-            value = value.split("+", 1)[0]
-        return value[:16] if len(value) > 16 else value
+        text = str(value).strip()
+        if not text:
+            return ""
+        try:
+            normalized = text.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(normalized)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            china_tz = timezone(timedelta(hours=8))
+            return dt.astimezone(china_tz).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            if "T" in text:
+                text = text.replace("T", " ")
+            if "+" in text:
+                text = text.split("+", 1)[0]
+            return text[:16] if len(text) > 16 else text
+
+    def _normalize_backend_chat_history(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "")).lower()
+            content = str(item.get("content", ""))
+            if role not in {"user", "assistant"}:
+                continue
+            normalized.append(
+                self._create_text_message("user" if role == "user" else "agent", content)
+            )
+        return normalized
 
     def _resource_display_name(self, resource_name: str) -> str:
         return Path(resource_name).name or resource_name
@@ -999,6 +1042,7 @@ class MainWindow(QMainWindow):
         conversation["messages"] = list(self.chat_messages)
         conversation["trace"] = list(self.trace_events)
         conversation["pending_hitl_request"] = self.pending_hitl_request
+        conversation["messages_loaded"] = True
 
     def _move_active_conversation_to_top(self) -> None:
         conversation = self._active_conversation()
@@ -1025,7 +1069,47 @@ class MainWindow(QMainWindow):
                 self._load_trace_events(self.trace_events)
             if hasattr(self, "history_list"):
                 self._refresh_conversation_list()
+            if (
+                not conversation.get("messages_loaded", True)
+                and self.api_client.enabled
+                and self.api_client.authenticated
+                and str(conversation.get("remote_updated_at", "")).strip()
+            ):
+                self._load_remote_conversation(session_id)
             break
+
+    def _load_remote_conversation(self, session_id: str) -> None:
+        def _on_done(payload):
+            messages = payload.get("messages", [])
+            normalized_messages = (
+                self._normalize_backend_chat_history(messages)
+                if isinstance(messages, list)
+                else []
+            )
+            updated_at = str(payload.get("updated_at", "")).strip()
+            title = str(payload.get("title", "")).strip()
+
+            for conversation in self.conversations:
+                if conversation["session_id"] != session_id:
+                    continue
+                conversation["messages"] = normalized_messages
+                conversation["messages_loaded"] = True
+                conversation["remote_updated_at"] = updated_at or conversation.get("remote_updated_at")
+                if title:
+                    conversation["title"] = title
+                if self.active_conversation_id == session_id:
+                    self.chat_messages = list(normalized_messages)
+                    self.trace_events = []
+                    self.pending_hitl_request = None
+                    self._load_chat_messages(self.chat_messages)
+                    self._load_trace_events(self.trace_events)
+                    self._refresh_conversation_list()
+                break
+
+        self._start_worker(
+            lambda: self.api_client.get_session_detail(session_id),
+            _on_done,
+        )
 
     def _initialize_default_conversations(self) -> None:
         conversation = self._create_conversation(
@@ -1160,24 +1244,21 @@ class MainWindow(QMainWindow):
                 session_id = str(item.get("session_id", "")).strip()
                 if not session_id:
                     continue
+                title = str(item.get("title", "")).strip()
                 preview = str(item.get("preview", "")).strip()
                 updated_at = str(item.get("updated_at", "")).strip()
                 conversation = existing.get(session_id)
                 if conversation is None:
-                    placeholder_messages = (
-                        [self._create_text_message("agent", preview)]
-                        if preview
-                        else self._build_new_chat_messages()
-                    )
                     conversation = self._create_conversation(
                         session_id=session_id,
-                        messages=placeholder_messages,
+                        messages=[],
                         trace=[],
-                        title=preview,
+                        title=title or preview,
                         remote_updated_at=updated_at,
+                        messages_loaded=False,
                     )
                 else:
-                    conversation["title"] = preview or conversation.get("title")
+                    conversation["title"] = title or preview or conversation.get("title")
                     conversation["remote_updated_at"] = updated_at
                 merged.append(conversation)
                 seen.add(session_id)
@@ -1823,6 +1904,7 @@ class MainWindow(QMainWindow):
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.chat_scroll_area = scroll_area
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(4, 4, 4, 4)
@@ -1965,6 +2047,7 @@ class MainWindow(QMainWindow):
                 )
             self.chat_layout.insertWidget(self.chat_layout.count() - 1, widget)
         self._refresh_conversation_list()
+        self._scroll_chat_to_bottom()
 
     def _load_trace_events(self, events: list[dict[str, str]]) -> None:
         while self.trace_layout.count() > 1:
@@ -2150,19 +2233,27 @@ class MainWindow(QMainWindow):
             "focus": self.ui("authenticated_focus"),
         }
 
+        active_session_id = str(payload.get("active_session_id", "")).strip()
         chat_history = payload.get("chat_history", [])
-        if isinstance(chat_history, list):
-            self.chat_messages = [
-                {
-                    "kind": "text",
-                    "sender": "user" if str(item.get("role", "")).lower() == "user" else "agent",
-                    "text": str(item.get("content", "")),
-                }
-                for item in chat_history
-            ]
+        if active_session_id:
+            normalized_messages = (
+                self._normalize_backend_chat_history(chat_history)
+                if isinstance(chat_history, list)
+                else []
+            )
+            conversation = self._create_conversation(
+                session_id=active_session_id,
+                messages=normalized_messages,
+                trace=[],
+                pending_hitl_request=None,
+                messages_loaded=True,
+            )
+            self.conversations = [conversation]
+            self.active_conversation_id = active_session_id
+            self.session_id = active_session_id
+            self.chat_messages = list(normalized_messages)
             self.trace_events = []
             self.pending_hitl_request = None
-            self._sync_active_conversation()
             self._load_chat_messages(self.chat_messages)
             self._load_trace_events(self.trace_events)
 

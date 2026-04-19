@@ -3,7 +3,7 @@ backend/services/dashboard_service.py
 Dashboard bootstrap 数据组装服务。
 """
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import ChatMessage as ChatMessageORM, ChatSession, Material, User
@@ -11,9 +11,6 @@ from backend.schemas.agent import ChatMessage as ChatMessageSchema, ScheduleData
 from backend.schemas.dashboard import BootstrapResponse
 from backend.schemas.user import UserPreferences, UserProfile
 from backend.schemas.material import MaterialInfo
-
-CHAT_HISTORY_LIMIT = 50  # bootstrap 时返回最近多少条消息
-
 
 async def build_bootstrap(db: AsyncSession, user: User) -> BootstrapResponse:
     """
@@ -27,11 +24,13 @@ async def build_bootstrap(db: AsyncSession, user: User) -> BootstrapResponse:
         BootstrapResponse，所有字段保证非 null（缺数据时返回空列表/空对象）
     """
     profile = _build_profile(user)
-    history = await _load_chat_history(db, user.user_id)
+    active_session_id = await _load_latest_session_id(db, user.user_id)
+    history = await _load_session_history(db, active_session_id)
     materials = await _load_materials(db, user.user_id)
     schedule = ScheduleData(events=[], conflicts=[])
     return BootstrapResponse(
         user_profile=profile,
+        active_session_id=active_session_id,
         chat_history=history,
         materials=materials,
         local_schedule=schedule,
@@ -49,16 +48,28 @@ def _build_profile(user: User) -> UserProfile:
     )
 
 
-async def _load_chat_history(db: AsyncSession, user_id) -> list[ChatMessageSchema]:
-    """
-    加载该用户最近 CHAT_HISTORY_LIMIT 条消息（跨所有 session，按时间倒序后反转）。
-    """
+async def _load_latest_session_id(db: AsyncSession, user_id) -> str | None:
+    stmt = (
+        select(ChatSession.session_id)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(1)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _load_session_history(db: AsyncSession, session_id: str | None) -> list[ChatMessageSchema]:
+    """加载单个会话的完整历史消息，按时间正序返回。"""
+    if not session_id:
+        return []
+
     stmt = (
         select(ChatMessageORM)
-        .join(ChatSession, ChatMessageORM.session_id == ChatSession.session_id)
-        .where(ChatSession.user_id == user_id)
-        .order_by(ChatMessageORM.timestamp.desc())
-        .limit(CHAT_HISTORY_LIMIT)
+        .where(ChatMessageORM.session_id == session_id)
+        .order_by(
+            ChatMessageORM.timestamp.asc(),
+            case((ChatMessageORM.role == "user", 0), else_=1).asc(),
+        )
     )
     rows = (await db.scalars(stmt)).all()
     return [
@@ -68,7 +79,7 @@ async def _load_chat_history(db: AsyncSession, user_id) -> list[ChatMessageSchem
             content=msg.content,
             timestamp=msg.timestamp,
         )
-        for msg in reversed(rows)
+        for msg in rows
     ]
 
 
