@@ -25,6 +25,17 @@ engine = create_async_engine(settings.POSTGRES_DSN, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
+async def ensure_tables_exist() -> None:
+    """
+    在本地开发环境中补齐缺失的 ORM 表。
+
+    该操作只会创建不存在的表，不会修改已存在表结构，
+    因此可安全用于补上后续新增的 `personal_tasks` 等表。
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency：提供一个请求范围的数据库 Session，请求结束后自动关闭。"""
     async with AsyncSessionLocal() as session:

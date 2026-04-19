@@ -15,7 +15,7 @@ from backend.database.postgres import Material, User
 from backend.database.chromadb import SubjectType, add_chunks, delete_file_chunks
 from backend.schemas.material import MaterialInfo
 from backend.utils.document_parser import parse_document
-from backend.agent.tools.rag import classify_subject   # 直接调用分类逻辑（非 tool 调用）
+from backend.agent.tools.rag import infer_subject_type
 
 
 ALLOWED_MIME_TYPES = {
@@ -100,7 +100,7 @@ async def upload_and_vectorize(
         subject_type: SubjectType = "other"
         try:
             snippet = parsed.text[:2000]
-            subject_type = await classify_subject(snippet)
+            subject_type = infer_subject_type(snippet)
             material.subject_type = subject_type
         except Exception:
             pass

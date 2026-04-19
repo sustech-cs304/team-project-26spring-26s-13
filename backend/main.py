@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import auth, user, agent, materials, dashboard, schedule
+from backend.database.postgres import ensure_tables_exist
 
 app = FastAPI(
     title="Student Productivity Agent API",
@@ -30,6 +31,12 @@ app.include_router(agent.router)
 app.include_router(materials.router)
 app.include_router(dashboard.router)
 app.include_router(schedule.router)
+
+
+@app.on_event("startup")
+async def ensure_runtime_schema() -> None:
+    """启动时补齐缺失的数据库表，避免新增功能依赖的表在本地缺失。"""
+    await ensure_tables_exist()
 
 
 @app.get("/health")

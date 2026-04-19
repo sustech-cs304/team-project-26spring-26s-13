@@ -1,5 +1,6 @@
 import json
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -18,6 +19,13 @@ from .constants import (
     _request_with_retry,
     logger,
 )
+
+
+@dataclass(frozen=True)
+class TisScheduleContext:
+    raw_occurrences: list[CourseOccurrence]
+    effective_occurrences: list[CourseOccurrence]
+    overrides: CalendarOverrides
 
 def _test5_file_path() -> Path:
     root = Path(__file__).resolve().parents[3]
@@ -529,7 +537,7 @@ def _apply_calendar_overrides(
     return kept
 
 
-async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
+async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> TisScheduleContext:
     _ensure_file_logging()
 
     service_url = f"{ACADEMIC_SYSTEM_BASE}/cas"
@@ -646,6 +654,16 @@ async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[Cou
             overrides.week1_monday.month,
             overrides.week1_monday.day,
         )
-        occs = _tis_meetings_to_occurrences(meetings, week1_monday=week1_monday)
-        cancel_days, move_rules = _filter_relevant_override_rules(occs, overrides.cancel_days, overrides.move_rules)
-        return _apply_calendar_overrides(occs, cancel_days=cancel_days, move_rules=move_rules)
+        raw_occs = _tis_meetings_to_occurrences(meetings, week1_monday=week1_monday)
+        cancel_days, move_rules = _filter_relevant_override_rules(raw_occs, overrides.cancel_days, overrides.move_rules)
+        effective_occs = _apply_calendar_overrides(raw_occs, cancel_days=cancel_days, move_rules=move_rules)
+        return TisScheduleContext(
+            raw_occurrences=raw_occs,
+            effective_occurrences=effective_occs,
+            overrides=overrides,
+        )
+
+
+async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
+    context = await fetch_course_schedule_context(cas_account, cas_password)
+    return context.effective_occurrences

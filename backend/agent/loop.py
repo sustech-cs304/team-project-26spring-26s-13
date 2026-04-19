@@ -6,10 +6,12 @@ PydanticAI Agent 主循环。
 
 from __future__ import annotations
 
-import time
+import asyncio
 import inspect
+import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
+
 
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -40,6 +42,9 @@ from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
+from backend.agent.shortcuts.schedule import try_handle_specific_schedule_query
+from backend.agent.tool_policy import normalize_route_for_prompt
+from backend.agent.validators import ResponseValidationContext, detect_alignment_issue
 import traceback
 
 
@@ -165,6 +170,17 @@ async def run_agent(
     if hitl_context and request.hitl_reply is not None:
         user_prompt = build_hitl_continuation_prompt(hitl_context.action, request.hitl_reply.approved)
 
+    deterministic_schedule_response = await try_handle_specific_schedule_query(
+        db,
+        user,
+        request,
+        user_prompt=user_prompt,
+        emit_trace=emit_trace,
+        traces=traces,
+    )
+    if deterministic_schedule_response is not None:
+        return deterministic_schedule_response
+
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (
         select(ChatMessage)
@@ -204,11 +220,14 @@ async def run_agent(
         print(f"has_llm_api_key={bool(llm_api_key)}")
         print(f"user_prompt={user_prompt!r}")
 
-        result = await agent.run(
-            user_prompt,
-            deps=deps,
-            model=dynamic_model,
-            message_history=message_history,
+        result = await asyncio.wait_for(
+            agent.run(
+                user_prompt,
+                deps=deps,
+                model=dynamic_model,
+                message_history=message_history,
+            ),
+            timeout=settings.AGENT_RUN_TIMEOUT_SECONDS,
         )
 
         print("=== agent.run success ===")
@@ -230,7 +249,37 @@ async def run_agent(
         print(f"tool_names={tool_names}")
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
+        chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
         print(f"chosen_route={chosen_route}")
+
+        alignment_issue = detect_alignment_issue(
+            ResponseValidationContext(
+                user_prompt=user_prompt,
+                assistant_content=final_data.content,
+                route=chosen_route,
+                tool_names=tool_names,
+            )
+        )
+        if alignment_issue:
+            await emit_trace(
+                TraceItem(
+                    phase="Reflection",
+                    title="检测到答非所问",
+                    detail=alignment_issue.message,
+                    status="error",
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            corrected_response = await try_handle_specific_schedule_query(
+                db,
+                user,
+                request,
+                user_prompt=user_prompt,
+                emit_trace=emit_trace,
+                traces=traces,
+            )
+            if corrected_response is not None:
+                return corrected_response
 
         # 持久化会话与消息
         stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
@@ -320,6 +369,34 @@ async def run_agent(
                 reason=e.reason,
             ),
             error=None,
+        )
+
+    except asyncio.TimeoutError:
+        await emit_trace(
+            TraceItem(
+                phase="Reflection",
+                title="推理超时",
+                detail=f"Agent 在 {settings.AGENT_RUN_TIMEOUT_SECONDS} 秒内未完成推理或工具调用。",
+                status="error",
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        return AgentResponse(
+            session_id=request.session_id,
+            assistant_message=AssistantMessage(
+                role="assistant",
+                content="本次 Agent 推理超时。请稍后重试，或把问题拆小一些再试。",
+                timestamp=datetime.now(timezone.utc),
+            ),
+            trace=traces,
+            route="chat",
+            ui_payload=UIPayload(),
+            hitl_request=None,
+            error=ErrorDetail(
+                code="agent_timeout",
+                message=f"Agent run exceeded {settings.AGENT_RUN_TIMEOUT_SECONDS} seconds.",
+                retryable=True,
+            ),
         )
 
     except Exception as e:

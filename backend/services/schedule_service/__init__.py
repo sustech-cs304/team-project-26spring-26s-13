@@ -2364,8 +2364,23 @@ async def refresh(db, user) -> ScheduleData:
     return detect_conflicts(deadlines, slots)
 
 from .constants import Course, CourseOccurrence, Deadline
+from .effective_schedule import EffectiveScheduleConflict, EffectiveScheduleDay, TeachingDayResolution
 
-__all__ = ["Deadline", "Course", "CourseOccurrence", "fetch_blackboard", "fetch_course_schedule", "detect_conflicts", "refresh"]
+__all__ = [
+    "Deadline",
+    "Course",
+    "CourseOccurrence",
+    "EffectiveScheduleConflict",
+    "EffectiveScheduleDay",
+    "TeachingDayResolution",
+    "fetch_blackboard",
+    "fetch_course_schedule",
+    "detect_conflicts",
+    "query_effective_schedule_conflicts",
+    "query_effective_schedule_for_date",
+    "resolve_teaching_day",
+    "refresh",
+]
 
 
 def __getattr__(name: str):
@@ -2381,6 +2396,22 @@ def __getattr__(name: str):
         from .conflicts import detect_conflicts
 
         return detect_conflicts
+    if name in {
+        "query_effective_schedule_conflicts",
+        "query_effective_schedule_for_date",
+        "resolve_teaching_day",
+    }:
+        from .effective_schedule import (
+            query_effective_schedule_conflicts,
+            query_effective_schedule_for_date,
+            resolve_teaching_day,
+        )
+
+        return {
+            "query_effective_schedule_conflicts": query_effective_schedule_conflicts,
+            "query_effective_schedule_for_date": query_effective_schedule_for_date,
+            "resolve_teaching_day": resolve_teaching_day,
+        }[name]
     if name == "refresh":
         from .refresh import refresh
 
