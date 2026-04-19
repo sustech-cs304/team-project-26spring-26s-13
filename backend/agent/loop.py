@@ -6,10 +6,11 @@ PydanticAI Agent 主循环。
 
 from __future__ import annotations
 
-import time
 import inspect
+import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
+
 
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -40,6 +41,7 @@ from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
+from backend.agent.shortcuts.schedule import try_handle_specific_schedule_query
 import traceback
 
 
@@ -164,6 +166,17 @@ async def run_agent(
     user_prompt = request.message
     if hitl_context and request.hitl_reply is not None:
         user_prompt = build_hitl_continuation_prompt(hitl_context.action, request.hitl_reply.approved)
+
+    deterministic_schedule_response = await try_handle_specific_schedule_query(
+        db,
+        user,
+        request,
+        user_prompt=user_prompt,
+        emit_trace=emit_trace,
+        traces=traces,
+    )
+    if deterministic_schedule_response is not None:
+        return deterministic_schedule_response
 
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (

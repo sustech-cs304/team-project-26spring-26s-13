@@ -36,6 +36,7 @@ Collection 命名规则："{subject_type}"
 """
 
 from typing import Literal
+from pathlib import Path
 
 import chromadb
 from chromadb import Collection
@@ -68,7 +69,7 @@ def get_chroma_client() -> chromadb.ClientAPI:
     """
     global _client
     if _client is None:
-        # TODO: 初始化 PersistentClient，路径 = settings.CHROMA_PERSIST_DIR
+        Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
         _client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
     return _client
 
@@ -85,9 +86,7 @@ def get_collection(subject_type: SubjectType) -> Collection:
         对应的 ChromaDB Collection 对象
     """
     client = get_chroma_client()
-    # TODO: 调用 client.get_or_create_collection(name=subject_type)
-    #       embedding_function 使用 DeepSeek 或本地 sentence-transformers
-    raise NotImplementedError
+    return client.get_or_create_collection(name=subject_type)
 
 
 # ── Write Operations ──────────────────────────────────────────────────────────
@@ -111,12 +110,22 @@ def add_chunks(
     Returns:
         None（写入失败抛出异常）
     """
-    # TODO:
-    # 1. get_collection(subject_type)
-    # 2. 构造 ids = [f"{file_id}_{i}" for i in range(len(chunks))]
-    # 3. 构造 metadatas = [{file_id, file_name, chunk_index, subject_type}, ...]
-    # 4. collection.add(ids=ids, documents=chunks, metadatas=metadatas)
-    raise NotImplementedError
+    collection = get_collection(subject_type)
+    normalized_chunks = [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+    if not normalized_chunks:
+        return
+
+    ids = [f"{file_id}_{i}" for i in range(len(normalized_chunks))]
+    metadatas = [
+        {
+            "file_id": file_id,
+            "file_name": file_name,
+            "chunk_index": i,
+            "subject_type": subject_type,
+        }
+        for i in range(len(normalized_chunks))
+    ]
+    collection.add(ids=ids, documents=normalized_chunks, metadatas=metadatas)
 
 
 def delete_file_chunks(file_id: str, subject_type: SubjectType) -> None:
@@ -130,9 +139,8 @@ def delete_file_chunks(file_id: str, subject_type: SubjectType) -> None:
     Returns:
         None
     """
-    # TODO:
-    # collection.delete(where={"file_id": file_id})
-    raise NotImplementedError
+    collection = get_collection(subject_type)
+    collection.delete(where={"file_id": file_id})
 
 
 # ── Read / Query Operations ───────────────────────────────────────────────────
@@ -162,8 +170,42 @@ def query_collections(
             "distance":     float  # 越小越相关
         }
     """
-    # TODO:
-    # 1. 对每个 subject_type 调用 get_collection(t).query(query_texts=[query_text], n_results=n_results_per_collection)
-    # 2. 合并所有结果，按 distance 排序
-    # 3. 返回统一格式的 list[dict]
-    raise NotImplementedError
+    merged: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for subject_type in dict.fromkeys(subject_types):
+        collection = get_collection(subject_type)
+        if collection.count() <= 0:
+            continue
+
+        result = collection.query(
+            query_texts=[query_text],
+            n_results=n_results_per_collection,
+        )
+        ids = result.get("ids", [[]])
+        documents = result.get("documents", [[]])
+        metadatas = result.get("metadatas", [[]])
+        distances = result.get("distances", [[]])
+
+        for item_id, document, metadata, distance in zip(
+            ids[0] if ids else [],
+            documents[0] if documents else [],
+            metadatas[0] if metadatas else [],
+            distances[0] if distances else [],
+        ):
+            if item_id in seen_ids:
+                continue
+            seen_ids.add(item_id)
+            metadata = metadata or {}
+            merged.append(
+                {
+                    "text": document or "",
+                    "file_id": str(metadata.get("file_id", "")),
+                    "file_name": str(metadata.get("file_name", "")),
+                    "chunk_index": int(metadata.get("chunk_index", 0)),
+                    "subject_type": str(metadata.get("subject_type", subject_type)),
+                    "distance": float(distance if distance is not None else 999999.0),
+                }
+            )
+
+    return sorted(merged, key=lambda item: item["distance"])
