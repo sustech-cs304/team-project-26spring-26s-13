@@ -46,6 +46,7 @@ Choose the `route` strictly based on the user's intent to switch the frontend UI
 ## Response Format
 - Keep responses concise and action-oriented.
 - For scheduler results, always present events and conflicts in structured form in your `content`.
+- For Blackboard deadlines or course-related scheduler results, prefer human-readable course names. Mention raw course IDs only when the user explicitly asks for them or when no course name is available.
 - For encyclopedia answers, always cite the source document in your `content`.
 - For OS operations, always describe what will be done before doing it.
 

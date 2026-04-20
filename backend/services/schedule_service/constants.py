@@ -29,6 +29,7 @@ class Deadline:
     course_id: str
     due_at: datetime
     type: Literal["assignment", "quiz", "project", "presentation", "other"]
+    course_name: str | None = None
     estimated_minutes: int | None = None
     priority: int | None = None
     url: str | None = None

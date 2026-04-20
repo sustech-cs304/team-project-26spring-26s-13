@@ -531,14 +531,78 @@ def _import_cookies(state: list[tuple[str, str, str, str]]) -> httpx.Cookies:
     return cookies
 
 
+def _normalize_assignment_title(raw: str) -> str:
+    title = " ".join((raw or "").split()).strip()
+    if not title:
+        return ""
+
+    for prefix in (
+        "上载作业：",
+        "上载作业:",
+        "Upload Assignment:",
+        "Review Submission History:",
+        "Review Submission History -",
+    ):
+        if title.startswith(prefix):
+            title = title[len(prefix):].strip()
+            break
+
+    return title
+
+
+def _extract_assignment_title(soup: BeautifulSoup) -> str:
+    # Prefer in-page headings because browser <title> text may already be elided.
+    candidates: list[str] = []
+
+    for element_id in ("pageTitleText", "crumb_3", "pageTitleHeader"):
+        node = soup.find(id=element_id)
+        if node:
+            candidates.append(node.get_text(" ", strip=True))
+
+    heading = soup.find("h1")
+    if heading:
+        candidates.append(heading.get_text(" ", strip=True))
+
+    if soup.title:
+        title_text = soup.title.get_text(" ", strip=True)
+        m = re.match(r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$", title_text)
+        if m:
+            candidates.append(m.group(1).strip())
+        else:
+            candidates.append(title_text)
+
+    for candidate in candidates:
+        normalized = _normalize_assignment_title(candidate)
+        if normalized:
+            return normalized
+
+    return ""
+
+
+def _extract_course_name(soup: BeautifulSoup) -> str:
+    candidates: list[str] = []
+
+    crumb = soup.find(id="crumb_1")
+    if crumb:
+        candidates.append(crumb.get_text(" ", strip=True))
+
+    course_path_link = soup.select_one("li.coursePath a[title]")
+    if course_path_link:
+        candidates.append(course_path_link.get("title", ""))
+
+    for candidate in candidates:
+        normalized = " ".join((candidate or "").split()).strip()
+        if normalized:
+            return normalized
+
+    return ""
+
+
 def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Deadline | None:
     soup = BeautifulSoup(html, "html.parser")
 
-    title_text = soup.title.get_text(" ", strip=True) if soup.title else ""
-    assignment_title = title_text
-    m = re.match(r"^上载作业：\s*(.*?)\s*[–-]\s*(.+)$", title_text)
-    if m:
-        assignment_title = m.group(1).strip()
+    assignment_title = _extract_assignment_title(soup)
+    course_name = _extract_course_name(soup)
 
     course_id = None
     m = re.search(r"\bstrCourseId\s*=\s*['\"]([^'\"]+)['\"]", html)
@@ -597,6 +661,7 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
         course_id=course_id,
         due_at=due_at,
         type="assignment",
+        course_name=course_name or None,
         url=page_url,
     )
 
