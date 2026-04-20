@@ -29,6 +29,6 @@ async def refresh(db, user) -> ScheduleData:
 
     deadlines, slots = await asyncio.gather(
         fetch_blackboard(cas_account, cas_password),
-        fetch_course_schedule(cas_account, cas_password),
+        fetch_course_schedule(cas_account, cas_password, force_refresh=True),
     )
     return detect_conflicts(deadlines, slots)

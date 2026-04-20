@@ -1,4 +1,4 @@
-﻿"""Package exports for schedule-related services."""
+"""Package exports for schedule-related services."""
 
 from .conflicts import (
     detect_conflicts,
@@ -16,7 +16,12 @@ from .effective_schedule import (
     resolve_teaching_day,
 )
 from .fetch_bb import fetch_blackboard
-from .fetch_tis import TisScheduleContext, fetch_course_schedule, fetch_course_schedule_context
+from .fetch_tis import (
+    TisScheduleContext,
+    fetch_course_schedule,
+    fetch_course_schedule_context,
+    invalidate_tis_schedule_cache,
+)
 from .personal import FixedPersonalEvent, PersonalTask, TimeWindow
 from .refresh import refresh
 
@@ -34,6 +39,7 @@ __all__ = [
     "fetch_blackboard",
     "fetch_course_schedule",
     "fetch_course_schedule_context",
+    "invalidate_tis_schedule_cache",
     "detect_conflicts",
     "detect_overlaps_with_personal",
     "detect_overlaps_with_personal_payload",

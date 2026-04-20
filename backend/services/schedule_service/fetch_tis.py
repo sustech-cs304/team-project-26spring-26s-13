@@ -1,8 +1,10 @@
+import asyncio
 import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
+import time
 from typing import Literal
 
 import httpx
@@ -34,6 +36,67 @@ class TisMeetingExtraction:
     candidate_count: int
     skipped_count: int
     skipped_examples: list[str]
+
+
+@dataclass(frozen=True)
+class _TisScheduleCacheEntry:
+    cached_at_monotonic: float
+    context: TisScheduleContext
+
+
+_TIS_SCHEDULE_CACHE_TTL_SECONDS = 10 * 60.0
+_TIS_SCHEDULE_CACHE: dict[str, _TisScheduleCacheEntry] = {}
+_TIS_SCHEDULE_CACHE_LOCKS: dict[str, asyncio.Lock] = {}
+_TIS_SCHEDULE_CACHE_GUARD = asyncio.Lock()
+
+
+def _tis_cache_key(cas_account: str) -> str:
+    return cas_account.strip().lower()
+
+
+def _get_cached_tis_schedule_context(cache_key: str) -> TisScheduleContext | None:
+    entry = _TIS_SCHEDULE_CACHE.get(cache_key)
+    if entry is None:
+        return None
+
+    age_seconds = time.monotonic() - entry.cached_at_monotonic
+    if age_seconds >= _TIS_SCHEDULE_CACHE_TTL_SECONDS:
+        _TIS_SCHEDULE_CACHE.pop(cache_key, None)
+        logger.info("tis.cache: expired key=%s age_seconds=%.3f", cache_key, age_seconds)
+        return None
+
+    logger.info("tis.cache: hit key=%s age_seconds=%.3f", cache_key, age_seconds)
+    return entry.context
+
+
+def _store_tis_schedule_context(cache_key: str, context: TisScheduleContext) -> None:
+    _TIS_SCHEDULE_CACHE[cache_key] = _TisScheduleCacheEntry(
+        cached_at_monotonic=time.monotonic(),
+        context=context,
+    )
+    logger.info("tis.cache: stored key=%s items=%d", cache_key, len(context.effective_occurrences))
+
+
+async def _get_tis_schedule_cache_lock(cache_key: str) -> asyncio.Lock:
+    async with _TIS_SCHEDULE_CACHE_GUARD:
+        lock = _TIS_SCHEDULE_CACHE_LOCKS.get(cache_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _TIS_SCHEDULE_CACHE_LOCKS[cache_key] = lock
+        return lock
+
+
+def invalidate_tis_schedule_cache(cas_account: str | None = None) -> None:
+    if cas_account is None:
+        _TIS_SCHEDULE_CACHE.clear()
+        logger.info("tis.cache: cleared all entries")
+        return
+
+    cache_key = _tis_cache_key(cas_account)
+    if not cache_key:
+        return
+    _TIS_SCHEDULE_CACHE.pop(cache_key, None)
+    logger.info("tis.cache: invalidated key=%s", cache_key)
 
 
 def _tis_debug_dump_path() -> Path:
@@ -684,7 +747,7 @@ def _apply_calendar_overrides(
     return kept
 
 
-async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> TisScheduleContext:
+async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password: str) -> TisScheduleContext:
     _ensure_file_logging()
 
     service_url = f"{ACADEMIC_SYSTEM_BASE}/cas"
@@ -824,6 +887,44 @@ async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> 
         )
 
 
-async def fetch_course_schedule(cas_account: str, cas_password: str) -> list[CourseOccurrence]:
-    context = await fetch_course_schedule_context(cas_account, cas_password)
+async def fetch_course_schedule_context(
+    cas_account: str,
+    cas_password: str,
+    *,
+    force_refresh: bool = False,
+) -> TisScheduleContext:
+    _ensure_file_logging()
+
+    cache_key = _tis_cache_key(cas_account)
+    if not cache_key:
+        return await _fetch_course_schedule_context_uncached(cas_account, cas_password)
+
+    if not force_refresh:
+        cached = _get_cached_tis_schedule_context(cache_key)
+        if cached is not None:
+            return cached
+
+    lock = await _get_tis_schedule_cache_lock(cache_key)
+    async with lock:
+        if not force_refresh:
+            cached = _get_cached_tis_schedule_context(cache_key)
+            if cached is not None:
+                return cached
+
+        context = await _fetch_course_schedule_context_uncached(cas_account, cas_password)
+        _store_tis_schedule_context(cache_key, context)
+        return context
+
+
+async def fetch_course_schedule(
+    cas_account: str,
+    cas_password: str,
+    *,
+    force_refresh: bool = False,
+) -> list[CourseOccurrence]:
+    context = await fetch_course_schedule_context(
+        cas_account,
+        cas_password,
+        force_refresh=force_refresh,
+    )
     return context.effective_occurrences
