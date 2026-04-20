@@ -18,6 +18,7 @@ from pydantic_ai import RunContext
 from backend.agent.core import AgentDeps, agent
 from backend.services import rag_service
 from backend.database import chromadb as chromadb_module
+from backend.database.chromadb import SubjectType
 
 
 def infer_subject_type(text: str) -> SubjectType:

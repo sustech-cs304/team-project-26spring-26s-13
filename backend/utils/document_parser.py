@@ -66,11 +66,9 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
     Returns:
         ParsedDocument
     """
-    from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
-
     import fitz  # type: ignore[import-not-found]
 
-    ocr_engine: PaddleOcrEngine | None = None
+    ocr_engine = None
 
     doc = fitz.open(file_path)
     pages_text: list[str] = []
@@ -81,6 +79,7 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
             continue
 
         if ocr_engine is None:
+            from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
             ocr_engine = PaddleOcrEngine()
 
         mat = fitz.Matrix(2, 2)

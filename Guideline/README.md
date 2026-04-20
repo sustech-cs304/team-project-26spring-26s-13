@@ -281,7 +281,6 @@ CREATE DATABASE "software-engineering";
 **第二步**：在 `software-engineering` 数据库中执行以下 SQL 建表：
 
 ```sql
--- 先建 alembic_version 表（记录迁移状态）
 CREATE TABLE IF NOT EXISTS alembic_version (
     version_num VARCHAR(32) NOT NULL PRIMARY KEY
 );
@@ -339,6 +338,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 INSERT INTO alembic_version (version_num) VALUES ('d8ff1092fce2')
 ON CONFLICT DO NOTHING;
+
+ALTER TABLE materials
+  ALTER COLUMN subject_type TYPE VARCHAR(32)
+  USING subject_type::text;
+
+DROP TYPE IF EXISTS subject_type;
 ```
 
 ---

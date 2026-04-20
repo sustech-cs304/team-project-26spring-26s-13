@@ -19,7 +19,7 @@ class BackendApiError(RuntimeError):
 @dataclass
 class BackendApiClient:
     base_url: str | None = None
-    timeout: float = 8.0
+    timeout: float = 500.0
     token: str | None = None
 
     @classmethod
@@ -118,6 +118,8 @@ class BackendApiClient:
         mime_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
         with open(file_path, "rb") as file_obj:
             file_bytes = file_obj.read()
+        # 上传要跑 OCR / LLM 分类 / 向量化，耗时可能达数分钟
+        upload_timeout = max(self.timeout, 300.0)
         payload = self._request(
             "POST",
             "/api/materials/upload",
@@ -127,6 +129,7 @@ class BackendApiClient:
                 "content_type": mime_type,
                 "content": file_bytes,
             },
+            timeout=upload_timeout,
         )
         if not isinstance(payload, dict):
             raise BackendApiError("Upload response must be a JSON object.")

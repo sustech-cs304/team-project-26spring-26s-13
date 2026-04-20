@@ -83,8 +83,9 @@ def get_collection(subject_type: SubjectType) -> Collection:
         对应的 ChromaDB Collection 对象
     """
     client = get_chroma_client()
-
-    return client.get_or_create_collection(name=subject_type)
+    # chromadb>=1.5 要求 collection 名称至少 3 个字符
+    name = f"sub_{subject_type}"
+    return client.get_or_create_collection(name=name)
 
 # ── Write Operations ──────────────────────────────────────────────────────────
 
