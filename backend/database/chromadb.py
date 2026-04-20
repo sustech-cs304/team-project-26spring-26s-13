@@ -196,3 +196,47 @@ def query_collections(
             })
     all_results.sort(key=lambda c: c["distance"])
     return all_results
+
+def keyword_search(
+    keyword: str,
+    subject_types: list[SubjectType] | None = None,
+    limit_per_collection: int = 5,
+) -> list[dict]:
+    """
+    关键词子串匹配兜底（用于默认英文 embedding 对中文语义检索不佳的场景）。
+    遍历指定/全部集合，找出 document 包含 keyword 的 chunk。
+
+    Args:
+        keyword:              关键词字符串（字面子串匹配）
+        subject_types:        要搜的 collection；None 表示全部
+        limit_per_collection: 每个 collection 最多返回多少条
+
+    Returns:
+        与 query_collections 相同格式的 list[dict]，distance 统一填 0.0
+    """
+    targets = subject_types or ALL_SUBJECT_TYPES
+    out: list[dict] = []
+    for st in targets:
+        collection = get_collection(st)
+        try:
+            if collection.count() == 0:
+                continue
+            got = collection.get(
+                where_document={"$contains": keyword},
+                limit=limit_per_collection,
+            )
+        except Exception:
+            continue
+        docs = got.get("documents") or []
+        metas = got.get("metadatas") or [{}] * len(docs)
+        for doc, meta in zip(docs, metas):
+            meta = meta or {}
+            out.append({
+                "text": doc,
+                "file_id": meta.get("file_id", ""),
+                "file_name": meta.get("file_name", ""),
+                "chunk_index": meta.get("chunk_index", 0),
+                "subject_type": meta.get("subject_type", st),
+                "distance": 0.0,
+            })
+    return out

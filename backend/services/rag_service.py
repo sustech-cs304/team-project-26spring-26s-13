@@ -3,8 +3,12 @@ backend/services/rag_service.py
 RAG 检索服务：学科分类剪枝 + 多 Collection 查询。
 """
 
-from backend.database.chromadb import SubjectType, ALL_SUBJECT_TYPES, query_collections
+import httpx
+
 from backend.config import settings
+
+from backend.database.chromadb import ALL_SUBJECT_TYPES, SubjectType, query_collections
+
 import httpx
 
 
@@ -72,7 +76,6 @@ async def classify_text_subject(text: str, api_key: str = None) -> SubjectType:
 
     return "other"
 
-
 def resolve_collections(subject_hint: str) -> list[SubjectType]:
     """
     根据 subject_hint 决定查询哪些 ChromaDB Collection。
@@ -116,3 +119,60 @@ def format_rag_context(chunks: list[dict], max_tokens: int = 4000) -> str:
         result.append(entry)
         budget -= len(entry)
     return "".join(result)
+
+async def classify_subject_llm(text: str, api_key: str | None) -> SubjectType:
+    """
+    直接调用 DeepSeek 对文本做 few-shot 学科分类。
+    供 material_service（上传流程）调用，不依赖 Agent RunContext。
+    无有效 api_key 时直接返回 "other"。
+    """
+    if not (api_key or "").strip():
+        return "other"
+
+    valid_subjects = ", ".join(ALL_SUBJECT_TYPES)
+    prompt = f"""你是一个学科分类助手。根据输入文本，判断它属于哪个学科分类。
+只能返回以下分类中的一个，不要输出任何其他内容：
+{valid_subjects}
+
+示例：
+输入：二叉树的层序遍历算法
+输出：cs
+
+输入：南科大挂科政策是什么
+输出：policy
+
+输入：线性代数矩阵乘法
+输出：math
+
+输入：有机化学反应机理
+输出：chemistry
+
+输入：贝加尔湖的形成与深度
+输出：geography
+
+输入：{text[:500]}
+输出："""
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.DEEPSEEK_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 16,
+                    "temperature": 0.0,
+                },
+            )
+        resp.raise_for_status()
+        subject = resp.json()["choices"][0]["message"]["content"].strip().lower()
+        if subject in ALL_SUBJECT_TYPES:
+            return subject  # type: ignore[return-value]
+    except Exception:
+        pass
+    return "other"
+

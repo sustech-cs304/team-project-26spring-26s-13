@@ -63,7 +63,7 @@ async def file_read(ctx: RunContext[AgentDeps], path: str) -> str:
     # TODO:
     # safe = _safe_path(workspace, path)
     # return safe.read_text(encoding="utf-8")[:10000]
-    raise NotImplementedError
+    return "ERROR:TOOL_NOT_IMPLEMENTED:file_read"
 
 
 @agent.tool
@@ -86,7 +86,7 @@ async def file_create(ctx: RunContext[AgentDeps], path: str, content: str) -> st
     # safe.write_text(content, encoding="utf-8")
     # await audit_service.log(db, user_id, "create", str(safe), hitl_required=False)
     # return f"OK:FILE_CREATED:{path}"
-    raise NotImplementedError
+    return "ERROR:TOOL_NOT_IMPLEMENTED:file_create"
 
 
 @agent.tool
@@ -115,7 +115,7 @@ async def file_update(ctx: RunContext[AgentDeps], path: str, content: str) -> st
     # request_id = f"hitl_{ctx.deps.session_id}_{int(time.time())}"
     # state = hitl_manager.create(request_id, session_id, action=f"Overwrite {path}", risk="medium")
     # raise HITLInterrupt(state, payload=[f"Overwrite content of '{path}'"], reason="File overwrite is irreversible.")
-    raise NotImplementedError
+    return "ERROR:TOOL_NOT_IMPLEMENTED:file_update"
 
 
 @agent.tool
@@ -132,7 +132,7 @@ async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
         "ERROR:FILE_NOT_FOUND"
     """
     # TODO: 类似 file_update，HITL risk="high"
-    raise NotImplementedError
+    return "ERROR:TOOL_NOT_IMPLEMENTED:file_delete"
 
 
 @agent.tool
@@ -166,4 +166,4 @@ async def batch_rename(
     # 2. 返回 preview（不执行）
     # 3. LLM 展示给用户，用户通过自然语言确认 → 触发 HITL
     # 4. HITL 通过后执行实际重命名
-    raise NotImplementedError
+    return "ERROR:TOOL_NOT_IMPLEMENTED:batch_rename"

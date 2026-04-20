@@ -3,6 +3,7 @@ backend/services/material_service.py
 教材文件业务逻辑：保存文件、触发向量化流程、删除清理。
 """
 
+import logging
 import uuid
 from pathlib import Path
 
@@ -15,8 +16,12 @@ from backend.database.postgres import Material, User
 from backend.database.chromadb import SubjectType, add_chunks, delete_file_chunks
 from backend.schemas.material import MaterialInfo
 from backend.utils.document_parser import parse_document
-from backend.agent.tools.rag import infer_subject_type
 
+from backend.utils.crypto import decrypt
+from backend.services import rag_service
+
+logger = logging.getLogger(__name__)
+from backend.agent.tools.rag import infer_subject_type
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -95,6 +100,29 @@ async def upload_and_vectorize(
     try:
         parsed = parse_document(str(file_path), content_type)
         chunks = _chunk_text(parsed.text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
+
+        # 学科分类：直接调 LLM，不依赖 Agent 工具框架
+        subject_type: SubjectType = "other"
+        try:
+            api_key = (
+                decrypt(user.llm_api_key_encrypted)
+                if user.llm_api_key_encrypted
+                else settings.DEEPSEEK_API_KEY
+            ) or None
+            subject_type = await rag_service.classify_subject_llm(parsed.text[:2000], api_key)
+            material.subject_type = subject_type
+        except Exception as e:
+            logger.warning("学科分类失败，回退到 other: %s", e)
+
+        if chunks:
+            add_chunks(subject_type, str(file_id), material.file_name, chunks)
+            logger.info("向量化完成: file=%s subject=%s chunks=%d", file_id, subject_type, len(chunks))
+
+        material.vectorized = True
+        await db.commit()
+    except Exception as e:
+        logger.error("向量化流程失败 (file=%s): %s", file_id, e, exc_info=True)
+        # 向量化失败不影响文件上传成功，仅保持 vectorized=False
         
         # 尝试分类学科
         subject_type: SubjectType = "other"
