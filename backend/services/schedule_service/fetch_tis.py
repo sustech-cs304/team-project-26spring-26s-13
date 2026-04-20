@@ -16,7 +16,9 @@ from .constants import (
     CourseOccurrence,
     _SUSTECH_CLASS_PERIODS,
     _TIS_WEEK1_MONDAY,
-    _cas_login,
+    _apply_cached_cas_cookies,
+    _cas_login_for_tis,
+    _clear_cas_cookie_cache,
     _ensure_file_logging,
     _request_with_retry,
     logger,
@@ -764,9 +766,16 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
         headers=headers,
         trust_env=False,
     ) as client:
+        _apply_cached_cas_cookies(client, cas_account)
         r0 = await _request_with_retry(client, "GET", main_url, label="tis.main")
-        if "cas.sustech.edu.cn" in str(r0.url):
-            await _cas_login(client, cas_account, cas_password, service_url)
+        r0_url = str(r0.url)
+        if (
+            r0.status_code == 403
+            or "/session/invalid" in r0_url
+            or "cas.sustech.edu.cn" in r0_url
+        ):
+            _clear_cas_cookie_cache(cas_account)
+            await _cas_login_for_tis(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
 
         _raise_for_unexpected_http_status(r0, label="tis.main")
@@ -788,7 +797,8 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
 
             r = await _request_with_retry(client, "POST", url, headers=req_headers, data=data or {}, label=label)
             if _tis_needs_auth_response(r):
-                await _cas_login(client, cas_account, cas_password, service_url)
+                _clear_cas_cookie_cache(cas_account)
+                await _cas_login_for_tis(client, cas_account, cas_password, service_url)
                 r = await _request_with_retry(
                     client,
                     "POST",

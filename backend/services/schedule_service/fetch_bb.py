@@ -11,12 +11,15 @@ from bs4 import BeautifulSoup
 from .constants import (
     BLACKBOARD_BASE,
     Deadline,
+    _apply_cached_cas_cookies,
     _backoff_seconds,
     _bb_sink_dump,
     _bb_sink_var,
-    _cas_login_enhanced,
+    _clear_cas_cookie_cache,
+    _cas_login_for_blackboard,
     _ensure_file_logging,
     _request_with_retry,
+    _store_cas_cookie_cache,
     logger,
 )
 
@@ -707,6 +710,7 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
             trust_env=False,
             cookies=cookies,
         ) as client:
+            _apply_cached_cas_cookies(client, cas_account)
 
             async def _bb_warmup(label_suffix: str) -> None:
                 await _request_with_retry(client, "GET", service_url, label=f"bb.sso{label_suffix}")
@@ -754,16 +758,38 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
 
             if "cas.sustech.edu.cn" in str(r0.url):
                 logger.info("bb.fetch: redirected to CAS, starting login")
-                await _cas_login_enhanced(client, cas_account, cas_password, service_url)
+                _clear_cas_cookie_cache(cas_account)
+                await _cas_login_for_blackboard(client, cas_account, cas_password, service_url)
                 await _bb_warmup(".after_login")
+                _store_cas_cookie_cache(cas_account, client.cookies)
                 r0 = await _bb_open_frontdoor(".after_login")
+                if "cas.sustech.edu.cn" in str(r0.url):
+                    logger.warning("bb.fetch: still redirected to CAS after login, clearing CAS cache and retrying once")
+                    _clear_cas_cookie_cache(cas_account)
+                    await _cas_login_for_blackboard(client, cas_account, cas_password, service_url)
+                    await _bb_warmup(".after_relogin")
+                    _store_cas_cookie_cache(cas_account, client.cookies)
+                    r0 = await _bb_open_frontdoor(".after_relogin")
 
             if _looks_like_transient_bb_500(r0):
                 logger.warning("bb.fetch: detected transient 500 error, attempting recovery")
+                _clear_cas_cookie_cache(cas_account)
                 for attempt in range(1, 4):
                     await asyncio.sleep(_backoff_seconds(attempt))
                     await _bb_warmup(f".recover{attempt}")
                     r0 = await _request_with_retry(client, "GET", tab_url, label=f"bb.tab.recover{attempt}")
+                    if "cas.sustech.edu.cn" in str(r0.url):
+                        logger.warning("bb.fetch: recovery redirected to CAS on attempt %d", attempt)
+                        _clear_cas_cookie_cache(cas_account)
+                        await _cas_login_for_blackboard(client, cas_account, cas_password, service_url)
+                        await _bb_warmup(f".recover{attempt}.after_login")
+                        _store_cas_cookie_cache(cas_account, client.cookies)
+                        r0 = await _request_with_retry(
+                            client,
+                            "GET",
+                            tab_url,
+                            label=f"bb.tab.recover{attempt}.after_login",
+                        )
                     if not _looks_like_transient_bb_500(r0):
                         logger.info("bb.fetch: recovery successful on attempt %d", attempt)
                         break
@@ -775,6 +801,7 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                 )
 
             _BB_COOKIE_CACHE[cas_account] = (time.time(), _export_cookies(client.cookies))
+            _store_cas_cookie_cache(cas_account, client.cookies)
 
             base_url = str(r0.url)
             course_ids = _extract_course_ids(r0.text)
