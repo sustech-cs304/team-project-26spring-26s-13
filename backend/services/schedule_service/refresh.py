@@ -1,5 +1,7 @@
 import asyncio
 
+from cryptography.fernet import InvalidToken
+
 from backend.schemas.agent import ScheduleData
 
 from .conflicts import detect_conflicts
@@ -22,11 +24,11 @@ async def refresh(db, user) -> ScheduleData:
 
     try:
         cas_password = decrypt(cas_password_encrypted)
-    except Exception as exc:
+    except (InvalidToken, TypeError, ValueError) as exc:
         raise PermissionError(f"CAS credentials invalid: {type(exc).__name__}") from exc
 
     deadlines, slots = await asyncio.gather(
         fetch_blackboard(cas_account, cas_password),
-        fetch_course_schedule(cas_account, cas_password),
+        fetch_course_schedule(cas_account, cas_password, force_refresh=True),
     )
     return detect_conflicts(deadlines, slots)

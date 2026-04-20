@@ -37,7 +37,7 @@ def _parse_iso_dt(value: object) -> datetime | None:
 
     try:
         return _normalize_dt(datetime.fromisoformat(s))
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -49,7 +49,7 @@ def parse_personal_events(payload: object) -> list[FixedPersonalEvent]:
     if isinstance(payload, str):
         try:
             obj = json.loads(payload)
-        except Exception:
+        except json.JSONDecodeError:
             return []
 
     if isinstance(obj, dict):

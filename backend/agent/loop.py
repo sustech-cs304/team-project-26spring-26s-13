@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
@@ -35,6 +37,8 @@ from backend.schemas.agent import (
     AssistantMessage,
     ErrorDetail,
     RiskLevel,
+    ScheduleData,
+    ScheduleEvent,
     TraceItem,
     UIPayload,
 )
@@ -42,7 +46,6 @@ from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
-from backend.agent.shortcuts.schedule import try_handle_specific_schedule_query
 from backend.agent.tool_policy import normalize_route_for_prompt
 from backend.agent.validators import ResponseValidationContext, detect_alignment_issue
 import traceback
@@ -170,17 +173,6 @@ async def run_agent(
     if hitl_context and request.hitl_reply is not None:
         user_prompt = build_hitl_continuation_prompt(hitl_context.action, request.hitl_reply.approved)
 
-    deterministic_schedule_response = await try_handle_specific_schedule_query(
-        db,
-        user,
-        request,
-        user_prompt=user_prompt,
-        emit_trace=emit_trace,
-        traces=traces,
-    )
-    if deterministic_schedule_response is not None:
-        return deterministic_schedule_response
-
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (
         select(ChatMessage)
@@ -247,6 +239,9 @@ async def run_agent(
 
         tool_names = _extract_tool_names(raw_messages)
         print(f"tool_names={tool_names}")
+        blackboard_result = _extract_tool_return_content(raw_messages, "fetch_blackboard_deadlines")
+        final_data = _normalize_blackboard_deadline_response(user_prompt, final_data, blackboard_result)
+        blackboard_schedule = _build_blackboard_schedule_data(user_prompt, blackboard_result)
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
         chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
@@ -270,16 +265,6 @@ async def run_agent(
                     timestamp=datetime.now(timezone.utc),
                 )
             )
-            corrected_response = await try_handle_specific_schedule_query(
-                db,
-                user,
-                request,
-                user_prompt=user_prompt,
-                emit_trace=emit_trace,
-                traces=traces,
-            )
-            if corrected_response is not None:
-                return corrected_response
 
         # 持久化会话与消息
         stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
@@ -329,7 +314,7 @@ async def run_agent(
             ),
             trace=traces,
             route=chosen_route,
-            ui_payload=UIPayload(),
+            ui_payload=UIPayload(schedule=blackboard_schedule),
             hitl_request=None,
             error=None,
         )
@@ -491,6 +476,138 @@ def _extract_tool_names(raw_messages: list) -> list[str]:
             if isinstance(part, ToolCallPart):
                 tool_names.append(part.tool_name)
     return tool_names
+
+
+def _extract_tool_return_content(raw_messages: list, tool_name: str) -> str | None:
+    for msg in raw_messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if isinstance(part, ToolReturnPart) and part.tool_name == tool_name:
+                return part.content if isinstance(part.content, str) else None
+    return None
+
+
+def _is_deadline_query(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(k in text or k in lowered for k in ("作业", "ddl", "截止", "deadline", "deadlines", "assignment", "homework", "quiz", "exam"))
+
+
+def _format_deadline_label(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return "未提供"
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalResponse, blackboard_result: str | None) -> FinalResponse:
+    if not _is_deadline_query(user_prompt) or not blackboard_result:
+        return final_data
+    if blackboard_result == "ERROR:CAS_LOGIN_FAILED":
+        return FinalResponse(content="我暂时无法获取 Blackboard 作业，因为未配置或无法使用 CAS 账号密码。请先在设置中保存正确的 CAS 凭据后重试。", route="scheduler")
+    if blackboard_result == "ERROR:BLACKBOARD_UNREACHABLE":
+        return FinalResponse(content="抱歉，暂时无法访问 Blackboard 系统来获取您的未完成作业信息。请稍后重试，或直接登录 Blackboard 查看最新作业截止时间。", route="scheduler")
+    try:
+        payload = json.loads(blackboard_result)
+    except Exception:
+        return final_data
+    if not isinstance(payload, list):
+        return final_data
+    if not payload:
+        return FinalResponse(content="当前没有查询到未完成的 Blackboard 作业或考试。", route="scheduler")
+
+    lines = ["您目前有以下未完成的作业：", "", "## 作业列表", ""]
+    for idx, item in enumerate(sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1):
+        title = str(item.get("title") or "未命名任务")
+        course_id = str(item.get("course_id") or "").strip()
+        course_name = str(item.get("course_name") or "").strip()
+        type_name = str(item.get("type") or "other").strip()
+        estimated_minutes = item.get("estimated_minutes")
+        priority = item.get("priority")
+        url = str(item.get("url") or "").strip()
+        course_label = f"课程名称：{course_name}" if course_name and course_name != course_id else f"课程ID：{course_id or course_name}"
+        type_label = {
+            "assignment": "作业",
+            "quiz": "测验",
+            "project": "项目",
+            "presentation": "展示",
+            "exam": "考试",
+            "other": "其他",
+        }.get(type_name, "其他")
+
+        lines.append(f"{idx}. **{title}**")
+        lines.append(f"   - {course_label}")
+        lines.append(f"   - 截止时间：{_format_deadline_label(str(item.get('deadline') or ''))}")
+        lines.append(f"   - 类型：{type_label}")
+        if estimated_minutes is not None:
+            lines.append(f"   - 预计耗时：{estimated_minutes} 分钟")
+        if priority is not None:
+            lines.append(f"   - 优先级：{priority}")
+        if url:
+            lines.append(f"   - 查看链接：{url}")
+        lines.append("")
+    return FinalResponse(content="\n".join(lines), route="scheduler")
+
+
+def _build_blackboard_schedule_data(user_prompt: str, blackboard_result: str | None) -> ScheduleData | None:
+    if not _is_deadline_query(user_prompt) or not blackboard_result:
+        return None
+    if blackboard_result.startswith("ERROR:"):
+        return ScheduleData(events=[], conflicts=[])
+    try:
+        payload = json.loads(blackboard_result)
+    except Exception:
+        return None
+    if not isinstance(payload, list):
+        return None
+
+    events: list[ScheduleEvent] = []
+    for idx, item in enumerate(sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1):
+        title = str(item.get("title") or "未命名任务")
+        course_id = str(item.get("course_id") or "").strip()
+        course_name = str(item.get("course_name") or "").strip()
+        type_name = str(item.get("type") or "other").strip()
+        estimated_minutes = item.get("estimated_minutes")
+        priority = item.get("priority")
+        url = str(item.get("url") or "").strip()
+
+        detail_parts = []
+        if course_name and course_name != course_id:
+            detail_parts.append(f"课程名称：{course_name}")
+        elif course_id:
+            detail_parts.append(f"课程ID：{course_id}")
+        detail_parts.append(
+            "类型："
+            + {
+                "assignment": "作业",
+                "quiz": "测验",
+                "project": "项目",
+                "presentation": "展示",
+                "exam": "考试",
+                "other": "其他",
+            }.get(type_name, "其他")
+        )
+        if estimated_minutes is not None:
+            detail_parts.append(f"预计耗时：{estimated_minutes} 分钟")
+        if priority is not None:
+            detail_parts.append(f"优先级：{priority}")
+        if url:
+            detail_parts.append(f"链接：{url}")
+
+        events.append(
+            ScheduleEvent(
+                event_id=f"bb_deadline_{idx}",
+                title=title,
+                time=_format_deadline_label(str(item.get("deadline") or "")),
+                source="Blackboard",
+                detail="；".join(detail_parts),
+            )
+        )
+    return ScheduleData(events=events, conflicts=[])
 
 
 def _build_message_history(history_messages: list[ChatMessage]) -> list[ModelRequest | ModelResponse]:

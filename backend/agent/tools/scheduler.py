@@ -165,7 +165,14 @@ async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
 
     Returns:
         JSON 字符串，格式：
-        [{"title": str, "course": str, "deadline": "ISO8601", "type": "assignment"|"exam"|"quiz"}]
+        [{
+          "title": str,
+          "course": str,
+          "course_id": str,
+          "course_name": str,
+          "deadline": "ISO8601",
+          "type": "assignment"|"exam"|"quiz"
+        }]
 
     Raises（以字符串形式返回给 LLM）：
         "ERROR:CAS_LOGIN_FAILED" - CAS 登录失败
@@ -188,9 +195,14 @@ async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
     payload = [
         {
             "title": d.title,
-            "course": d.course_id,
+            "course": (d.course_name or d.course_id),
+            "course_id": d.course_id,
+            "course_name": (d.course_name or d.course_id),
             "deadline": d.due_at.isoformat(),
             "type": d.type,
+            "estimated_minutes": d.estimated_minutes,
+            "priority": d.priority,
+            "url": d.url,
         }
         for d in deadlines
     ]
@@ -364,23 +376,27 @@ async def detect_schedule_conflicts(
             continue
         title = str(item.get("title") or "").strip()
         course = str(item.get("course") or "").strip()
+        course_id = str(item.get("course_id") or "").strip()
+        course_name = str(item.get("course_name") or course or course_id).strip()
         deadline_s = str(item.get("deadline") or "").strip()
         typ = str(item.get("type") or "other").strip().lower()
         typ = type_map.get(typ, typ)
         if typ not in allowed_types:
             typ = "other"
-        if not title or not course or not deadline_s:
+        if not title or not (course or course_id or course_name) or not deadline_s:
             continue
         try:
             due_at = datetime.fromisoformat(deadline_s)
         except Exception:
             continue
+        normalized_course_id = course_id or course_name or course
         deadlines.append(
             schedule_service.Deadline(
                 title=title,
-                course_id=course,
+                course_id=normalized_course_id,
                 due_at=due_at,
                 type=typ,
+                course_name=course_name or None,
             )
         )
 

@@ -216,8 +216,8 @@ async def _crawl_course_upload_urls(
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script"]):
-            for attr in ("href", "data-href", "src"):
+        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
+            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
                 v = (tag.get(attr) or "").strip()
                 if not v:
                     continue
@@ -256,13 +256,18 @@ async def _crawl_course_upload_urls(
                 if "/webapps/blackboard/content/listContent.jsp" not in abs_url:
                     if "/webapps/blackboard/content/launchLink.jsp" not in abs_url:
                         if "/webapps/blackboard/execute/courseMain" not in abs_url:
-                            continue
+                            if "/webapps/blackboard/execute/announcement" not in abs_url:
+                                continue
 
             if "/webapps/blackboard/content/listContent.jsp" in abs_url:
                 enqueue(abs_url, final_url)
                 continue
 
             if "/webapps/blackboard/content/launchLink.jsp" in abs_url:
+                enqueue(abs_url, final_url)
+                continue
+
+            if "/webapps/blackboard/execute/announcement" in abs_url:
                 enqueue(abs_url, final_url)
                 continue
 
@@ -427,7 +432,7 @@ async def _crawl_portal_upload_urls(
         for u in _extract_upload_assignment_urls(html, final_url):
             upload_urls.add(u)
 
-        for course_id in _extract_course_ids(html):
+        for course_id in _extract_course_ids(f"{final_url}\n{html}"):
             if course_id in seen_course_ids:
                 continue
             seen_course_ids.add(course_id)
@@ -436,8 +441,8 @@ async def _crawl_portal_upload_urls(
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script"]):
-            for attr in ("href", "data-href", "src"):
+        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
+            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
                 v = (tag.get(attr) or "").strip()
                 if not v:
                     continue
@@ -477,6 +482,10 @@ async def _crawl_portal_upload_urls(
                 continue
 
             if "/webapps/blackboard/content/listContent.jsp" in abs_url:
+                enqueue(abs_url, final_url)
+                continue
+
+            if "/webapps/blackboard/execute/announcement" in abs_url:
                 enqueue(abs_url, final_url)
                 continue
 
@@ -522,14 +531,78 @@ def _import_cookies(state: list[tuple[str, str, str, str]]) -> httpx.Cookies:
     return cookies
 
 
+def _normalize_assignment_title(raw: str) -> str:
+    title = " ".join((raw or "").split()).strip()
+    if not title:
+        return ""
+
+    for prefix in (
+        "上载作业：",
+        "上载作业:",
+        "Upload Assignment:",
+        "Review Submission History:",
+        "Review Submission History -",
+    ):
+        if title.startswith(prefix):
+            title = title[len(prefix):].strip()
+            break
+
+    return title
+
+
+def _extract_assignment_title(soup: BeautifulSoup) -> str:
+    # Prefer in-page headings because browser <title> text may already be elided.
+    candidates: list[str] = []
+
+    for element_id in ("pageTitleText", "crumb_3", "pageTitleHeader"):
+        node = soup.find(id=element_id)
+        if node:
+            candidates.append(node.get_text(" ", strip=True))
+
+    heading = soup.find("h1")
+    if heading:
+        candidates.append(heading.get_text(" ", strip=True))
+
+    if soup.title:
+        title_text = soup.title.get_text(" ", strip=True)
+        m = re.match(r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$", title_text)
+        if m:
+            candidates.append(m.group(1).strip())
+        else:
+            candidates.append(title_text)
+
+    for candidate in candidates:
+        normalized = _normalize_assignment_title(candidate)
+        if normalized:
+            return normalized
+
+    return ""
+
+
+def _extract_course_name(soup: BeautifulSoup) -> str:
+    candidates: list[str] = []
+
+    crumb = soup.find(id="crumb_1")
+    if crumb:
+        candidates.append(crumb.get_text(" ", strip=True))
+
+    course_path_link = soup.select_one("li.coursePath a[title]")
+    if course_path_link:
+        candidates.append(course_path_link.get("title", ""))
+
+    for candidate in candidates:
+        normalized = " ".join((candidate or "").split()).strip()
+        if normalized:
+            return normalized
+
+    return ""
+
+
 def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Deadline | None:
     soup = BeautifulSoup(html, "html.parser")
 
-    title_text = soup.title.get_text(" ", strip=True) if soup.title else ""
-    assignment_title = title_text
-    m = re.match(r"^上载作业：\s*(.*?)\s*[–-]\s*(.+)$", title_text)
-    if m:
-        assignment_title = m.group(1).strip()
+    assignment_title = _extract_assignment_title(soup)
+    course_name = _extract_course_name(soup)
 
     course_id = None
     m = re.search(r"\bstrCourseId\s*=\s*['\"]([^'\"]+)['\"]", html)
@@ -588,6 +661,7 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
         course_id=course_id,
         due_at=due_at,
         type="assignment",
+        course_name=course_name or None,
         url=page_url,
     )
 
@@ -715,24 +789,30 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
 
             course_ids |= portal_course_ids
 
-            upload_url_set: set[str] = set(_extract_upload_assignment_urls(r0.text, base_url))
+            seed_upload_urls = set(_extract_upload_assignment_urls(r0.text, base_url))
+            upload_url_set: set[str] = set(seed_upload_urls)
             upload_url_set |= set(portal_upload_urls)
 
             dwr_urls = await _fetch_upload_urls_via_tool_activity_dwr(client, tab_url)
             upload_url_set |= set(dwr_urls)
 
+            course_added = 0
             for course_id in sorted(course_ids):
+                before = len(upload_url_set)
                 course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
                 upload_url_set |= course_urls
+                course_added += len(upload_url_set) - before
 
             upload_urls = sorted(upload_url_set)
 
             logger.info(
-                "bb.fetch: base=%s course_ids=%d upload_urls(seed)=%d dwr_urls=%d total=%d",
+                "bb.fetch: base=%s course_ids=%d seed=%d portal=%d dwr=%d course_added=%d total=%d",
                 base_url,
                 len(course_ids),
-                len(_extract_upload_assignment_urls(r0.text, base_url)),
+                len(seed_upload_urls),
+                len(portal_upload_urls),
                 len(dwr_urls),
+                course_added,
                 len(upload_urls),
             )
 
