@@ -27,9 +27,23 @@ class TisScheduleContext:
     effective_occurrences: list[CourseOccurrence]
     overrides: CalendarOverrides
 
-def _test5_file_path() -> Path:
+
+@dataclass(frozen=True)
+class TisMeetingExtraction:
+    meetings: list[dict[str, object]]
+    candidate_count: int
+    skipped_count: int
+    skipped_examples: list[str]
+
+
+def _tis_debug_dump_path() -> Path:
     root = Path(__file__).resolve().parents[3]
-    return root / "test" / "result" / "test5.txt"
+    return root / "temp" / "schedule_service" / "tis_debug_dump.txt"
+
+
+def _test5_file_path() -> Path:
+    # Keep the old helper name as an internal alias during the transition.
+    return _tis_debug_dump_path()
 
 
 def _preview_obj(obj: object, limit: int = 8000) -> str:
@@ -40,11 +54,33 @@ def _preview_obj(obj: object, limit: int = 8000) -> str:
     else:
         try:
             s = json.dumps(obj, ensure_ascii=False, default=str)
-        except Exception:
+        except (TypeError, ValueError):
             s = str(obj)
     if len(s) > limit:
         return s[:limit] + "..."
     return s
+
+
+def _parse_json_payload(resp: httpx.Response) -> object:
+    try:
+        return resp.json()
+    except json.JSONDecodeError:
+        payload = _safe_response_text(resp)
+        s = (payload or "").strip()
+        if s.startswith("{") or s.startswith("["):
+            try:
+                return json.loads(s)
+            except json.JSONDecodeError:
+                return payload
+        return payload
+
+
+def _safe_response_text(resp: httpx.Response, *, lowercase: bool = False) -> str:
+    try:
+        text = resp.text or ""
+    except (httpx.DecodingError, httpx.ResponseNotRead, UnicodeDecodeError):
+        return ""
+    return text.lower() if lowercase else text
 
 
 def _tis_needs_auth_response(resp: httpx.Response) -> bool:
@@ -60,22 +96,27 @@ def _tis_needs_auth_response(resp: httpx.Response) -> bool:
     ct = (resp.headers.get("content-type") or "").lower()
 
     if "application/json" in ct:
-        try:
-            txt = resp.text or ""
-        except Exception:
-            txt = ""
+        txt = _safe_response_text(resp)
         if "身份认证" in txt or "需要身份认证" in txt or "登录" in txt:
             return True
 
     if ct.startswith("text/html"):
-        try:
-            snippet = (resp.text or "").lower()
-        except Exception:
-            snippet = ""
+        snippet = _safe_response_text(resp, lowercase=True)
         if "cas" in snippet and ("login" in snippet or "统一身份认证" in snippet):
             return True
 
     return False
+
+
+def _raise_for_unexpected_http_status(resp: httpx.Response, *, label: str) -> None:
+    status = resp.status_code
+    if status < 400:
+        return
+    if status in (401, 403):
+        raise PermissionError(f"Academic system rejected request: label={label} status={status}")
+    if status == 429 or status >= 500:
+        raise ConnectionError(f"Academic system endpoint failed: label={label} status={status}")
+    raise RuntimeError(f"Academic system endpoint returned unexpected status: label={label} status={status}")
 
 
 def _tis_dump_test5(
@@ -86,14 +127,19 @@ def _tis_dump_test5(
     r_kb: httpx.Response | None,
     kb_payload: object | None,
     meetings_count: int,
+    candidate_count: int = 0,
+    skipped_count: int = 0,
+    skipped_examples: list[str] | None = None,
 ) -> None:
     try:
-        path = _test5_file_path()
+        path = _tis_debug_dump_path()
         path.parent.mkdir(parents=True, exist_ok=True)
 
         lines: list[str] = []
         lines.append(f"reason={reason}")
         lines.append(f"meetings_count={meetings_count}")
+        lines.append(f"candidate_count={candidate_count}")
+        lines.append(f"skipped_count={skipped_count}")
 
         if r_term is not None:
             lines.append(f"term.status={r_term.status_code}")
@@ -132,6 +178,8 @@ def _tis_dump_test5(
         lines.append(f"kb.interesting_dicts={interesting}")
         for i, s in enumerate(samples):
             lines.append(f"kb.sample[{i}]={_preview_obj(s, 2000)}")
+        for i, s in enumerate(skipped_examples or []):
+            lines.append(f"kb.skipped[{i}]={s}")
 
         if term_payload is not None:
             lines.append("term.payload.preview=" + _preview_obj(term_payload, 2500))
@@ -139,7 +187,7 @@ def _tis_dump_test5(
             lines.append("kb.payload.preview=" + _preview_obj(kb_payload, 2500))
 
         path.write_text("\n".join(lines), encoding="utf-8")
-    except Exception:
+    except (OSError, TypeError, ValueError):
         logger.exception("tis.dump_test5 failed")
 
 
@@ -160,27 +208,57 @@ def _tis_iter_dicts(obj: object):
         if s.startswith("{") or s.startswith("["):
             try:
                 parsed = json.loads(s)
-            except Exception:
+            except json.JSONDecodeError:
                 return
             yield from _tis_iter_dicts(parsed)
 
 
-def _tis_extract_xn_xq(payload: object) -> tuple[str, str] | None:
-    if isinstance(payload, dict):
-        xn = payload.get("xn") or payload.get("XN") or payload.get("xndm") or payload.get("XNDM")
-        xq = payload.get("xq") or payload.get("XQ") or payload.get("xqdm") or payload.get("XQDM")
-        if isinstance(xn, str) and isinstance(xq, (str, int)) and xn.strip():
-            return xn.strip(), str(xq).strip()
-
-    text = str(payload or "")
-    m = re.search(r"\b(20\d{2}-20\d{2})\b", text)
-    if not m:
+def _coerce_term_pair(xn: object, xq: object) -> tuple[str, str] | None:
+    if not isinstance(xn, str) or not isinstance(xq, (str, int)):
         return None
-    xn = m.group(1)
-    m2 = re.search(r"\b(xq|XQ|xqdm|XQDM)\s*[:=]\s*['\"]?(1|2)['\"]?\b", text)
-    if m2:
-        return xn, m2.group(2)
+    xn_text = xn.strip()
+    xq_text = str(xq).strip()
+    if not re.fullmatch(r"20\d{2}-20\d{2}", xn_text):
+        return None
+    if xq_text not in {"1", "2"}:
+        return None
+    return xn_text, xq_text
+
+
+def _tis_extract_xn_xq_from_obj(payload: object) -> tuple[str, str] | None:
+    if isinstance(payload, dict):
+        pair = _coerce_term_pair(
+            payload.get("xn") or payload.get("XN") or payload.get("xndm") or payload.get("XNDM"),
+            payload.get("xq") or payload.get("XQ") or payload.get("xqdm") or payload.get("XQDM"),
+        )
+        if pair:
+            return pair
+        for value in payload.values():
+            pair = _tis_extract_xn_xq_from_obj(value)
+            if pair:
+                return pair
+        return None
+
+    if isinstance(payload, list):
+        for item in payload:
+            pair = _tis_extract_xn_xq_from_obj(item)
+            if pair:
+                return pair
+        return None
+
+    if isinstance(payload, str):
+        s = payload.strip()
+        if s.startswith("{") or s.startswith("["):
+            try:
+                parsed = json.loads(s)
+            except json.JSONDecodeError:
+                return None
+            return _tis_extract_xn_xq_from_obj(parsed)
     return None
+
+
+def _tis_extract_xn_xq(payload: object) -> tuple[str, str] | None:
+    return _tis_extract_xn_xq_from_obj(payload)
 
 
 def _tis_parse_weekday(v: object) -> int | None:
@@ -209,7 +287,7 @@ def _tis_parse_sections(v: object) -> tuple[int, int] | None:
             b = int(v[1])
             if 1 <= a <= b <= 16:
                 return a, b
-        except Exception:
+        except (TypeError, ValueError):
             return None
 
     if isinstance(v, int) and 1 <= v <= 16:
@@ -245,7 +323,7 @@ def _tis_parse_weeks(v: object) -> list[int]:
         for item in v:
             try:
                 n = int(str(item).strip())
-            except Exception:
+            except (TypeError, ValueError):
                 continue
             if 1 <= n <= 40:
                 out.append(n)
@@ -302,12 +380,81 @@ def _tis_dt(day0: datetime, hhmm: str) -> datetime:
     return datetime(day0.year, day0.month, day0.day, int(hh), int(mm))
 
 
-def _tis_extract_meetings(payload: object) -> list[dict[str, object]]:
+def _has_any_key(d: dict[str, object], keys: tuple[str, ...]) -> bool:
+    return any(k in d for k in keys)
+
+
+def _is_candidate_meeting_dict(d: dict[str, object]) -> bool:
+    name_keys = ("kcmc", "KCMC", "course", "courseName", "name", "title", "RWH", "rwh", "kch", "KCH")
+    schedule_keys = (
+        "SKSJ",
+        "SKSJ_EN",
+        "xq",
+        "XQ",
+        "xqj",
+        "XQJ",
+        "weekday",
+        "dayOfWeek",
+        "xqjmc",
+        "weekDay",
+        "ksjc",
+        "KSJC",
+        "jsjc",
+        "JSJC",
+        "jcs",
+        "JCS",
+        "jc",
+        "JC",
+        "qzjc",
+        "QZJC",
+        "ZC",
+        "zc",
+        "zcs",
+        "ZCS",
+        "weeks",
+        "week",
+        "kkzc",
+        "KKZC",
+        "weekRange",
+        "KEY",
+        "key",
+    )
+    return _has_any_key(d, name_keys) and _has_any_key(d, schedule_keys)
+
+
+def _summarize_unparsed_meeting(
+    d: dict[str, object],
+    *,
+    course_name: object,
+    weekday: int | None,
+    sections: tuple[int, int] | None,
+    weeks: list[int],
+) -> str:
+    missing: list[str] = []
+    if not course_name:
+        missing.append("course_name")
+    if not weekday:
+        missing.append("weekday")
+    if not sections:
+        missing.append("sections")
+    if not weeks:
+        missing.append("weeks")
+    ident = d.get("RWH") or d.get("rwh") or d.get("kch") or d.get("KCH") or course_name or "<unknown>"
+    return f"id={ident} missing={','.join(missing)}"
+
+
+def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
     meetings: list[dict[str, object]] = []
+    candidate_count = 0
+    skipped_examples: list[str] = []
 
     for d in _tis_iter_dicts(payload):
         if not isinstance(d, dict):
             continue
+        if not _is_candidate_meeting_dict(d):
+            continue
+
+        candidate_count += 1
 
         desc_src = d.get("SKSJ") or d.get("SKSJ_EN")
 
@@ -391,6 +538,16 @@ def _tis_extract_meetings(payload: object) -> list[dict[str, object]]:
                     location = m.group(1).strip()
 
         if not weekday or not sections or not weeks or not course_name:
+            if len(skipped_examples) < 5:
+                skipped_examples.append(
+                    _summarize_unparsed_meeting(
+                        d,
+                        course_name=course_name,
+                        weekday=weekday,
+                        sections=sections,
+                        weeks=weeks,
+                    )
+                )
             continue
 
         start_sec, end_sec = sections
@@ -413,7 +570,12 @@ def _tis_extract_meetings(payload: object) -> list[dict[str, object]]:
             }
         )
 
-    return meetings
+    return TisMeetingExtraction(
+        meetings=meetings,
+        candidate_count=candidate_count,
+        skipped_count=max(candidate_count - len(meetings), 0),
+        skipped_examples=skipped_examples,
+    )
 
 
 def _tis_meetings_to_occurrences(
@@ -457,21 +619,6 @@ def _tis_meetings_to_occurrences(
     return occs
 
 
-_FALLBACK_CANCEL_DAYS = {
-    date(2026, 2, 23),
-    date(2026, 2, 24),
-    date(2026, 4, 6),
-    date(2026, 5, 1),
-    date(2026, 5, 4),
-    date(2026, 5, 5),
-}
-
-_FALLBACK_MOVE_RULES: list[tuple[date, date]] = [
-    (date(2026, 2, 23), date(2026, 2, 28)),
-    (date(2026, 5, 5), date(2026, 5, 9)),
-]
-
-
 def _filter_relevant_override_rules(
     occs: list[CourseOccurrence],
     cancel_days: set[date],
@@ -486,23 +633,23 @@ def _filter_relevant_override_rules(
 
 
 async def _load_calendar_overrides() -> CalendarOverrides:
-    cancel_days = set(_FALLBACK_CANCEL_DAYS)
-    move_rules = list(_FALLBACK_MOVE_RULES)
-    week1_monday = _TIS_WEEK1_MONDAY.date()
-
     try:
         overrides = await get_calendar_overrides()
-        cancel_days.update(overrides.cancel_days)
-        move_rules.extend(overrides.move_rules)
-        if overrides.week1_monday is not None:
-            week1_monday = overrides.week1_monday
-    except Exception:
-        logger.exception("tis.calendar: failed to load dynamic calendar overrides, using fallback only")
+    except Exception as exc:
+        logger.exception("tis.calendar: failed to load academic calendar overrides")
+        raise RuntimeError("Academic calendar overrides unavailable") from exc
+
+    if overrides.week1_monday is None:
+        raise RuntimeError("Academic calendar overrides missing week1_monday")
 
     return CalendarOverrides(
-        cancel_days=cancel_days,
-        move_rules=list(dict.fromkeys(move_rules)),
-        week1_monday=week1_monday,
+        cancel_days=set(overrides.cancel_days),
+        move_rules=list(dict.fromkeys(overrides.move_rules)),
+        week1_monday=overrides.week1_monday,
+        source_url=overrides.source_url,
+        source_pdf_url=overrides.source_pdf_url,
+        source_pdf_path=overrides.source_pdf_path,
+        extracted_pages=overrides.extracted_pages,
     )
 
 
@@ -559,8 +706,7 @@ async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> 
             await _cas_login(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
 
-        if r0.status_code >= 400:
-            raise ConnectionError(f"Academic system unreachable: status={r0.status_code}")
+        _raise_for_unexpected_http_status(r0, label="tis.main")
 
         xhr_headers = {
             "Origin": ACADEMIC_SYSTEM_BASE,
@@ -592,25 +738,24 @@ async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> 
             if _tis_needs_auth_response(r):
                 raise PermissionError("TIS authentication required")
 
+            _raise_for_unexpected_http_status(r, label=label)
+
             return r
 
         r_term = await _tis_post("/component/querydangqianxnxq", label="tis.term")
 
-        term_payload: object
-        try:
-            term_payload = r_term.json()
-        except Exception:
-            term_payload = r_term.text
-            s = (term_payload or "").strip()
-            if s.startswith("{") or s.startswith("["):
-                try:
-                    term_payload = json.loads(s)
-                except Exception:
-                    term_payload = r_term.text
-
+        term_payload = _parse_json_payload(r_term)
         xn_xq = _tis_extract_xn_xq(term_payload)
         if not xn_xq:
-            xn_xq = ("2025-2026", "2")
+            _tis_dump_test5(
+                reason="term_missing_xn_xq",
+                r_term=r_term,
+                term_payload=term_payload,
+                r_kb=None,
+                kb_payload=None,
+                meetings_count=0,
+            )
+            raise RuntimeError("Academic term payload missing xn/xq")
         xn, xq = xn_xq
 
         await _tis_post("/component/querysfxsbjkb", label="tis.sfxsbjkb")
@@ -623,18 +768,30 @@ async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> 
 
         r_kb = await _tis_post("/xszykb/queryxszykbzong", data={"xn": xn, "xq": xq}, label="tis.kb.zong")
 
-        try:
-            kb_payload: object = r_kb.json()
-        except Exception:
-            kb_payload = r_kb.text
-            s = (kb_payload or "").strip()
-            if s.startswith("{") or s.startswith("["):
-                try:
-                    kb_payload = json.loads(s)
-                except Exception:
-                    kb_payload = r_kb.text
-
-        meetings = _tis_extract_meetings(kb_payload)
+        kb_payload = _parse_json_payload(r_kb)
+        extraction = _tis_extract_meetings(kb_payload)
+        meetings = extraction.meetings
+        if extraction.skipped_count:
+            logger.warning(
+                "tis.kb: candidate_rows=%s parsed=%s skipped=%s examples=%s",
+                extraction.candidate_count,
+                len(meetings),
+                extraction.skipped_count,
+                extraction.skipped_examples,
+            )
+        if extraction.candidate_count and extraction.skipped_count >= max(1, extraction.candidate_count // 2):
+            _tis_dump_test5(
+                reason="meetings_partially_unparseable",
+                r_term=r_term,
+                term_payload=term_payload,
+                r_kb=r_kb,
+                kb_payload=kb_payload,
+                meetings_count=len(meetings),
+                candidate_count=extraction.candidate_count,
+                skipped_count=extraction.skipped_count,
+                skipped_examples=extraction.skipped_examples,
+            )
+            raise RuntimeError("Academic schedule partially unparseable")
         if not meetings:
             _tis_dump_test5(
                 reason="meetings_empty",
@@ -643,6 +800,9 @@ async def fetch_course_schedule_context(cas_account: str, cas_password: str) -> 
                 r_kb=r_kb,
                 kb_payload=kb_payload,
                 meetings_count=0,
+                candidate_count=extraction.candidate_count,
+                skipped_count=extraction.skipped_count,
+                skipped_examples=extraction.skipped_examples,
             )
             if _tis_needs_auth_response(r_kb):
                 raise PermissionError("TIS authentication required")
