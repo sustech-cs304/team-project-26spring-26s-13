@@ -13,14 +13,11 @@ RAG 检索工具：根据查询内容进行学科剪枝后查询向量数据库�
 
 import json
 
-import httpx
 from pydantic_ai import RunContext
 
 from backend.agent.core import AgentDeps, agent
-from backend.config import settings
 from backend.services import rag_service
 from backend.database import chromadb as chromadb_module
-from backend.database.chromadb import ALL_SUBJECT_TYPES, SubjectType
 
 
 @agent.tool
@@ -28,35 +25,51 @@ async def query_rag(
     ctx: RunContext[AgentDeps],
     query: str,
     subject_hint: str,
+    keyword: str = "",
 ) -> str:
     """
     在向量数据库中检索与 query 相关的文档片段，用于增强 LLM 回答。
 
     Args:
-        query:        用户的原始问题（或经过改写的检索 query）
-        subject_hint: LLM 判断的学科分类，必须是以下之一：
+        query:        用户的原始问题（或经过改写的检索 query），用于向量语义搜索
+        subject_hint: 学科分类，建议不确定时传 "unknown" 查全部集合。可选值：
                       "cs" | "electronics" | "materials" | "math" | "physics" |
                       "chemistry" | "biology" | "geography" | "philosophy" | "history" |
                       "literature" | "politics" | "finance" | "statistics" | "ocean" |
-                      "economics" | "law" | "management" | "medicine" | "policy" | "other" | "unknown"
-                      传 "unknown" 时查全部集合
+                      "economics" | "law" | "management" | "medicine" | "policy" |
+                      "other" | "unknown"
+        keyword:      从问题中提取的核心关键词（1-8 字，例如"贝加尔湖"、"挂科"、
+                      "binary tree"），用于向量检索无果时的关键词兜底匹配。
+                      中文问题**必须**填写；英文问题可留空。
 
     Returns:
-        JSON 字符串，格式：
-        {
-          "chunks": [
-            {"text": str, "file_name": str, "subject_type": str, "distance": float}
-          ],
-          "collections_queried": ["cs", "other"]
-        }
-        chunks 已按 distance 升序排列（最相关在前）。
-        若无匹配结果，chunks 为空列表。
+        JSON 字符串：{"chunks": [...], "collections_queried": [...]}
+        chunks 按 distance 升序；若向量检索无果，会回退到关键词兜底。
     """
+    # 第一步：按学科剪枝做向量语义检索
     collections = rag_service.resolve_collections(subject_hint)
     try:
         results = chromadb_module.query_collections(query, collections)
     except Exception:
         results = []
+
+    # 第二步兜底：猜错学科 → 扩展到全部集合再向量检索一次
+    if not results and subject_hint != "unknown":
+        from backend.database.chromadb import ALL_SUBJECT_TYPES
+        collections = list(ALL_SUBJECT_TYPES)
+        try:
+            results = chromadb_module.query_collections(query, collections)
+        except Exception:
+            results = []
+
+    # 第三步兜底：向量检索仍无果 → 用 keyword 做字面子串匹配
+    # 这是中文场景的关键兜底（默认英文 embedding 对中文语义差）
+    if not results and keyword.strip():
+        try:
+            results = chromadb_module.keyword_search(keyword.strip())
+        except Exception:
+            results = []
+
     return json.dumps(
         {
             "chunks": [
@@ -95,51 +108,4 @@ async def classify_subject(
         "literature" | "politics" | "finance" | "statistics" | "ocean" |
         "economics" | "law" | "management" | "medicine" | "policy" | "other"
     """
-    valid_subjects = ", ".join(ALL_SUBJECT_TYPES)
-    few_shot_prompt = f"""你是一个学科分类助手。根据输入文本，判断它属于哪个学科分类。
-只能返回以下分类中的一个，不要输出任何其他内容：
-{valid_subjects}
-
-示例：
-输入：二叉树的层序遍历算法
-输出：cs
-
-输入：南科大挂科政策是什么
-输出：policy
-
-输入：线性代数矩阵乘法
-输出：math
-
-输入：有机化学反应机理
-输出：chemistry
-
-输入：如何分析股票估值
-输出：finance
-
-输入：{text[:500]}
-输出："""
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{settings.DEEPSEEK_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {ctx.deps.llm_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.DEEPSEEK_MODEL,
-                    "messages": [{"role": "user", "content": few_shot_prompt}],
-                    "max_tokens": 16,
-                    "temperature": 0.0,
-                },
-            )
-        resp.raise_for_status()
-        result = resp.json()
-        subject = result["choices"][0]["message"]["content"].strip().lower()
-        if subject in ALL_SUBJECT_TYPES:
-            return subject
-    except Exception:
-        pass
-
-    return "other"
+    return await rag_service.classify_subject_llm(text, ctx.deps.llm_api_key)
