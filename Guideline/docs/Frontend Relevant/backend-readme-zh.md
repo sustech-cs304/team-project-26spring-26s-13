@@ -4,8 +4,8 @@
 
 配套字段契约请同时参考：
 
-- [backend-interface-contract-zh.md](./backend-interface-contract-zh.md)
-- [backend-interface-contract.md](./backend-interface-contract.md)
+- [backend-interface-contract-zh.md](backend-interface-contract-zh.md)
+- [backend-interface-contract.md](backend-interface-contract.md)
 
 ## 1. 当前联调背景
 

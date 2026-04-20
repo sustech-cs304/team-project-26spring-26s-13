@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User
 from backend.agent.prompt import SYSTEM_PROMPT
+from backend.agent.tool_policy import prepare_tools_for_prompt
 from backend.config import settings
 
 @dataclass
@@ -74,6 +75,7 @@ def _make_agent() -> Agent[AgentDeps, FinalResponse]:
         deps_type=AgentDeps,
         output_type=FinalResponse,  # [修改] 从原本的 str 改为强制输出 FinalResponse 结构
         system_prompt=SYSTEM_PROMPT,
+        prepare_tools=prepare_tools_for_prompt,
     )
 
 # 模块加载时立即初始化，tools/*.py 的 @agent.tool 装饰器可在导入时正常注册。

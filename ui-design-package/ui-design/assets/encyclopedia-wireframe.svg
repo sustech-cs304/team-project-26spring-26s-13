@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#fcfcfc"/>
+  <rect x="40" y="40" width="1320" height="820" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
+  <text x="80" y="95" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Campus Encyclopedia Wireframe</text>
+  <rect x="70" y="125" width="1260" height="3" fill="#222222"/>
+
+  <rect x="80" y="150" width="1240" height="70" rx="16" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="105" y="195" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Search Bar: credits, dorm policy, handbook rules, withdrawal, scholarship ...</text>
+
+  <rect x="80" y="250" width="230" height="580" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="105" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Query Context</text>
+  <rect x="105" y="320" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="378" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="436" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="105" y="540" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Suggested filters:</text>
+  <text x="105" y="570" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">student handbook</text>
+  <text x="105" y="600" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">dormitory rules</text>
+  <text x="105" y="630" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">degree requirements</text>
+
+  <rect x="340" y="250" width="630" height="580" rx="18" fill="#f9f9f9" stroke="#333333" stroke-width="2"/>
+  <text x="370" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Answer Rendering</text>
+  <rect x="370" y="320" width="570" height="470" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <line x1="400" y1="370" x2="840" y2="370" stroke="#666666" stroke-width="3"/>
+  <line x1="400" y1="420" x2="890" y2="420" stroke="#666666" stroke-width="2"/>
+  <line x1="400" y1="455" x2="865" y2="455" stroke="#666666" stroke-width="2"/>
+  <line x1="400" y1="490" x2="880" y2="490" stroke="#666666" stroke-width="2"/>
+  <line x1="400" y1="550" x2="790" y2="550" stroke="#666666" stroke-width="2"/>
+  <line x1="400" y1="585" x2="850" y2="585" stroke="#666666" stroke-width="2"/>
+  <line x1="400" y1="620" x2="870" y2="620" stroke="#666666" stroke-width="2"/>
+  <rect x="400" y="675" width="180" height="48" rx="10" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <rect x="595" y="675" width="180" height="48" rx="10" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+
+  <rect x="1000" y="250" width="320" height="580" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="1025" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Sources and Follow-ups</text>
+  <rect x="1025" y="320" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1025" y="415" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1025" y="510" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1025" y="645" width="270" height="48" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1025" y="705" width="270" height="48" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+</svg>

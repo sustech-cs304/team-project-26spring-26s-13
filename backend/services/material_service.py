@@ -16,11 +16,12 @@ from backend.database.postgres import Material, User
 from backend.database.chromadb import SubjectType, add_chunks, delete_file_chunks
 from backend.schemas.material import MaterialInfo
 from backend.utils.document_parser import parse_document
+
 from backend.utils.crypto import decrypt
 from backend.services import rag_service
 
 logger = logging.getLogger(__name__)
-
+from backend.agent.tools.rag import infer_subject_type
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -122,6 +123,24 @@ async def upload_and_vectorize(
     except Exception as e:
         logger.error("向量化流程失败 (file=%s): %s", file_id, e, exc_info=True)
         # 向量化失败不影响文件上传成功，仅保持 vectorized=False
+        
+        # 尝试分类学科
+        subject_type: SubjectType = "other"
+        try:
+            snippet = parsed.text[:2000]
+            subject_type = infer_subject_type(snippet)
+            material.subject_type = subject_type
+        except Exception:
+            pass
+
+        if chunks:
+            add_chunks(subject_type, str(file_id), material.file_name, chunks)
+        
+        material.vectorized = True
+        await db.commit()
+    except Exception:
+        # 向量化失败不影响文件上传成功，仅保持 vectorized=False
+        pass
 
     return _to_schema(material)
 

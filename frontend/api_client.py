@@ -141,6 +141,7 @@ class BackendApiClient:
         attachments: list[dict[str, Any]] | None = None,
         hitl_reply: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        agent_timeout = max(self.timeout, 300.0)
         payload = self._request(
             "POST",
             "/api/agent/run",
@@ -151,6 +152,7 @@ class BackendApiClient:
                 "attachments": attachments or [],
                 "hitl_reply": hitl_reply,
             },
+            timeout=agent_timeout,
         )
         if not isinstance(payload, dict):
             raise BackendApiError("Agent response must be a JSON object.")
@@ -192,9 +194,10 @@ class BackendApiClient:
         ).encode("utf-8")
 
         req = request.Request(url, data=body, headers=headers, method="POST")
+        agent_timeout = max(self.timeout, 300.0)
 
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
+            with request.urlopen(req, timeout=agent_timeout) as response:
                 final_payload: dict[str, Any] | None = None
                 for raw in response:
                     line = raw.decode("utf-8", errors="ignore").strip()
@@ -228,6 +231,12 @@ class BackendApiClient:
             raise BackendApiError("Sessions response must be a JSON array.")
         return [item for item in payload if isinstance(item, dict)]
 
+    def get_session_detail(self, session_id: str) -> dict[str, Any]:
+        payload = self._request("GET", f"/api/agent/sessions/{session_id}")
+        if not isinstance(payload, dict):
+            raise BackendApiError("Session detail response must be a JSON object.")
+        return payload
+
     def delete_session(self, session_id: str) -> None:
         self._request("DELETE", f"/api/agent/sessions/{session_id}")
 
@@ -244,6 +253,7 @@ class BackendApiClient:
         *,
         json_body: dict[str, Any] | None = None,
         file_upload: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> Any:
         if not self.enabled or not self.base_url:
             raise BackendApiError("REST backend is disabled. Set SPA_API_BASE_URL to enable it.")
@@ -264,7 +274,7 @@ class BackendApiClient:
         req = request.Request(url, data=data, headers=headers, method=method)
 
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
+            with request.urlopen(req, timeout=timeout or self.timeout) as response:
                 body = response.read().decode("utf-8", errors="ignore")
         except error.HTTPError as exc:
             detail = self._parse_http_error(exc)

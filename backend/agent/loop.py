@@ -6,21 +6,24 @@ PydanticAI Agent 主循环。
 
 from __future__ import annotations
 
-import time
+import asyncio
 import inspect
+import time
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
 
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
+    TextPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
@@ -39,6 +42,10 @@ from backend.agent.hitl import HITLPendingState, hitl_manager
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
+from backend.agent.shortcuts.schedule import try_handle_specific_schedule_query
+from backend.agent.tool_policy import normalize_route_for_prompt
+from backend.agent.validators import ResponseValidationContext, detect_alignment_issue
+import traceback
 
 
 TraceEmitter = Callable[[TraceItem], Awaitable[None] | None]
@@ -112,9 +119,42 @@ async def run_agent(
         )
     )
 
-    llm_api_key = decrypt(user.llm_api_key_encrypted) if user.llm_api_key_encrypted else settings.DEEPSEEK_API_KEY
+    llm_api_key = (
+        decrypt(user.llm_api_key_encrypted)
+        if user.llm_api_key_encrypted
+        else settings.DEEPSEEK_API_KEY
+    )
+    llm_api_key = (llm_api_key or "").strip()
     cas_account = user.cas_account
     cas_password = decrypt(user.cas_password_encrypted) if user.cas_password_encrypted else None
+
+    if not llm_api_key:
+        await emit_trace(
+            TraceItem(
+                phase="Reflection",
+                title="缺少 LLM API Key",
+                detail="当前用户未保存个人 API Key，且服务端也未配置默认的 DEEPSEEK_API_KEY。",
+                status="error",
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        return AgentResponse(
+            session_id=request.session_id,
+            assistant_message=AssistantMessage(
+                role="assistant",
+                content="当前未配置 LLM API Key。请先在设置中保存个人 API Key，或在服务端 .env 中配置 DEEPSEEK_API_KEY。",
+                timestamp=datetime.now(timezone.utc),
+            ),
+            trace=traces,
+            route="chat",
+            ui_payload=UIPayload(),
+            hitl_request=None,
+            error=ErrorDetail(
+                code="missing_llm_api_key",
+                message="Missing LLM API key. Save a user API key or configure DEEPSEEK_API_KEY in .env.",
+                retryable=False,
+            ),
+        )
 
     deps = AgentDeps(
         db=db,
@@ -130,14 +170,29 @@ async def run_agent(
     if hitl_context and request.hitl_reply is not None:
         user_prompt = build_hitl_continuation_prompt(hitl_context.action, request.hitl_reply.approved)
 
-    # 最小内存读取（当前版本不注入 message_history，仅用于后续升级）
+    deterministic_schedule_response = await try_handle_specific_schedule_query(
+        db,
+        user,
+        request,
+        user_prompt=user_prompt,
+        emit_trace=emit_trace,
+        traces=traces,
+    )
+    if deterministic_schedule_response is not None:
+        return deterministic_schedule_response
+
+    # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (
         select(ChatMessage)
         .where(ChatMessage.session_id == request.session_id)
-        .order_by(ChatMessage.timestamp.asc())
+        .order_by(
+            ChatMessage.timestamp.asc(),
+            case((ChatMessage.role == "user", 0), else_=1).asc(),
+        )
         .limit(10)
     )
-    _ = (await db.execute(history_stmt)).scalars().all()
+    history_messages = (await db.execute(history_stmt)).scalars().all()
+    message_history = _build_message_history(history_messages)
 
     try:
         provider = OpenAIProvider(
@@ -159,30 +214,101 @@ async def run_agent(
             )
         )
 
-        result = await agent.run(user_prompt, deps=deps, model=dynamic_model)
+        print("=== agent.run start ===")
+        print(f"model={settings.DEEPSEEK_MODEL}")
+        print(f"base_url={settings.DEEPSEEK_BASE_URL}")
+        print(f"has_llm_api_key={bool(llm_api_key)}")
+        print(f"user_prompt={user_prompt!r}")
 
+        result = await asyncio.wait_for(
+            agent.run(
+                user_prompt,
+                deps=deps,
+                model=dynamic_model,
+                message_history=message_history,
+            ),
+            timeout=settings.AGENT_RUN_TIMEOUT_SECONDS,
+        )
+
+        print("=== agent.run success ===")
+        print(f"result_type={type(result)}")
+        print(f"has_data={hasattr(result, 'data')}")
+        print("=== after agent.run ===")
         final_data: FinalResponse = getattr(result, "data", None) or result.output
+        print(f"final_data_type={type(final_data)}")
+        print(f"final_data={final_data!r}")
         raw_messages = result.all_messages()
+        print("=== got raw_messages ===")
+        print(f"raw_messages_count={len(raw_messages)}")
 
         for item in _build_trace(raw_messages):
             await emit_trace(item)
+        print("=== trace built ===")
 
         tool_names = _extract_tool_names(raw_messages)
+        print(f"tool_names={tool_names}")
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
+        chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
+        print(f"chosen_route={chosen_route}")
+
+        alignment_issue = detect_alignment_issue(
+            ResponseValidationContext(
+                user_prompt=user_prompt,
+                assistant_content=final_data.content,
+                route=chosen_route,
+                tool_names=tool_names,
+            )
+        )
+        if alignment_issue:
+            await emit_trace(
+                TraceItem(
+                    phase="Reflection",
+                    title="检测到答非所问",
+                    detail=alignment_issue.message,
+                    status="error",
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            corrected_response = await try_handle_specific_schedule_query(
+                db,
+                user,
+                request,
+                user_prompt=user_prompt,
+                emit_trace=emit_trace,
+                traces=traces,
+            )
+            if corrected_response is not None:
+                return corrected_response
 
         # 持久化会话与消息
         stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
         chat_session = (await db.execute(stmt_session)).scalar_one_or_none()
+        print("=== session loaded ===")
         if chat_session is None:
             chat_session = ChatSession(session_id=request.session_id, user_id=user.user_id)
             db.add(chat_session)
+            print("=== session created ===")
         chat_session.updated_at = datetime.now(timezone.utc)
 
-        new_user_msg = ChatMessage(session_id=request.session_id, role="user", content=user_prompt)
-        new_ast_msg = ChatMessage(session_id=request.session_id, role="assistant", content=final_data.content)
+        user_message_time = datetime.now(timezone.utc)
+        assistant_message_time = user_message_time + timedelta(microseconds=1)
+        new_user_msg = ChatMessage(
+            session_id=request.session_id,
+            role="user",
+            content=user_prompt,
+            timestamp=user_message_time,
+        )
+        new_ast_msg = ChatMessage(
+            session_id=request.session_id,
+            role="assistant",
+            content=final_data.content,
+            timestamp=assistant_message_time,
+        )
         db.add_all([new_user_msg, new_ast_msg])
+        print("=== messages added ===")
         await db.commit()
+        print("=== db.commit done ===")
 
         await emit_trace(
             TraceItem(
@@ -245,7 +371,39 @@ async def run_agent(
             error=None,
         )
 
+    except asyncio.TimeoutError:
+        await emit_trace(
+            TraceItem(
+                phase="Reflection",
+                title="推理超时",
+                detail=f"Agent 在 {settings.AGENT_RUN_TIMEOUT_SECONDS} 秒内未完成推理或工具调用。",
+                status="error",
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+        return AgentResponse(
+            session_id=request.session_id,
+            assistant_message=AssistantMessage(
+                role="assistant",
+                content="本次 Agent 推理超时。请稍后重试，或把问题拆小一些再试。",
+                timestamp=datetime.now(timezone.utc),
+            ),
+            trace=traces,
+            route="chat",
+            ui_payload=UIPayload(),
+            hitl_request=None,
+            error=ErrorDetail(
+                code="agent_timeout",
+                message=f"Agent run exceeded {settings.AGENT_RUN_TIMEOUT_SECONDS} seconds.",
+                retryable=True,
+            ),
+        )
+
     except Exception as e:
+        print("=== agent.run exception ===")
+        print(f"error_type={type(e).__name__}")
+        print(f"error_message={e}")
+        print(traceback.format_exc())
         await emit_trace(
             TraceItem(
                 phase="Reflection",
@@ -333,6 +491,25 @@ def _extract_tool_names(raw_messages: list) -> list[str]:
             if isinstance(part, ToolCallPart):
                 tool_names.append(part.tool_name)
     return tool_names
+
+
+def _build_message_history(history_messages: list[ChatMessage]) -> list[ModelRequest | ModelResponse]:
+    """Convert persisted chat messages into the PydanticAI message history format."""
+    message_history: list[ModelRequest | ModelResponse] = []
+    for item in history_messages:
+        if item.role == "user":
+            message_history.append(
+                ModelRequest(parts=[UserPromptPart(item.content)], timestamp=item.timestamp)
+            )
+        elif item.role == "assistant":
+            message_history.append(
+                ModelResponse(
+                    parts=[TextPart(item.content)],
+                    timestamp=item.timestamp,
+                    model_name=settings.DEEPSEEK_MODEL,
+                )
+            )
+    return message_history
 
 
 # ── 工具注册 ──────────────────────────────────────────────────────────────────

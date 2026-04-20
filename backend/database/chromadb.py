@@ -197,7 +197,6 @@ def query_collections(
     all_results.sort(key=lambda c: c["distance"])
     return all_results
 
-
 def keyword_search(
     keyword: str,
     subject_types: list[SubjectType] | None = None,

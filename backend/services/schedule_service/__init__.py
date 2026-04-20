@@ -18,8 +18,15 @@ from datetime import datetime, timedelta
 from typing import Literal
 from urllib.parse import unquote_plus, urljoin
 
-import httpx
-from bs4 import BeautifulSoup
+try:
+    import httpx
+except ModuleNotFoundError:  # pragma: no cover
+    httpx = None  # type: ignore[assignment]
+
+try:
+    from bs4 import BeautifulSoup
+except ModuleNotFoundError:  # pragma: no cover
+    BeautifulSoup = None  # type: ignore[assignment]
 
 from backend.schemas.agent import ScheduleConflict, ScheduleData, ScheduleEvent
 
@@ -2356,21 +2363,58 @@ async def refresh(db, user) -> ScheduleData:
     )
     return detect_conflicts(deadlines, slots)
 
-# ---------------------------------------------------------------------------
-# Re-export public API from split modules (override in-file definitions)
-from .constants import Deadline, Course, CourseOccurrence
-from .fetch_bb import fetch_blackboard
-from .fetch_tis import fetch_course_schedule
-from .conflicts import detect_conflicts
-from .refresh import refresh
+from .constants import Course, CourseOccurrence, Deadline
+from .effective_schedule import EffectiveScheduleConflict, EffectiveScheduleDay, TeachingDayResolution
 
 __all__ = [
     "Deadline",
     "Course",
     "CourseOccurrence",
+    "EffectiveScheduleConflict",
+    "EffectiveScheduleDay",
+    "TeachingDayResolution",
     "fetch_blackboard",
     "fetch_course_schedule",
     "detect_conflicts",
+    "query_effective_schedule_conflicts",
+    "query_effective_schedule_for_date",
+    "resolve_teaching_day",
     "refresh",
 ]
+
+
+def __getattr__(name: str):
+    if name == "fetch_blackboard":
+        from .fetch_bb import fetch_blackboard
+
+        return fetch_blackboard
+    if name == "fetch_course_schedule":
+        from .fetch_tis import fetch_course_schedule
+
+        return fetch_course_schedule
+    if name == "detect_conflicts":
+        from .conflicts import detect_conflicts
+
+        return detect_conflicts
+    if name in {
+        "query_effective_schedule_conflicts",
+        "query_effective_schedule_for_date",
+        "resolve_teaching_day",
+    }:
+        from .effective_schedule import (
+            query_effective_schedule_conflicts,
+            query_effective_schedule_for_date,
+            resolve_teaching_day,
+        )
+
+        return {
+            "query_effective_schedule_conflicts": query_effective_schedule_conflicts,
+            "query_effective_schedule_for_date": query_effective_schedule_for_date,
+            "resolve_teaching_day": resolve_teaching_day,
+        }[name]
+    if name == "refresh":
+        from .refresh import refresh
+
+        return refresh
+    raise AttributeError(name)
 

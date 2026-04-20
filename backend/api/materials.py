@@ -24,8 +24,7 @@ async def list_materials(
     返回当前用户上传的所有教材列表（按上传时间倒序）。
     用于前端侧边栏的材料列表展示。
     """
-    # TODO: return await material_service.list_materials(db, current_user.user_id)
-    raise NotImplementedError
+    return await material_service.list_materials(db, current_user.user_id)
 
 
 @router.post("/upload", response_model=MaterialInfo, status_code=status.HTTP_201_CREATED)
@@ -49,8 +48,10 @@ async def upload_material(
         400: 不支持的文件类型
         413: 文件超出大小限制
     """
-    # TODO: return await material_service.upload_and_vectorize(db, current_user, file)
-    raise NotImplementedError
+    try:
+        return await material_service.upload_and_vectorize(db, current_user, file)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,5 +70,9 @@ async def delete_material(
         403: file_id 不属于当前用户
         404: file_id 不存在
     """
-    # TODO: await material_service.delete_material(db, current_user.user_id, file_id)
-    raise NotImplementedError
+    try:
+        await material_service.delete_material(db, current_user.user_id, file_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your file")

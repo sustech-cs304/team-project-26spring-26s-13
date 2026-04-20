@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # ── Database ────────────────────────────────────────
-    POSTGRES_DSN: str = "postgresql+asyncpg://user:password@localhost:5432/spa_db"
+    POSTGRES_DSN: str = "postgresql+asyncpg://postgres:password@localhost:5432/software-engineering"
     CHROMA_PERSIST_DIR: str = "./data/chromadb"
 
     # ── Security ────────────────────────────────────────
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # ── LLM ─────────────────────────────────────────────
     DEEPSEEK_MODEL: str = "deepseek-chat"          # model ID passed to PydanticAI
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_API_KEY: str = ""                     # optional fallback when user has not saved a personal key
+    AGENT_RUN_TIMEOUT_SECONDS: int = 300
 
     # ── File Storage ────────────────────────────────────
     UPLOAD_DIR: str = "./data/uploads"             # raw uploaded files
@@ -42,6 +44,5 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-
 
 settings = Settings()

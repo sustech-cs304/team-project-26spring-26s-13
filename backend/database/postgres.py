@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import AsyncGenerator
 
 from sqlalchemy import (
-    Boolean, DateTime, Enum, ForeignKey,
+    Boolean, DateTime, ForeignKey,
     LargeBinary, String, Text, func
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -23,6 +23,17 @@ from backend.config import settings
 
 engine = create_async_engine(settings.POSTGRES_DSN, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def ensure_tables_exist() -> None:
+    """
+    在本地开发环境中补齐缺失的 ORM 表。
+
+    该操作只会创建不存在的表，不会修改已存在表结构，
+    因此可安全用于补上后续新增的 `personal_tasks` 等表。
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -90,7 +101,12 @@ class ChatSession(Base):
 
     user: Mapped["User"] = relationship(back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="session", order_by="ChatMessage.timestamp", cascade="all, delete-orphan"
+        back_populates="session",
+        order_by=lambda: (
+            ChatMessage.timestamp,
+            ChatMessage.role == "assistant",
+        ),
+        cascade="all, delete-orphan",
     )
 
 
@@ -102,7 +118,9 @@ class ChatMessage(Base):
 
     message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[str] = mapped_column(String(128), ForeignKey("chat_sessions.session_id"), nullable=False)
-    role: Mapped[str] = mapped_column(Enum("user", "assistant", name="message_role"), nullable=False)
+    # Keep this aligned with the README's manual schema, which uses VARCHAR + CHECK
+    # instead of a PostgreSQL enum type.
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -122,17 +140,9 @@ class Material(Base):
     file_name: Mapped[str] = mapped_column(String(256), nullable=False)
     file_type: Mapped[str] = mapped_column(String(64), nullable=False)   # MIME type, e.g. "application/pdf"
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)  # 服务器本地绝对路径
-    subject_type: Mapped[str] = mapped_column(
-        Enum(
-            "cs", "electronics", "materials", "math", "physics",
-            "chemistry", "biology", "geography", "philosophy", "history",
-            "literature", "politics", "finance", "statistics", "ocean",
-            "economics", "law", "management", "medicine", "policy", "other",
-            name="subject_type"
-        ),
-        nullable=False,
-        default="other"
-    )
+    # The current bootstrap SQL creates this as VARCHAR(32), so use String here
+    # to avoid requiring a native PostgreSQL enum type in local setups.
+    subject_type: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     vectorized: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#fcfcfc"/>
+  <rect x="40" y="40" width="1320" height="820" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
+  <text x="80" y="95" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Student Productivity Agent - Main Dashboard Wireframe</text>
+  <rect x="70" y="125" width="1260" height="3" fill="#222222"/>
+
+  <rect x="80" y="150" width="280" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="105" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Left Sidebar</text>
+  <text x="105" y="225" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Conversation History</text>
+  <rect x="105" y="242" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="307" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="372" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="105" y="465" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Loaded Materials</text>
+  <rect x="105" y="482" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="542" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="602" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="105" y="700" width="110" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="225" y="700" width="110" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="105" y="780" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Quick access: new chat / add file / settings</text>
+
+  <rect x="390" y="150" width="610" height="680" rx="18" fill="#f9f9f9" stroke="#333333" stroke-width="2"/>
+  <text x="420" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Center Workspace</text>
+  <text x="420" y="225" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Chat Conversation</text>
+  <rect x="420" y="245" width="550" height="80" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="480" y="340" width="490" height="90" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="420" y="445" width="430" height="80" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="470" y="540" width="500" height="95" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="420" y="695" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Mode Selector + Composer</text>
+  <rect x="420" y="715" width="140" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="575" y="715" width="285" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="875" y="715" width="95" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="420" y="795" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Primary interaction flow: ask - observe result - approve if needed</text>
+
+  <rect x="1030" y="150" width="290" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
+  <text x="1055" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Thought Trace</text>
+  <rect x="1055" y="220" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1055" y="315" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1055" y="410" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1055" y="505" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1055" y="600" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="1055" y="745" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Observation / Planning / Tool Use / Result</text>
+</svg>

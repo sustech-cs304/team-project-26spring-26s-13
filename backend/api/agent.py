@@ -8,11 +8,11 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User, ChatSession, ChatMessage, get_db
-from backend.schemas.agent import AgentRequest, AgentResponse, SessionSummary
+from backend.schemas.agent import AgentRequest, AgentResponse, ChatMessage as ChatMessageSchema, SessionDetail, SessionSummary
 from backend.agent.loop import run_agent
 from backend.agent.hitl import hitl_manager
 from backend.api.deps import get_current_user
@@ -125,21 +125,92 @@ async def list_sessions(
 
     results: list[SessionSummary] = []
     for sess in sessions:
+        title_stmt = (
+            select(ChatMessage.content)
+            .where(
+                ChatMessage.session_id == sess.session_id,
+                ChatMessage.role == "user",
+            )
+            .order_by(
+                ChatMessage.timestamp.asc(),
+                case((ChatMessage.role == "user", 0), else_=1).asc(),
+            )
+            .limit(1)
+        )
         preview_stmt = (
             select(ChatMessage.content)
             .where(ChatMessage.session_id == sess.session_id)
-            .order_by(ChatMessage.timestamp.desc())
+            .where(ChatMessage.role == "user")
+            .order_by(
+                ChatMessage.timestamp.desc(),
+                case((ChatMessage.role == "user", 0), else_=1).asc(),
+            )
             .limit(1)
         )
-        preview_content = (await db.execute(preview_stmt)).scalar_one_or_none() or ""
+        title_content = (await db.execute(title_stmt)).scalar_one_or_none() or ""
+        preview_content = (await db.execute(preview_stmt)).scalar_one_or_none() or title_content
         results.append(
             SessionSummary(
                 session_id=sess.session_id,
+                title=title_content[:120],
                 preview=preview_content[:120],
                 updated_at=sess.updated_at,
             )
         )
     return results
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetail)
+async def get_session_detail(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SessionDetail:
+    stmt = select(ChatSession).where(ChatSession.session_id == session_id)
+    session_obj = (await db.execute(stmt)).scalar_one_or_none()
+    if session_obj is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    if session_obj.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    title_stmt = (
+        select(ChatMessage.content)
+        .where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.role == "user",
+        )
+        .order_by(
+            ChatMessage.timestamp.asc(),
+            case((ChatMessage.role == "user", 0), else_=1).asc(),
+        )
+        .limit(1)
+    )
+    title_content = (await db.execute(title_stmt)).scalar_one_or_none() or ""
+
+    message_stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(
+            ChatMessage.timestamp.asc(),
+            case((ChatMessage.role == "user", 0), else_=1).asc(),
+        )
+    )
+    messages = (await db.execute(message_stmt)).scalars().all()
+
+    return SessionDetail(
+        session_id=session_id,
+        title=title_content[:120],
+        updated_at=session_obj.updated_at,
+        messages=[
+            ChatMessageSchema(
+                message_id=str(msg.message_id),
+                role=msg.role,
+                content=msg.content,
+                timestamp=msg.timestamp,
+            )
+            for msg in messages
+        ],
+    )
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

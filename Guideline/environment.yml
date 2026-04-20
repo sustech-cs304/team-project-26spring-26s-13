@@ -48,6 +48,7 @@ dependencies:
       # Security
       - cryptography>=42.0.0 # Fernet encryption for CAS/API keys
       - passlib[bcrypt]>=1.7.4 # bcrypt password hashing
+      - bcrypt==4.0.1 # passlib 1.7.4 expects bcrypt's legacy __about__ metadata
       - python-jose[cryptography]>=3.3.0 # JWT tokens
 
       # Frontend
