@@ -16,7 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover
     BeautifulSoup = None  # type: ignore[assignment]
 
 from backend.services.schedule_service.academic_calendar_models import CalendarPdfRef
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 
 
 _PDF_RE = re.compile(r"""href\s*=\s*["']([^"']+?\.pdf(?:\?[^"']*)?)["']""", re.I)

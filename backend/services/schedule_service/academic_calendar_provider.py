@@ -16,7 +16,7 @@ from backend.services.schedule_service.academic_calendar_fetch import download_c
 from backend.services.schedule_service.academic_calendar_models import CalendarOverrides, CalendarPdfRef
 from backend.services.schedule_service.academic_calendar_parse import parse_calendar_overrides
 from backend.services.schedule_service.academic_calendar_source import discover_calendar_pdfs, is_calendar_asset_url
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 
 
 def _cache_dir() -> Path:

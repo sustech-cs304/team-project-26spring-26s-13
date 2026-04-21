@@ -6,7 +6,7 @@ from .conflicts import (
     detect_overlaps_with_personal_payload,
     parse_personal_events,
 )
-from .constants import Course, CourseOccurrence, Deadline
+from .enums import CourseOccurrenceKind, DeadlineType, TaskPeriod
 from .effective_schedule import (
     EffectiveScheduleConflict,
     EffectiveScheduleDay,
@@ -22,16 +22,19 @@ from .fetch_tis import (
     fetch_course_schedule_context,
     invalidate_tis_schedule_cache,
 )
-from .personal import FixedPersonalEvent, PersonalTask, TimeWindow
+from .models import Course, CourseOccurrence, Deadline, FixedPersonalEvent, PersonalTask, TimeWindow
 from .refresh import refresh
 
 __all__ = [
     "Course",
     "CourseOccurrence",
+    "CourseOccurrenceKind",
     "Deadline",
+    "DeadlineType",
     "FixedPersonalEvent",
     "TimeWindow",
     "PersonalTask",
+    "TaskPeriod",
     "EffectiveScheduleConflict",
     "EffectiveScheduleDay",
     "TeachingDayResolution",

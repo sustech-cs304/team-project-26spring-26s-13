@@ -4,6 +4,7 @@ backend/services/material_service.py
 """
 
 import logging
+import mimetypes
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from backend.utils.document_parser import parse_document
 
 from backend.utils.crypto import decrypt
 from backend.services import rag_service
+from backend.services.schedule_service.fetch_bb import BlackboardMaterial, fetch_blackboard_course_materials
 
 logger = logging.getLogger(__name__)
 from backend.agent.tools.rag import infer_subject_type
@@ -68,63 +70,52 @@ async def upload_and_vectorize(
     6. 写入 ChromaDB（database/chromadb.add_chunks）
     7. 更新 materials 表 vectorized=True
     """
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_MIME_TYPES:
-        raise ValueError(f"Unsupported file type: {content_type}")
-
     file_bytes = await file.read()
-    size_mb = len(file_bytes) / (1024 * 1024)
-    if size_mb > settings.MAX_UPLOAD_SIZE_MB:
-        raise ValueError(f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB")
-
-    file_id = uuid.uuid4()
-    suffix = Path(file.filename or "file").suffix
-    user_dir = Path(settings.UPLOAD_DIR) / str(user.user_id)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    file_path = user_dir / f"{file_id}{suffix}"
-    file_path.write_bytes(file_bytes)
-
-    material = Material(
-        file_id=file_id,
-        user_id=user.user_id,
+    return await _create_material_from_bytes(
+        db=db,
+        user=user,
         file_name=file.filename or "unknown",
-        file_type=content_type,
-        file_path=str(file_path.resolve()),
-        subject_type="other",
-        vectorized=False,
+        content_type=file.content_type or "",
+        file_bytes=file_bytes,
     )
-    db.add(material)
-    await db.commit()
-    await db.refresh(material)
+
+
+async def sync_blackboard_materials(
+    db: AsyncSession,
+    user: User,
+) -> list[MaterialInfo]:
+    cas_account = (getattr(user, "cas_account", None) or "").strip()
+    cas_password_encrypted = getattr(user, "cas_password_encrypted", None)
+    if not cas_account or not cas_password_encrypted:
+        raise PermissionError("CAS credentials not configured")
 
     try:
-        parsed = parse_document(str(file_path), content_type)
-        chunks = _chunk_text(parsed.text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
+        cas_password = decrypt(cas_password_encrypted)
+    except Exception as exc:
+        raise PermissionError(f"CAS credentials invalid: {type(exc).__name__}") from exc
 
-        # 学科分类：直接调 LLM，不依赖 Agent 工具框架
-        subject_type: SubjectType = "other"
+    bb_materials = await fetch_blackboard_course_materials(cas_account, cas_password)
+    existing = await db.scalars(select(Material).where(Material.user_id == user.user_id))
+    existing_names = {material.file_name for material in existing}
+
+    synced: list[MaterialInfo] = []
+    for item in bb_materials:
+        if item.file_name in existing_names:
+            continue
         try:
-            api_key = (
-                decrypt(user.llm_api_key_encrypted)
-                if user.llm_api_key_encrypted
-                else settings.DEEPSEEK_API_KEY
-            ) or None
-            subject_type = await rag_service.classify_subject_llm(parsed.text[:2000], api_key)
-            material.subject_type = subject_type
-        except Exception as e:
-            logger.warning("学科分类失败，回退到 other: %s", e)
-
-        if chunks:
-            add_chunks(subject_type, str(file_id), material.file_name, chunks)
-            logger.info("向量化完成: file=%s subject=%s chunks=%d", file_id, subject_type, len(chunks))
-
-        material.vectorized = True
-        await db.commit()
-    except Exception as e:
-        # 向量化失败不影响文件上传成功，仅保持 vectorized=False
-        logger.error("向量化流程失败 (file=%s): %s", file_id, e, exc_info=True)
-
-    return _to_schema(material)
+            info = await _create_material_from_bytes(
+                db=db,
+                user=user,
+                file_name=item.file_name,
+                content_type=item.file_type,
+                file_bytes=item.file_bytes,
+            )
+        except ValueError:
+            logger.info("跳过不支持的 Blackboard 课件: %s (%s)", item.file_name, item.file_type)
+            continue
+        synced.append(info)
+        existing_names.add(info.file_name)
+    return synced
 
 
 async def delete_material(
@@ -164,6 +155,80 @@ def _chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
         chunks.append(text[start:end])
         start += chunk_size - overlap
     return chunks if chunks else [text]
+
+
+def _normalize_content_type(file_name: str, content_type: str) -> str:
+    normalized = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized in ALLOWED_MIME_TYPES:
+        return normalized
+    guessed, _encoding = mimetypes.guess_type(file_name)
+    guessed = (guessed or "").lower()
+    if guessed in ALLOWED_MIME_TYPES:
+        return guessed
+    return normalized
+
+
+async def _create_material_from_bytes(
+    db: AsyncSession,
+    user: User,
+    file_name: str,
+    content_type: str,
+    file_bytes: bytes,
+) -> MaterialInfo:
+    normalized_type = _normalize_content_type(file_name, content_type)
+    if normalized_type not in ALLOWED_MIME_TYPES:
+        raise ValueError(f"Unsupported file type: {content_type or normalized_type}")
+
+    size_mb = len(file_bytes) / (1024 * 1024)
+    if size_mb > settings.MAX_UPLOAD_SIZE_MB:
+        raise ValueError(f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB")
+
+    file_id = uuid.uuid4()
+    suffix = Path(file_name or "file").suffix
+    user_dir = Path(settings.UPLOAD_DIR) / str(user.user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    file_path = user_dir / f"{file_id}{suffix}"
+    file_path.write_bytes(file_bytes)
+
+    material = Material(
+        file_id=file_id,
+        user_id=user.user_id,
+        file_name=file_name or "unknown",
+        file_type=normalized_type,
+        file_path=str(file_path.resolve()),
+        subject_type="other",
+        vectorized=False,
+    )
+    db.add(material)
+    await db.commit()
+    await db.refresh(material)
+
+    try:
+        parsed = parse_document(str(file_path), normalized_type)
+        chunks = _chunk_text(parsed.text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
+
+        subject_type: SubjectType = "other"
+        try:
+            api_key = (
+                decrypt(user.llm_api_key_encrypted)
+                if user.llm_api_key_encrypted
+                else settings.DEEPSEEK_API_KEY
+            ) or None
+            subject_type = await rag_service.classify_subject_llm(parsed.text[:2000], api_key)
+            material.subject_type = subject_type
+        except Exception as e:
+            logger.warning("学科分类失败，回退到 other: %s", e)
+
+        if chunks:
+            add_chunks(subject_type, str(file_id), material.file_name, chunks)
+            logger.info("向量化完成: file=%s subject=%s chunks=%d", file_id, subject_type, len(chunks))
+
+        material.vectorized = True
+        await db.commit()
+    except Exception as e:
+        logger.error("向量化流程失败 (file=%s): %s", file_id, e, exc_info=True)
+
+    return _to_schema(material)
 
 
 def _to_schema(material: Material) -> MaterialInfo:

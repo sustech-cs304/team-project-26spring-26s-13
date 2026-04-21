@@ -10,7 +10,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     httpx = None  # type: ignore[assignment]
 
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 
 
 def _cache_dir() -> Path:

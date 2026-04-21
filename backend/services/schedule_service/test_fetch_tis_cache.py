@@ -4,7 +4,8 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from backend.services.schedule_service.academic_calendar_models import CalendarOverrides
-from backend.services.schedule_service.constants import CourseOccurrence
+from backend.services.schedule_service.enums import CourseOccurrenceKind
+from backend.services.schedule_service.models import CourseOccurrence
 from backend.services.schedule_service.fetch_tis import (
     TisScheduleContext,
     fetch_course_schedule_context,
@@ -18,7 +19,7 @@ def _make_context(course_id: str, day: int) -> TisScheduleContext:
         start_at=datetime(2026, 3, day, 8, 0),
         end_at=datetime(2026, 3, day, 9, 50),
         location="Room 101",
-        kind="lecture",
+        kind=CourseOccurrenceKind.LECTURE,
         instructor="Teacher",
         notes=f"Course {course_id}",
     )

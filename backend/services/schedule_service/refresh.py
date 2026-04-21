@@ -5,9 +5,9 @@ from cryptography.fernet import InvalidToken
 from backend.schemas.agent import ScheduleData
 
 from .conflicts import detect_conflicts
-from .constants import _ensure_file_logging
 from .fetch_bb import fetch_blackboard
 from .fetch_tis import fetch_course_schedule
+from .log_utils import _ensure_file_logging
 
 
 async def refresh(db, user) -> ScheduleData:

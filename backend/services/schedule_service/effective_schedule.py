@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 
 from .academic_calendar_models import CalendarOverrides
-from .constants import CourseOccurrence
+from .models import CourseOccurrence
 from .fetch_tis import fetch_course_schedule_context
 
 

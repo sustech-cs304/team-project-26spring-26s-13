@@ -5,7 +5,7 @@ from collections import Counter
 from datetime import date, timedelta
 
 from backend.services.schedule_service.academic_calendar_models import CalendarOverrides
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 
 
 _YMD_RE = re.compile(r"(?P<y>20\d{2})[./\-](?P<m>\d{1,2})[./\-](?P<d>\d{1,2})")
