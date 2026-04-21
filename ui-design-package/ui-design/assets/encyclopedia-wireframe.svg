@@ -1,40 +1,97 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
-  <rect width="1400" height="900" fill="#fcfcfc"/>
-  <rect x="40" y="40" width="1320" height="820" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
-  <text x="80" y="95" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Campus Encyclopedia Wireframe</text>
-  <rect x="70" y="125" width="1260" height="3" fill="#222222"/>
+  <rect width="1400" height="900" fill="#f7f7f7"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#ffffff" stroke="#2a2a2a" stroke-width="3"/>
+  <text x="74" y="88" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#111111">UI Design - Campus QA Result</text>
+  <line x1="70" y1="108" x2="1330" y2="108" stroke="#222222" stroke-width="3"/>
 
-  <rect x="80" y="150" width="1240" height="70" rx="16" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
-  <text x="105" y="195" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Search Bar: credits, dorm policy, handbook rules, withdrawal, scholarship ...</text>
+  <text x="76" y="150" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" fill="#111111">Student Productivity Agent</text>
+  <text x="76" y="180" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#444444">Campus QA uses the same dashboard and returns a cited answer card in chat.</text>
 
-  <rect x="80" y="250" width="230" height="580" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
-  <text x="105" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Query Context</text>
-  <rect x="105" y="320" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="378" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="436" width="180" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="105" y="540" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Suggested filters:</text>
-  <text x="105" y="570" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">student handbook</text>
-  <text x="105" y="600" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">dormitory rules</text>
-  <text x="105" y="630" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">degree requirements</text>
+  <rect x="742" y="126" width="118" height="34" rx="9" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <text x="764" y="148" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">REST API</text>
+  <rect x="874" y="126" width="138" height="34" rx="9" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <text x="904" y="148" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Signed In</text>
+  <rect x="1028" y="120" width="76" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1118" y="120" width="92" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1224" y="120" width="104" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="1049" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Lang</text>
+  <text x="1142" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Settings</text>
+  <text x="1246" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Log Out</text>
 
-  <rect x="340" y="250" width="630" height="580" rx="18" fill="#f9f9f9" stroke="#333333" stroke-width="2"/>
-  <text x="370" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Answer Rendering</text>
-  <rect x="370" y="320" width="570" height="470" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <line x1="400" y1="370" x2="840" y2="370" stroke="#666666" stroke-width="3"/>
-  <line x1="400" y1="420" x2="890" y2="420" stroke="#666666" stroke-width="2"/>
-  <line x1="400" y1="455" x2="865" y2="455" stroke="#666666" stroke-width="2"/>
-  <line x1="400" y1="490" x2="880" y2="490" stroke="#666666" stroke-width="2"/>
-  <line x1="400" y1="550" x2="790" y2="550" stroke="#666666" stroke-width="2"/>
-  <line x1="400" y1="585" x2="850" y2="585" stroke="#666666" stroke-width="2"/>
-  <line x1="400" y1="620" x2="870" y2="620" stroke="#666666" stroke-width="2"/>
-  <rect x="400" y="675" width="180" height="48" rx="10" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
-  <rect x="595" y="675" width="180" height="48" rx="10" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <rect x="70" y="210" width="304" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="96" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Left Sidebar</text>
 
-  <rect x="1000" y="250" width="320" height="580" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
-  <text x="1025" y="290" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Sources and Follow-ups</text>
-  <rect x="1025" y="320" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1025" y="415" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1025" y="510" width="270" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1025" y="645" width="270" height="48" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1025" y="705" width="270" height="48" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="94" y="270" width="256" height="112" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="300" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Workspace</text>
+  <text x="112" y="327" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#222222">Campus QA conversation</text>
+  <rect x="112" y="344" width="64" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <rect x="184" y="344" width="86" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <rect x="278" y="344" width="54" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <text x="124" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Chats</text>
+  <text x="196" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Sources</text>
+  <text x="290" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Trace</text>
+
+  <rect x="94" y="398" width="256" height="206" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="428" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">History</text>
+  <rect x="238" y="406" width="48" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <rect x="292" y="406" width="40" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="247" y="424" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Del</text>
+  <text x="301" y="424" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">New</text>
+  <rect x="112" y="472" width="220" height="42" rx="10" fill="#e9f2ff" stroke="#4b78aa" stroke-width="2"/>
+  <rect x="112" y="524" width="220" height="42" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="112" y="576" width="220" height="42" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="128" y="498" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">What are credit requirements?</text>
+  <text x="128" y="548" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Dormitory policy question</text>
+  <text x="128" y="600" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Scholarship handbook lookup</text>
+
+  <rect x="94" y="620" width="256" height="182" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="650" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Read Materials</text>
+  <text x="112" y="676" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Knowledge files for context</text>
+  <rect x="112" y="694" width="220" height="36" rx="9" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="112" y="738" width="220" height="36" rx="9" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="126" y="716" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">student_handbook_2026.pdf</text>
+  <text x="126" y="760" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">dormitory_policy.pdf</text>
+
+  <rect x="394" y="210" width="610" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="420" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Center Chat Workspace</text>
+
+  <rect x="420" y="270" width="558" height="360" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="440" y="300" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Chat Flow with Campus QA Card</text>
+  <rect x="690" y="322" width="264" height="84" rx="14" fill="#f6f6f6" stroke="#666666" stroke-width="1.5"/>
+  <text x="712" y="348" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">You  Campus QA</text>
+  <text x="712" y="370" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">What are the graduation credit requirements?</text>
+
+  <rect x="444" y="430" width="496" height="174" rx="16" fill="#ffffff" stroke="#4b78aa" stroke-width="2"/>
+  <text x="466" y="458" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#111111">Agent  Campus QA Result</text>
+  <text x="466" y="484" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Structured answer with markdown-style paragraphs</text>
+  <rect x="466" y="496" width="448" height="18" rx="6" fill="#f4f4f4" stroke="#888888" stroke-width="1.1"/>
+  <rect x="466" y="522" width="432" height="18" rx="6" fill="#f4f4f4" stroke="#888888" stroke-width="1.1"/>
+  <rect x="466" y="548" width="320" height="18" rx="6" fill="#f4f4f4" stroke="#888888" stroke-width="1.1"/>
+  <text x="466" y="584" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Citations: handbook section, policy page, official source</text>
+
+  <rect x="420" y="648" width="558" height="154" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="440" y="678" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Composer</text>
+  <rect x="440" y="694" width="518" height="82" rx="12" fill="#fcfcfc" stroke="#777777" stroke-width="1.5"/>
+  <rect x="440" y="784" width="132" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="462" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Campus QA  v</text>
+  <rect x="820" y="784" width="64" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <rect x="894" y="784" width="64" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="835" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Clear</text>
+  <text x="914" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Send</text>
+
+  <rect x="1024" y="210" width="300" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="1050" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Thought Trace</text>
+  <text x="1050" y="274" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Retrieval and reasoning stay visible</text>
+  <rect x="1050" y="294" width="248" height="82" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="1050" y="388" width="248" height="82" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="1050" y="482" width="248" height="82" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="1066" y="322" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Observation  |  DONE</text>
+  <text x="1066" y="346" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Read user question and selected files</text>
+  <text x="1066" y="416" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Retrieval  |  DONE</text>
+  <text x="1066" y="440" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Search handbook chunks and citations</text>
+  <text x="1066" y="510" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Answering  |  DONE</text>
+  <text x="1066" y="534" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Compose grounded response for the card</text>
+  <rect x="1050" y="652" width="248" height="96" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="1066" y="680" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#111111">No Page Switch</text>
+  <text x="1066" y="706" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Campus QA stays inside the same chat workspace</text>
 </svg>

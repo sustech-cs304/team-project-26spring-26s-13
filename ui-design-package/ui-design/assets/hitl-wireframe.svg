@@ -1,26 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
-  <rect width="1400" height="900" fill="#ebebeb"/>
-  <rect x="80" y="100" width="1240" height="700" rx="22" fill="#f6f6f6" stroke="#888888" stroke-width="2"/>
-  <rect x="0" y="0" width="1400" height="900" fill="#000000" opacity="0.18"/>
+  <rect width="1400" height="900" fill="#ececec"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#ffffff" stroke="#2a2a2a" stroke-width="3"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#111111" opacity="0.12"/>
 
-  <rect x="350" y="150" width="700" height="560" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
-  <text x="390" y="205" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Human-in-the-Loop Authorization</text>
-  <rect x="390" y="230" width="620" height="3" fill="#222222"/>
+  <text x="74" y="88" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#111111">UI Design - HITL Dialog</text>
+  <line x1="70" y1="108" x2="1330" y2="108" stroke="#222222" stroke-width="3"/>
+  <text x="76" y="150" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#444444">Risky actions pause the dashboard and require explicit approval.</text>
 
-  <text x="390" y="275" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Risk Level</text>
-  <rect x="520" y="248" width="140" height="38" rx="10" fill="#f7f7f7" stroke="#444444" stroke-width="2"/>
+  <rect x="78" y="194" width="286" height="620" rx="18" fill="#f3f3f3" stroke="#888888" stroke-width="2" opacity="0.7"/>
+  <rect x="392" y="194" width="612" height="620" rx="18" fill="#f3f3f3" stroke="#888888" stroke-width="2" opacity="0.7"/>
+  <rect x="1032" y="194" width="290" height="620" rx="18" fill="#f3f3f3" stroke="#888888" stroke-width="2" opacity="0.7"/>
 
-  <text x="390" y="330" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Action Summary</text>
-  <rect x="390" y="345" width="620" height="80" rx="12" fill="#fafafa" stroke="#444444" stroke-width="2"/>
+  <text x="110" y="232" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#555555">Background Dashboard</text>
+  <text x="424" y="232" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#555555">Chat Flow Paused</text>
+  <text x="1062" y="232" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#555555">Thought Trace</text>
 
-  <text x="390" y="470" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Reason</text>
-  <rect x="390" y="485" width="620" height="70" rx="12" fill="#fafafa" stroke="#444444" stroke-width="2"/>
+  <rect x="286" y="188" width="720" height="524" rx="24" fill="#ffffff" stroke="#222222" stroke-width="3"/>
+  <text x="340" y="240" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#111111">HITL Authorization</text>
+  <text x="340" y="276" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#444444">The agent has reached a high-risk operation and needs approval.</text>
 
-  <text x="390" y="600" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#222222">Affected Targets</text>
-  <rect x="390" y="615" width="620" height="40" rx="10" fill="#fafafa" stroke="#444444" stroke-width="2"/>
-  <rect x="390" y="665" width="620" height="40" rx="10" fill="#fafafa" stroke="#444444" stroke-width="2"/>
+  <rect x="340" y="304" width="148" height="36" rx="10" fill="#fff3e0" stroke="#b97a22" stroke-width="2"/>
+  <text x="376" y="327" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#7f4d00">Risk: High</text>
 
-  <rect x="730" y="735" width="120" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="875" y="735" width="135" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="350" y="790" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Modal interrupt for risky file deletion or schedule overwrite actions</text>
+  <rect x="340" y="360" width="612" height="88" rx="16" fill="#fafafa" stroke="#666666" stroke-width="1.8"/>
+  <text x="366" y="392" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#111111">Action Summary</text>
+  <text x="366" y="420" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#444444">The agent is about to modify local schedule data or trigger a system-level action.</text>
+
+  <rect x="340" y="466" width="304" height="146" rx="16" fill="#fafafa" stroke="#666666" stroke-width="1.8"/>
+  <text x="366" y="496" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#111111">Reason</text>
+  <text x="366" y="526" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#444444">A tool call requested a write action</text>
+  <text x="366" y="552" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#444444">that may affect files, schedule entries,</text>
+  <text x="366" y="578" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#444444">or personal data.</text>
+
+  <rect x="676" y="466" width="276" height="146" rx="16" fill="#fafafa" stroke="#666666" stroke-width="1.8"/>
+  <text x="702" y="496" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#111111">Payload Preview</text>
+  <rect x="702" y="516" width="224" height="22" rx="6" fill="#f1f1f1" stroke="#888888" stroke-width="1.2"/>
+  <rect x="702" y="548" width="204" height="22" rx="6" fill="#f1f1f1" stroke="#888888" stroke-width="1.2"/>
+  <rect x="702" y="580" width="176" height="22" rx="6" fill="#f1f1f1" stroke="#888888" stroke-width="1.2"/>
+
+  <rect x="586" y="638" width="138" height="42" rx="12" fill="#ffffff" stroke="#777777" stroke-width="2"/>
+  <rect x="740" y="638" width="148" height="42" rx="12" fill="#1f4f8a" stroke="#1f4f8a" stroke-width="2"/>
+  <text x="632" y="665" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#111111">Reject</text>
+  <text x="787" y="665" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#ffffff">Approve</text>
+
+  <text x="1038" y="300" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#666666">Pending gate in the trace</text>
+  <rect x="1040" y="322" width="226" height="92" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5" opacity="0.8"/>
+  <text x="1058" y="352" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#333333">Tool Use  |  WAITING</text>
+  <text x="1058" y="378" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#555555">Waiting for user approval</text>
+
+  <text x="420" y="770" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#444444">This dialog belongs to the existing dashboard instead of a separate page.</text>
 </svg>

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#ececec"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#ffffff" stroke="#2a2a2a" stroke-width="3"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#111111" opacity="0.10"/>
+
+  <text x="74" y="88" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#111111">UI Design - Settings Dialog</text>
+  <line x1="70" y1="108" x2="1330" y2="108" stroke="#222222" stroke-width="3"/>
+  <text x="76" y="150" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#444444">Settings opens as a dashboard modal instead of a standalone page.</text>
+
+  <rect x="86" y="194" width="1228" height="620" rx="20" fill="#f3f3f3" stroke="#888888" stroke-width="2" opacity="0.65"/>
+  <text x="116" y="234" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#666666">Background Dashboard</text>
+
+  <rect x="330" y="160" width="620" height="610" rx="24" fill="#ffffff" stroke="#222222" stroke-width="3"/>
+  <text x="384" y="214" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111111">Settings</text>
+  <text x="384" y="246" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#555555">Manage external service connections for the current workspace.</text>
+
+  <rect x="384" y="280" width="520" height="200" rx="18" fill="#fafafa" stroke="#666666" stroke-width="1.8"/>
+  <text x="414" y="318" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#111111">SUSTech CAS</text>
+  <text x="414" y="348" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Used for schedule sync and campus system authentication.</text>
+  <text x="414" y="388" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">CAS Account</text>
+  <rect x="414" y="398" width="452" height="36" rx="8" fill="#ffffff" stroke="#888888" stroke-width="1.4"/>
+  <text x="414" y="452" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">CAS Password</text>
+  <rect x="414" y="462" width="452" height="36" rx="8" fill="#ffffff" stroke="#888888" stroke-width="1.4"/>
+  <rect x="716" y="516" width="150" height="34" rx="10" fill="#1f4f8a" stroke="#1f4f8a" stroke-width="2"/>
+  <text x="759" y="538" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#ffffff">Save CAS</text>
+
+  <rect x="384" y="500" width="520" height="176" rx="18" fill="#fafafa" stroke="#666666" stroke-width="1.8"/>
+  <text x="414" y="538" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#111111">LLM API Key</text>
+  <text x="414" y="568" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Used for the remote model connection configured by the backend.</text>
+  <text x="414" y="608" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">API Key</text>
+  <rect x="414" y="618" width="452" height="36" rx="8" fill="#ffffff" stroke="#888888" stroke-width="1.4"/>
+  <rect x="588" y="690" width="98" height="34" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.6"/>
+  <text x="618" y="712" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Close</text>
+  <rect x="716" y="690" width="150" height="34" rx="10" fill="#1f4f8a" stroke="#1f4f8a" stroke-width="2"/>
+  <text x="759" y="712" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#ffffff">Save Key</text>
+
+  <text x="414" y="750" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#666666">Separate save actions match the frontend behavior.</text>
+</svg>

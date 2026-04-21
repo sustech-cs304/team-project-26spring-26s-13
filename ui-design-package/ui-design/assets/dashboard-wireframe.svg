@@ -1,42 +1,100 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
-  <rect width="1400" height="900" fill="#fcfcfc"/>
-  <rect x="40" y="40" width="1320" height="820" rx="24" fill="#ffffff" stroke="#2f2f2f" stroke-width="3"/>
-  <text x="80" y="95" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#111111">Student Productivity Agent - Main Dashboard Wireframe</text>
-  <rect x="70" y="125" width="1260" height="3" fill="#222222"/>
+  <rect width="1400" height="900" fill="#f7f7f7"/>
+  <rect x="36" y="36" width="1328" height="828" rx="24" fill="#ffffff" stroke="#2a2a2a" stroke-width="3"/>
+  <text x="74" y="88" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#111111">UI Design - Main Dashboard</text>
+  <line x1="70" y1="108" x2="1330" y2="108" stroke="#222222" stroke-width="3"/>
 
-  <rect x="80" y="150" width="280" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
-  <text x="105" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Left Sidebar</text>
-  <text x="105" y="225" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Conversation History</text>
-  <rect x="105" y="242" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="307" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="372" width="230" height="55" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="105" y="465" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Loaded Materials</text>
-  <rect x="105" y="482" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="542" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="602" width="230" height="50" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="105" y="700" width="110" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="225" y="700" width="110" height="44" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="105" y="780" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Quick access: new chat / add file / settings</text>
+  <text x="76" y="150" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" fill="#111111">Student Productivity Agent</text>
+  <text x="76" y="180" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#444444">Desktop workspace for agent loops, HITL approval, schedule sync, and campus QA.</text>
 
-  <rect x="390" y="150" width="610" height="680" rx="18" fill="#f9f9f9" stroke="#333333" stroke-width="2"/>
-  <text x="420" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Center Workspace</text>
-  <text x="420" y="225" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Chat Conversation</text>
-  <rect x="420" y="245" width="550" height="80" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="480" y="340" width="490" height="90" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="420" y="445" width="430" height="80" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="470" y="540" width="500" height="95" rx="14" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="420" y="695" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#222222">Mode Selector + Composer</text>
-  <rect x="420" y="715" width="140" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="575" y="715" width="285" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="875" y="715" width="95" height="46" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="420" y="795" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Primary interaction flow: ask - observe result - approve if needed</text>
+  <rect x="770" y="126" width="110" height="34" rx="9" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <text x="788" y="148" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">REST API</text>
+  <rect x="892" y="126" width="138" height="34" rx="9" fill="#f4f4f4" stroke="#444444" stroke-width="2"/>
+  <text x="922" y="148" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Signed In</text>
+  <rect x="1046" y="120" width="76" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1136" y="120" width="92" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <rect x="1242" y="120" width="86" height="42" rx="10" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="1067" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Lang</text>
+  <text x="1160" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Settings</text>
+  <text x="1264" y="146" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111111">Log Out</text>
 
-  <rect x="1030" y="150" width="290" height="680" rx="18" fill="#f7f7f7" stroke="#333333" stroke-width="2"/>
-  <text x="1055" y="190" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">Thought Trace</text>
-  <rect x="1055" y="220" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1055" y="315" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1055" y="410" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1055" y="505" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <rect x="1055" y="600" width="240" height="80" rx="12" fill="#ffffff" stroke="#444444" stroke-width="2"/>
-  <text x="1055" y="745" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#555555">Observation / Planning / Tool Use / Result</text>
+  <rect x="70" y="210" width="304" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="96" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Left Sidebar</text>
+
+  <rect x="94" y="270" width="256" height="112" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="300" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Workspace</text>
+  <text x="112" y="327" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#222222">Current session overview</text>
+  <rect x="112" y="344" width="72" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <rect x="192" y="344" width="78" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <rect x="278" y="344" width="54" height="24" rx="8" fill="#f4f4f4" stroke="#666666" stroke-width="1.5"/>
+  <text x="122" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Chats</text>
+  <text x="205" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Materials</text>
+  <text x="291" y="360" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Trace</text>
+
+  <rect x="94" y="398" width="256" height="206" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="428" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">History</text>
+  <rect x="238" y="406" width="48" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <rect x="292" y="406" width="40" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="247" y="424" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Del</text>
+  <text x="301" y="424" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">New</text>
+  <text x="112" y="454" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Recent sessions from sidebar</text>
+  <rect x="112" y="472" width="220" height="42" rx="10" fill="#e9f2ff" stroke="#4b78aa" stroke-width="2"/>
+  <rect x="112" y="524" width="220" height="42" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="112" y="576" width="220" height="42" rx="10" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="128" y="498" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Schedule sync issue</text>
+  <text x="128" y="548" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Campus handbook QA</text>
+  <text x="128" y="600" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">General planning chat</text>
+
+  <rect x="94" y="620" width="256" height="182" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="112" y="650" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Read Materials</text>
+  <text x="112" y="676" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Loaded or prepared files</text>
+  <rect x="112" y="694" width="220" height="36" rx="9" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="112" y="738" width="220" height="36" rx="9" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="126" y="716" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">student_handbook_2026.pdf</text>
+  <text x="126" y="760" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">week5_notes.md</text>
+  <rect x="112" y="784" width="220" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="190" y="803" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Add Resource</text>
+
+  <rect x="394" y="210" width="610" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="420" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Center Chat Workspace</text>
+
+  <rect x="420" y="270" width="558" height="360" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="440" y="300" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Agent Chat</text>
+  <rect x="444" y="322" width="264" height="72" rx="14" fill="#ffffff" stroke="#888888" stroke-width="1.5"/>
+  <text x="462" y="346" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Agent  Chat</text>
+  <text x="462" y="368" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Welcome card and general agent reply</text>
+  <rect x="710" y="414" width="244" height="88" rx="14" fill="#f6f6f6" stroke="#666666" stroke-width="1.5"/>
+  <text x="730" y="440" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">You  Chat</text>
+  <text x="730" y="462" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">User prompt from the current mode</text>
+  <rect x="444" y="520" width="330" height="86" rx="14" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="464" y="546" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111111">Agent  Result Card</text>
+  <text x="464" y="568" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Schedule or Campus QA card is rendered here</text>
+
+  <rect x="420" y="648" width="558" height="154" rx="16" fill="#ffffff" stroke="#444444" stroke-width="2"/>
+  <text x="440" y="678" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#111111">Composer</text>
+  <rect x="440" y="694" width="518" height="82" rx="12" fill="#fcfcfc" stroke="#777777" stroke-width="1.5"/>
+  <rect x="440" y="784" width="86" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="466" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Chat  v</text>
+  <rect x="820" y="784" width="64" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <rect x="894" y="784" width="64" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="835" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Clear</text>
+  <text x="914" y="803" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Send</text>
+
+  <rect x="1024" y="210" width="300" height="612" rx="18" fill="#fbfbfb" stroke="#333333" stroke-width="2"/>
+  <text x="1050" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#111111">Thought Trace</text>
+  <text x="1050" y="274" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#555555">Always visible reasoning context</text>
+  <rect x="1050" y="294" width="248" height="84" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="1050" y="390" width="248" height="84" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <rect x="1050" y="486" width="248" height="84" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="1066" y="322" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Observation  |  DONE</text>
+  <text x="1066" y="348" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Read user goal and working context</text>
+  <text x="1066" y="418" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Reasoning  |  DONE</text>
+  <text x="1066" y="444" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Choose route and prepare tool call</text>
+  <text x="1066" y="514" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#111111">Tool Use  |  RUNNING</text>
+  <text x="1066" y="540" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Schedule sync, QA retrieval, or HITL</text>
+  <rect x="1050" y="650" width="248" height="96" rx="12" fill="#ffffff" stroke="#777777" stroke-width="1.5"/>
+  <text x="1066" y="678" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#111111">Pending HITL Gate</text>
+  <text x="1066" y="706" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#444444">Live approval entry point for risky actions</text>
+  <rect x="1100" y="758" width="156" height="28" rx="8" fill="#ffffff" stroke="#666666" stroke-width="1.5"/>
+  <text x="1140" y="777" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#111111">Open HITL Dialog</text>
 </svg>
