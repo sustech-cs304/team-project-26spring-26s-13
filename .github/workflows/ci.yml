@@ -58,7 +58,7 @@ jobs:
         SPA_API_BASE_URL: http://127.0.0.1:8000
         SPA_JWT_SECRET: supersecret_test_key
       run: |
-        pytest tests/ --cov=backend --cov-report=xml
+        python -m pytest tests/ --cov=backend --cov-report=xml
         
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4
