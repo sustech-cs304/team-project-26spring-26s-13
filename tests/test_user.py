@@ -8,8 +8,8 @@ from httpx import AsyncClient
 
 from tests.conftest import SAMPLE_USER
 
-
 # ── GET /api/user/profile ─────────────────────────────────────────────────────
+
 
 async def test_get_profile_success(async_client: AsyncClient, auth_headers: dict):
     """Authenticated GET /api/user/profile → 200 with correct user data."""
@@ -41,7 +41,10 @@ async def test_get_profile_invalid_token(async_client: AsyncClient):
 
 # ── PUT /api/user/profile ─────────────────────────────────────────────────────
 
-async def test_update_profile_display_name(async_client: AsyncClient, auth_headers: dict):
+
+async def test_update_profile_display_name(
+    async_client: AsyncClient, auth_headers: dict
+):
     """PUT /api/user/profile updating display_name → 200 with new name."""
     resp = await async_client.put(
         "/api/user/profile",

@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 
-
 # ── POST /api/schedule/refresh ────────────────────────────────────────────────
+
 
 async def test_refresh_schedule_unauthenticated(async_client: AsyncClient):
     """POST /api/schedule/refresh without token → 401/403."""

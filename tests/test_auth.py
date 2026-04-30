@@ -7,8 +7,8 @@ from httpx import AsyncClient
 
 from tests.conftest import SAMPLE_USER
 
-
 # ── Register ──────────────────────────────────────────────────────────────────
+
 
 async def test_register_success(async_client: AsyncClient):
     """POST /api/auth/register with valid data → 201 + token."""
@@ -59,6 +59,7 @@ async def test_register_duplicate_username(async_client: AsyncClient):
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 
+
 async def test_login_success(async_client: AsyncClient, registered_user: dict):
     """POST /api/auth/login with correct credentials → 200 + token."""
     resp = await async_client.post(
@@ -90,6 +91,7 @@ async def test_login_nonexistent_user(async_client: AsyncClient):
 
 
 # ── Logout ────────────────────────────────────────────────────────────────────
+
 
 async def test_logout(async_client: AsyncClient, auth_headers: dict):
     """POST /api/auth/logout → 204 No Content (stateless JWT)."""

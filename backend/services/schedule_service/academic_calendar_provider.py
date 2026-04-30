@@ -11,11 +11,23 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     httpx = None  # type: ignore[assignment]
 
-from backend.services.schedule_service.academic_calendar_extract import extract_calendar_text_from_pdf
-from backend.services.schedule_service.academic_calendar_fetch import download_calendar_asset
-from backend.services.schedule_service.academic_calendar_models import CalendarOverrides, CalendarPdfRef
-from backend.services.schedule_service.academic_calendar_parse import parse_calendar_overrides
-from backend.services.schedule_service.academic_calendar_source import discover_calendar_pdfs, is_calendar_asset_url
+from backend.services.schedule_service.academic_calendar_extract import (
+    extract_calendar_text_from_pdf,
+)
+from backend.services.schedule_service.academic_calendar_fetch import (
+    download_calendar_asset,
+)
+from backend.services.schedule_service.academic_calendar_models import (
+    CalendarOverrides,
+    CalendarPdfRef,
+)
+from backend.services.schedule_service.academic_calendar_parse import (
+    parse_calendar_overrides,
+)
+from backend.services.schedule_service.academic_calendar_source import (
+    discover_calendar_pdfs,
+    is_calendar_asset_url,
+)
 from backend.services.schedule_service.constants import logger
 
 
@@ -32,7 +44,9 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _read_cached_overrides(path: Path, *, max_age: timedelta) -> CalendarOverrides | None:
+def _read_cached_overrides(
+    path: Path, *, max_age: timedelta
+) -> CalendarOverrides | None:
     if not path.exists() or path.stat().st_size <= 0:
         return None
     mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
@@ -66,8 +80,12 @@ def _write_cached_overrides(path: Path, overrides: CalendarOverrides) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(overrides)
     payload["cancel_days"] = sorted([d.isoformat() for d in overrides.cancel_days])
-    payload["move_rules"] = [[a.isoformat(), b.isoformat()] for a, b in overrides.move_rules]
-    payload["week1_monday"] = overrides.week1_monday.isoformat() if overrides.week1_monday else None
+    payload["move_rules"] = [
+        [a.isoformat(), b.isoformat()] for a, b in overrides.move_rules
+    ]
+    payload["week1_monday"] = (
+        overrides.week1_monday.isoformat() if overrides.week1_monday else None
+    )
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -114,7 +132,11 @@ async def get_calendar_overrides(
             logger.info("calendar.provider: overrides_cache_hit path=%s", cache_path)
             return cached
 
-    page_url = (page_url or os.getenv("SUSTECH_CALENDAR_PAGE_URL") or "https://sustech.edu.cn/zh/academic-calendar.html").strip()
+    page_url = (
+        page_url
+        or os.getenv("SUSTECH_CALENDAR_PAGE_URL")
+        or "https://sustech.edu.cn/zh/academic-calendar.html"
+    ).strip()
     if not page_url:
         raise ValueError("page_url is required")
 
@@ -125,7 +147,9 @@ async def get_calendar_overrides(
             pdfs = await discover_calendar_pdfs(page_url=page_url, client=None)
             pdf_ref = _pick_best_pdf(pdfs)
 
-        pdf_path = await download_calendar_asset(pdf_ref.url, client=None, force=force_refresh)
+        pdf_path = await download_calendar_asset(
+            pdf_ref.url, client=None, force=force_refresh
+        )
         extracted = await extract_calendar_text_from_pdf(pdf_path)
         overrides = parse_calendar_overrides(
             extracted.text,
@@ -142,7 +166,9 @@ async def get_calendar_overrides(
                 pdfs = await discover_calendar_pdfs(page_url=page_url, client=client)
                 pdf_ref = _pick_best_pdf(pdfs)
 
-            pdf_path = await download_calendar_asset(pdf_ref.url, client=client, force=force_refresh)
+            pdf_path = await download_calendar_asset(
+                pdf_ref.url, client=client, force=force_refresh
+            )
             extracted = await extract_calendar_text_from_pdf(pdf_path)
             overrides = parse_calendar_overrides(
                 extracted.text,

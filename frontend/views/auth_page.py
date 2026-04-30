@@ -6,8 +6,12 @@ Frontend Relevant/views/auth_page.py
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QLabel, QLineEdit, QPushButton, QTabWidget,
-    QVBoxLayout, QWidget,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from frontend.api.client import APIError, api_client

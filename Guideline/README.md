@@ -559,26 +559,26 @@ black>=24.0.0
 在项目根目录下执行（需先激活 conda 环境）：
 
 ```bash
-# 运行全部测试
-pytest tests/
+# 运行全部测试（必须用 python -m pytest，否则 backend 模块找不到）
+python -m pytest tests/
 
 # 带覆盖率报告
-pytest tests/ --cov=backend --cov-report=term-missing
+python -m pytest tests/ --cov=backend --cov-report=term-missing
 
 # 生成 XML 覆盖率报告（CI 用）
-pytest tests/ --cov=backend --cov-report=xml
+python -m pytest tests/ --cov=backend --cov-report=xml
 
 # 只运行某个文件
-pytest tests/test_auth.py
+python -m pytest tests/test_auth.py
 
 # 只运行某个测试函数
-pytest tests/test_auth.py::test_register_success
+python -m pytest tests/test_auth.py::test_register_success
 
 # 失败立刻停止（调试用）
-pytest tests/ -x
+python -m pytest tests/ -x
 
 # 详细输出
-pytest tests/ -v
+python -m pytest tests/ -v
 ```
 
 > **注意**：测试运行后会在项目根目录生成 `test.db`（SQLite 测试数据库），已加入 `.gitignore`，不应提交。
@@ -740,7 +740,7 @@ CI 配置位于 `.github/workflows/ci.yml`，每次向 `main` 分支 push 或发
 3. pip install -r requirements.txt -r requirements-dev.txt
 4. black --check .          # 格式检查
 5. flake8 .                 # Lint 检查
-6. pytest tests/ --cov=backend --cov-report=xml
+6. python -m pytest tests/ --cov=backend --cov-report=xml
 7. 上传覆盖率报告到 Codecov
 ```
 
@@ -751,7 +751,7 @@ CI 配置位于 `.github/workflows/ci.yml`，每次向 `main` 分支 push 或发
 ```bash
 black --check .
 flake8 .
-pytest tests/ --cov=backend --cov-report=term-missing
+python -m pytest tests/ --cov=backend --cov-report=term-missing
 ```
 
 ---

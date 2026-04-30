@@ -82,7 +82,12 @@ def parse_personal_events(payload: object) -> list[FixedPersonalEvent]:
         if not isinstance(item, dict):
             continue
 
-        title = str(item.get("title") or item.get("name") or item.get("summary") or "").strip() or "TODO"
+        title = (
+            str(
+                item.get("title") or item.get("name") or item.get("summary") or ""
+            ).strip()
+            or "TODO"
+        )
 
         start_raw = (
             item.get("start_at")
@@ -108,7 +113,11 @@ def parse_personal_events(payload: object) -> list[FixedPersonalEvent]:
         if location is not None:
             location = str(location).strip() or None
 
-        events.append(FixedPersonalEvent(title=title, start_at=start_at, end_at=end_at, location=location))
+        events.append(
+            FixedPersonalEvent(
+                title=title, start_at=start_at, end_at=end_at, location=location
+            )
+        )
 
     events.sort(key=lambda e: (e.start_at, e.end_at, e.title))
     return events
@@ -320,8 +329,12 @@ def detect_overlaps_with_personal(
             )
         )
 
-    courses_sorted = sorted(normalized_courses, key=lambda o: (o.start_at, o.end_at, o.course_id))
-    personal_sorted = sorted(normalized_personal, key=lambda p: (p.start_at, p.end_at, p.title))
+    courses_sorted = sorted(
+        normalized_courses, key=lambda o: (o.start_at, o.end_at, o.course_id)
+    )
+    personal_sorted = sorted(
+        normalized_personal, key=lambda p: (p.start_at, p.end_at, p.title)
+    )
 
     i = 0
     for p in personal_sorted:
@@ -345,21 +358,30 @@ def detect_overlaps_with_personal(
                     parts.append(f"course_location={o.location}")
                 if p.location:
                     parts.append(f"todo_location={p.location}")
-                conflicts.append(ScheduleConflict(title=p.title, detail=" ".join(parts)))
+                conflicts.append(
+                    ScheduleConflict(title=p.title, detail=" ".join(parts))
+                )
             j += 1
 
     if deadline_mode not in {"point", "window"}:
         deadline_mode = "point"
 
-    deadlines_sorted = sorted(normalized_deadlines, key=lambda d: (d.due_at, d.course_id, d.title))
+    deadlines_sorted = sorted(
+        normalized_deadlines, key=lambda d: (d.due_at, d.course_id, d.title)
+    )
     di = 0
     for p in personal_sorted:
         if deadline_mode == "window":
             window_start = p.start_at - deadline_window
-            while di < len(deadlines_sorted) and deadlines_sorted[di].due_at <= window_start:
+            while (
+                di < len(deadlines_sorted)
+                and deadlines_sorted[di].due_at <= window_start
+            ):
                 di += 1
         else:
-            while di < len(deadlines_sorted) and deadlines_sorted[di].due_at < p.start_at:
+            while (
+                di < len(deadlines_sorted) and deadlines_sorted[di].due_at < p.start_at
+            ):
                 di += 1
 
         dj = di
@@ -386,7 +408,9 @@ def detect_overlaps_with_personal(
                 ]
                 if d.url:
                     parts.append(f"url={d.url}")
-                conflicts.append(ScheduleConflict(title=p.title, detail=" ".join(parts)))
+                conflicts.append(
+                    ScheduleConflict(title=p.title, detail=" ".join(parts))
+                )
             dj += 1
 
     events_with_time.sort(key=lambda x: x[0])

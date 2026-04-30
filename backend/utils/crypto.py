@@ -15,6 +15,7 @@ from backend.config import settings
 # 延迟初始化，避免模块加载时 settings 未就绪
 _fernet: Fernet | None = None
 
+
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is None:
@@ -26,8 +27,11 @@ def _get_fernet() -> Fernet:
         try:
             _fernet = Fernet(key.encode())
         except Exception as exc:
-            raise RuntimeError("Invalid FERNET_KEY. It must be a urlsafe base64-encoded 32-byte key.") from exc
+            raise RuntimeError(
+                "Invalid FERNET_KEY. It must be a urlsafe base64-encoded 32-byte key."
+            ) from exc
     return _fernet
+
 
 def encrypt(plaintext: str) -> bytes:
     """
@@ -38,6 +42,7 @@ def encrypt(plaintext: str) -> bytes:
         Fernet 加密后的字节串
     """
     return _get_fernet().encrypt(plaintext.encode("utf-8"))
+
 
 def decrypt(ciphertext: bytes) -> str:
     """

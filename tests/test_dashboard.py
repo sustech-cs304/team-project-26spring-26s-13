@@ -7,8 +7,8 @@ from httpx import AsyncClient
 
 from tests.conftest import SAMPLE_USER
 
-
 # ── GET /api/dashboard/bootstrap ─────────────────────────────────────────────
+
 
 async def test_bootstrap_unauthenticated(async_client: AsyncClient):
     """GET /api/dashboard/bootstrap without token → 401/403."""

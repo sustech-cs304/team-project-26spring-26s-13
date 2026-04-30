@@ -26,8 +26,12 @@ def extract_scheduler_intent(prompt: str) -> SchedulerIntentProfile:
         text,
         ("课表", "课程", "上课", "安排", "schedule", "course", "timetable", "class"),
     )
-    asks_specific_date = _contains_any(text, ("年", "月", "日", "202", "-")) and asks_schedule
-    asks_first_slot = _contains_any(text, ("第一节", "第1节", "first class", "first course"))
+    asks_specific_date = (
+        _contains_any(text, ("年", "月", "日", "202", "-")) and asks_schedule
+    )
+    asks_first_slot = _contains_any(
+        text, ("第一节", "第1节", "first class", "first course")
+    )
     asks_conflict_decision = _contains_any(
         text,
         ("冲突", "重叠", "撞课", "conflict", "overlap"),
@@ -45,7 +49,9 @@ def extract_scheduler_intent(prompt: str) -> SchedulerIntentProfile:
     )
 
 
-def validate_scheduler_response(context: ResponseValidationContext) -> ValidationIssue | None:
+def validate_scheduler_response(
+    context: ResponseValidationContext,
+) -> ValidationIssue | None:
     intent = extract_scheduler_intent(context.user_prompt)
     answer = context.assistant_content or ""
     tool_names = set(context.tool_names)
@@ -56,7 +62,14 @@ def validate_scheduler_response(context: ResponseValidationContext) -> Validatio
     if intent.asks_conflict_decision:
         if not _contains_any(
             answer,
-            ("会存在时间冲突", "不会与课表产生时间冲突", "存在时间冲突", "不会冲突", "有冲突", "无冲突"),
+            (
+                "会存在时间冲突",
+                "不会与课表产生时间冲突",
+                "存在时间冲突",
+                "不会冲突",
+                "有冲突",
+                "无冲突",
+            ),
         ):
             return ValidationIssue(
                 code="scheduler_missing_conflict_decision",
@@ -64,14 +77,18 @@ def validate_scheduler_response(context: ResponseValidationContext) -> Validatio
             )
 
     if intent.asks_first_slot:
-        if not _contains_any(answer, ("第一节", "第1节", "当天第一节课", "首门课程", "最早一节")):
+        if not _contains_any(
+            answer, ("第一节", "第1节", "当天第一节课", "首门课程", "最早一节")
+        ):
             return ValidationIssue(
                 code="scheduler_missing_first_slot",
                 message="用户询问的是第一节课，但回答没有明确标出第一节课。",
             )
 
     if intent.asks_adjustment_reasoning:
-        has_adjustment_evidence = _contains_any(answer, ("调休", "补课", "教学日说明", "补 ", "停课"))
+        has_adjustment_evidence = _contains_any(
+            answer, ("调休", "补课", "教学日说明", "补 ", "停课")
+        )
         used_adjustment_path = "fetch_schedule_adjustments" in tool_names
         if not has_adjustment_evidence and not used_adjustment_path:
             return ValidationIssue(

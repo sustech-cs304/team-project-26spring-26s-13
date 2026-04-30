@@ -7,8 +7,8 @@ we only verify the HTTP contract, not the decrypted values.
 
 from httpx import AsyncClient
 
-
 # ── PUT /api/user/credentials ─────────────────────────────────────────────────
+
 
 async def test_update_credentials_unauthenticated(async_client: AsyncClient):
     """PUT /api/user/credentials without a token → 401/403."""
@@ -26,13 +26,19 @@ async def test_update_credentials_invalid_token(async_client: AsyncClient):
     assert resp.status_code == 401
 
 
-async def test_update_credentials_empty_body(async_client: AsyncClient, auth_headers: dict):
+async def test_update_credentials_empty_body(
+    async_client: AsyncClient, auth_headers: dict
+):
     """Empty JSON body (all fields None) should be a no-op → 204."""
-    resp = await async_client.put("/api/user/credentials", headers=auth_headers, json={})
+    resp = await async_client.put(
+        "/api/user/credentials", headers=auth_headers, json={}
+    )
     assert resp.status_code == 204
 
 
-async def test_update_credentials_cas_account_only(async_client: AsyncClient, auth_headers: dict):
+async def test_update_credentials_cas_account_only(
+    async_client: AsyncClient, auth_headers: dict
+):
     """Update cas_account only → 204 No Content."""
     resp = await async_client.put(
         "/api/user/credentials",
@@ -42,7 +48,9 @@ async def test_update_credentials_cas_account_only(async_client: AsyncClient, au
     assert resp.status_code == 204
 
 
-async def test_update_credentials_cas_password(async_client: AsyncClient, auth_headers: dict):
+async def test_update_credentials_cas_password(
+    async_client: AsyncClient, auth_headers: dict
+):
     """Update CAS account + password → 204; password is stored encrypted."""
     resp = await async_client.put(
         "/api/user/credentials",
@@ -55,7 +63,9 @@ async def test_update_credentials_cas_password(async_client: AsyncClient, auth_h
     assert resp.status_code == 204
 
 
-async def test_update_credentials_llm_api_key(async_client: AsyncClient, auth_headers: dict):
+async def test_update_credentials_llm_api_key(
+    async_client: AsyncClient, auth_headers: dict
+):
     """Update LLM API key only → 204."""
     resp = await async_client.put(
         "/api/user/credentials",
@@ -65,7 +75,9 @@ async def test_update_credentials_llm_api_key(async_client: AsyncClient, auth_he
     assert resp.status_code == 204
 
 
-async def test_update_credentials_all_fields(async_client: AsyncClient, auth_headers: dict):
+async def test_update_credentials_all_fields(
+    async_client: AsyncClient, auth_headers: dict
+):
     """Update all credential fields at once → 204."""
     resp = await async_client.put(
         "/api/user/credentials",

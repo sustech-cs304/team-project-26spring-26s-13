@@ -21,8 +21,8 @@ from httpx import AsyncClient
 
 from tests.conftest import TestSessionLocal, SAMPLE_USER
 
-
 # ── Fixture: seed a ChatSession row for the registered user ──────────────────
+
 
 @pytest_asyncio.fixture
 async def sample_session(registered_user: dict) -> str:
@@ -31,7 +31,9 @@ async def sample_session(registered_user: dict) -> str:
     import uuid as _uuid
 
     session_id = f"sess_test_{uuid.uuid4().hex[:8]}"
-    user_id = _uuid.UUID(registered_user["user_id"])  # must be uuid.UUID for SQLite binding
+    user_id = _uuid.UUID(
+        registered_user["user_id"]
+    )  # must be uuid.UUID for SQLite binding
 
     async with TestSessionLocal() as db:
         sess = ChatSession(
@@ -47,6 +49,7 @@ async def sample_session(registered_user: dict) -> str:
 
 
 # ── GET /api/agent/sessions ───────────────────────────────────────────────────
+
 
 async def test_list_sessions_unauthenticated(async_client: AsyncClient):
     """GET /api/agent/sessions without token → 401/403."""
@@ -74,6 +77,7 @@ async def test_list_sessions_returns_seeded_session(
 
 
 # ── GET /api/agent/sessions/{session_id} ─────────────────────────────────────
+
 
 async def test_get_session_not_found(async_client: AsyncClient, auth_headers: dict):
     """GET a non-existent session → 404."""
@@ -140,6 +144,7 @@ async def test_get_session_forbidden_for_other_user(async_client: AsyncClient):
 
 
 # ── DELETE /api/agent/sessions/{session_id} ───────────────────────────────────
+
 
 async def test_delete_session_not_found(async_client: AsyncClient, auth_headers: dict):
     """DELETE a non-existent session → 404."""
@@ -214,6 +219,7 @@ async def test_delete_session_forbidden_for_other_user(async_client: AsyncClient
 
 # ── POST /api/agent/run ───────────────────────────────────────────────────────
 
+
 async def test_agent_run_unauthenticated(async_client: AsyncClient):
     """POST /api/agent/run without a token → 401/403."""
     resp = await async_client.post(
@@ -265,6 +271,7 @@ async def test_agent_run_success_with_mock(
 
     # AgentResponse is a Pydantic model; patch run_agent to return it
     from backend.schemas.agent import AgentResponse
+
     fake_agent_response = AgentResponse(**fake_response)
 
     with patch(

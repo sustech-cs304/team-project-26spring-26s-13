@@ -17,7 +17,9 @@ class ResponseValidationContext:
     tool_names: list[str] = field(default_factory=list)
 
 
-def detect_alignment_issue(context: ResponseValidationContext) -> ValidationIssue | None:
+def detect_alignment_issue(
+    context: ResponseValidationContext,
+) -> ValidationIssue | None:
     """
     Route-aware response validation entrypoint.
 

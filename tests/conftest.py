@@ -52,18 +52,21 @@ def _patched_uuid_bind(self, dialect):
             return str(value) if dialect.name == "sqlite" else value.hex
         # Already a string – pass through for SQLite, convert hex for Postgres
         return value if dialect.name == "sqlite" else _uuid_mod.UUID(str(value)).hex
+
     return process
 
 
 def _patched_uuid_result(self, dialect, coltype):
     if not self.as_uuid:
         return None
+
     def process(value):
         if value is None:
             return None
         if isinstance(value, _uuid_mod.UUID):
             return value
         return _uuid_mod.UUID(str(value))
+
     return process
 
 
@@ -103,6 +106,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_database():

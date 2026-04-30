@@ -65,6 +65,7 @@ class AgentWorker(QThread):
         """
         try:
             if self.stream_trace:
+
                 def on_event(event: dict) -> None:
                     if event.get("event") == "trace":
                         data = event.get("data")

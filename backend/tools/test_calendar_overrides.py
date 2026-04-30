@@ -14,10 +14,17 @@ def _repo_root() -> Path:
 
 sys.path.insert(0, str(_repo_root()))
 
-from backend.services.schedule_service.academic_calendar_fetch import download_calendar_asset
+from backend.services.schedule_service.academic_calendar_fetch import (
+    download_calendar_asset,
+)
 from backend.services.schedule_service.academic_calendar_models import CalendarPdfRef
-from backend.services.schedule_service.academic_calendar_source import discover_calendar_pdfs, is_calendar_asset_url
-from backend.services.schedule_service.academic_calendar_provider import get_calendar_overrides
+from backend.services.schedule_service.academic_calendar_source import (
+    discover_calendar_pdfs,
+    is_calendar_asset_url,
+)
+from backend.services.schedule_service.academic_calendar_provider import (
+    get_calendar_overrides,
+)
 
 
 def _json_default(obj):
@@ -43,7 +50,6 @@ def _pick_best_asset(pdfs: list[CalendarPdfRef]) -> CalendarPdfRef:
         return (s, len(u))
 
     return sorted(pdfs, key=score, reverse=True)[0]
-
 
 
 async def _run(page_url: str, *, force: bool) -> dict[str, object]:
@@ -73,7 +79,10 @@ async def _fetch_only(url: str, *, force: bool) -> dict[str, object]:
     return {
         "input_url": url,
         "discovered_count": len(discovered),
-        "discovered": [{"url": p.url, "title": p.title, "media_type": p.media_type} for p in discovered[:20]],
+        "discovered": [
+            {"url": p.url, "title": p.title, "media_type": p.media_type}
+            for p in discovered[:20]
+        ],
         "picked_url": picked.url,
         "download_path": str(path),
         "download_bytes": path.stat().st_size if path.exists() else 0,
@@ -87,9 +96,16 @@ def main() -> int:
         default="https://sustech.edu.cn/zh/academic-calendar.html",
         help="校历页面 URL 或校历资源直链（pdf/jpg/png/webp）",
     )
-    ap.add_argument("--fetch-only", action="store_true", help="仅测试发现/下载链路，不做 OCR/解析")
+    ap.add_argument(
+        "--fetch-only", action="store_true", help="仅测试发现/下载链路，不做 OCR/解析"
+    )
     ap.add_argument("--force", action="store_true", help="跳过缓存强制刷新下载/解析")
-    ap.add_argument("--out", default=str(_repo_root() / "temp" / "calendar_cache" / "manual_test_overrides.json"))
+    ap.add_argument(
+        "--out",
+        default=str(
+            _repo_root() / "temp" / "calendar_cache" / "manual_test_overrides.json"
+        ),
+    )
     args = ap.parse_args()
 
     if args.fetch_only:
@@ -98,7 +114,10 @@ def main() -> int:
         payload = asyncio.run(_run(args.url, force=bool(args.force)))
     out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default),
+        encoding="utf-8",
+    )
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default))
     print(f"saved={out_path}")
     return 0

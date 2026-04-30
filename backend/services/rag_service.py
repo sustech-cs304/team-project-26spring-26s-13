@@ -15,11 +15,11 @@ import httpx
 async def classify_text_subject(text: str, api_key: str = None) -> SubjectType:
     """
     调用 LLM 判断一段文本（文件摘要或用户问题）属于哪个学科分类。
-    
+
     Args:
         text: 需要分类的文本
         api_key: 可选的 DeepSeek API Key。若不提供，将尝试使用 settings.DEEPSEEK_API_KEY。
-        
+
     Returns:
         SubjectType 枚举字符串之一。若无法分类或报错，返回 "other"
     """
@@ -50,7 +50,7 @@ async def classify_text_subject(text: str, api_key: str = None) -> SubjectType:
     key = api_key or settings.DEEPSEEK_API_KEY
     if not key:
         return "other"
-        
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
@@ -75,6 +75,7 @@ async def classify_text_subject(text: str, api_key: str = None) -> SubjectType:
         pass
 
     return "other"
+
 
 def resolve_collections(subject_hint: str) -> list[SubjectType]:
     """
@@ -119,6 +120,7 @@ def format_rag_context(chunks: list[dict], max_tokens: int = 4000) -> str:
         result.append(entry)
         budget -= len(entry)
     return "".join(result)
+
 
 async def classify_subject_llm(text: str, api_key: str | None) -> SubjectType:
     """
@@ -175,4 +177,3 @@ async def classify_subject_llm(text: str, api_key: str | None) -> SubjectType:
     except Exception:
         pass
     return "other"
-

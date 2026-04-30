@@ -31,12 +31,55 @@ def infer_subject_type(text: str) -> SubjectType:
     lowered = text.lower()
 
     keyword_map: list[tuple[SubjectType, tuple[str, ...]]] = [
-        ("cs", ("algorithm", "binary tree", "database", "python", "java", "代码", "编程", "算法", "数据结构", "计算机")),
-        ("electronics", ("circuit", "signal", "semiconductor", "电路", "模电", "数电", "信号")),
+        (
+            "cs",
+            (
+                "algorithm",
+                "binary tree",
+                "database",
+                "python",
+                "java",
+                "代码",
+                "编程",
+                "算法",
+                "数据结构",
+                "计算机",
+            ),
+        ),
+        (
+            "electronics",
+            ("circuit", "signal", "semiconductor", "电路", "模电", "数电", "信号"),
+        ),
         ("materials", ("material", "alloy", "polymer", "材料", "合金", "高分子")),
-        ("math", ("matrix", "calculus", "linear algebra", "probability", "矩阵", "微积分", "线代", "数学")),
-        ("physics", ("quantum", "mechanics", "thermodynamics", "物理", "量子", "力学", "热力学")),
-        ("chemistry", ("organic", "inorganic", "reaction", "chemistry", "化学", "有机", "反应")),
+        (
+            "math",
+            (
+                "matrix",
+                "calculus",
+                "linear algebra",
+                "probability",
+                "矩阵",
+                "微积分",
+                "线代",
+                "数学",
+            ),
+        ),
+        (
+            "physics",
+            (
+                "quantum",
+                "mechanics",
+                "thermodynamics",
+                "物理",
+                "量子",
+                "力学",
+                "热力学",
+            ),
+        ),
+        (
+            "chemistry",
+            ("organic", "inorganic", "reaction", "chemistry", "化学", "有机", "反应"),
+        ),
         ("biology", ("cell", "gene", "biology", "生物", "细胞", "基因")),
         ("geography", ("climate", "terrain", "geography", "地理", "气候")),
         ("philosophy", ("ethics", "metaphysics", "philosophy", "哲学", "伦理")),
@@ -44,13 +87,31 @@ def infer_subject_type(text: str) -> SubjectType:
         ("literature", ("novel", "poetry", "literature", "文学", "小说", "诗歌")),
         ("politics", ("government", "election", "politics", "政治", "政府", "选举")),
         ("finance", ("stock", "valuation", "finance", "投资", "金融", "估值", "股票")),
-        ("statistics", ("regression", "variance", "statistics", "统计", "回归", "方差")),
+        (
+            "statistics",
+            ("regression", "variance", "statistics", "统计", "回归", "方差"),
+        ),
         ("ocean", ("marine", "ocean", "sea", "海洋", "海水")),
-        ("economics", ("economics", "gdp", "inflation", "economics", "经济", "通货膨胀")),
+        (
+            "economics",
+            ("economics", "gdp", "inflation", "economics", "经济", "通货膨胀"),
+        ),
         ("law", ("law", "contract", "legal", "法律", "合同", "法条")),
         ("management", ("management", "operation", "hr", "管理", "运营", "组织行为")),
         ("medicine", ("disease", "clinical", "medicine", "医学", "临床", "疾病")),
-        ("policy", ("policy", "handbook", "guideline", "规定", "政策", "学位要求", "手册", "南科大")),
+        (
+            "policy",
+            (
+                "policy",
+                "handbook",
+                "guideline",
+                "规定",
+                "政策",
+                "学位要求",
+                "手册",
+                "南科大",
+            ),
+        ),
     ]
 
     for subject, keywords in keyword_map:
@@ -95,6 +156,7 @@ async def query_rag(
     # 第二步兜底：猜错学科 → 扩展到全部集合再向量检索一次
     if not results and subject_hint != "unknown":
         from backend.database.chromadb import ALL_SUBJECT_TYPES
+
         collections = list(ALL_SUBJECT_TYPES)
         try:
             results = chromadb_module.query_collections(query, collections)

@@ -4,8 +4,8 @@ backend/agent/tools/__init__.py
 loop.py 中 import backend.agent.tools 时此文件自动执行。
 """
 
-from backend.agent.tools import scheduler       # noqa: F401
-from backend.agent.tools import rag             # noqa: F401
-from backend.agent.tools import os_automation   # noqa: F401
-from backend.agent.tools import study_copilot   # noqa: F401
+from backend.agent.tools import scheduler  # noqa: F401
+from backend.agent.tools import rag  # noqa: F401
+from backend.agent.tools import os_automation  # noqa: F401
+from backend.agent.tools import study_copilot  # noqa: F401
 from backend.agent.tools import personal_tasks  # noqa: F401

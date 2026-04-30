@@ -43,16 +43,50 @@ from chromadb import Collection
 from backend.config import settings
 
 SubjectType = Literal[
-    "cs", "electronics", "materials", "math", "physics",
-    "chemistry", "biology", "geography", "philosophy", "history",
-    "literature", "politics", "finance", "statistics", "ocean",
-    "economics", "law", "management", "medicine", "policy", "other"
+    "cs",
+    "electronics",
+    "materials",
+    "math",
+    "physics",
+    "chemistry",
+    "biology",
+    "geography",
+    "philosophy",
+    "history",
+    "literature",
+    "politics",
+    "finance",
+    "statistics",
+    "ocean",
+    "economics",
+    "law",
+    "management",
+    "medicine",
+    "policy",
+    "other",
 ]
 ALL_SUBJECT_TYPES: list[SubjectType] = [
-    "cs", "electronics", "materials", "math", "physics",
-    "chemistry", "biology", "geography", "philosophy", "history",
-    "literature", "politics", "finance", "statistics", "ocean",
-    "economics", "law", "management", "medicine", "policy", "other"
+    "cs",
+    "electronics",
+    "materials",
+    "math",
+    "physics",
+    "chemistry",
+    "biology",
+    "geography",
+    "philosophy",
+    "history",
+    "literature",
+    "politics",
+    "finance",
+    "statistics",
+    "ocean",
+    "economics",
+    "law",
+    "management",
+    "medicine",
+    "policy",
+    "other",
 ]
 
 # ── Client singleton ──────────────────────────────────────────────────────────
@@ -71,6 +105,7 @@ def get_chroma_client() -> chromadb.ClientAPI:
         _client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
     return _client
 
+
 def get_collection(subject_type: SubjectType) -> Collection:
     """
     获取或创建指定学科类型的 Collection。
@@ -87,7 +122,9 @@ def get_collection(subject_type: SubjectType) -> Collection:
     name = f"sub_{subject_type}"
     return client.get_or_create_collection(name=name)
 
+
 # ── Write Operations ──────────────────────────────────────────────────────────
+
 
 def add_chunks(
     subject_type: SubjectType,
@@ -142,6 +179,7 @@ def delete_file_chunks(file_id: str, subject_type: SubjectType) -> None:
 
 # ── Read / Query Operations ───────────────────────────────────────────────────
 
+
 def query_collections(
     query_text: str,
     subject_types: list[SubjectType],
@@ -184,19 +222,26 @@ def query_collections(
         if not result["documents"] or not result["documents"][0]:
             continue
         documents = result["documents"][0]
-        metadatas = result["metadatas"][0] if result["metadatas"] else [{}] * len(documents)
-        distances = result["distances"][0] if result["distances"] else [0.0] * len(documents)
+        metadatas = (
+            result["metadatas"][0] if result["metadatas"] else [{}] * len(documents)
+        )
+        distances = (
+            result["distances"][0] if result["distances"] else [0.0] * len(documents)
+        )
         for doc, meta, dist in zip(documents, metadatas, distances):
-            all_results.append({
-                "text": doc,
-                "file_id": meta.get("file_id", ""),
-                "file_name": meta.get("file_name", ""),
-                "chunk_index": meta.get("chunk_index", 0),
-                "subject_type": meta.get("subject_type", st),
-                "distance": dist,
-            })
+            all_results.append(
+                {
+                    "text": doc,
+                    "file_id": meta.get("file_id", ""),
+                    "file_name": meta.get("file_name", ""),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "subject_type": meta.get("subject_type", st),
+                    "distance": dist,
+                }
+            )
     all_results.sort(key=lambda c: c["distance"])
     return all_results
+
 
 def keyword_search(
     keyword: str,
@@ -232,12 +277,14 @@ def keyword_search(
         metas = got.get("metadatas") or [{}] * len(docs)
         for doc, meta in zip(docs, metas):
             meta = meta or {}
-            out.append({
-                "text": doc,
-                "file_id": meta.get("file_id", ""),
-                "file_name": meta.get("file_name", ""),
-                "chunk_index": meta.get("chunk_index", 0),
-                "subject_type": meta.get("subject_type", st),
-                "distance": 0.0,
-            })
+            out.append(
+                {
+                    "text": doc,
+                    "file_id": meta.get("file_id", ""),
+                    "file_name": meta.get("file_name", ""),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "subject_type": meta.get("subject_type", st),
+                    "distance": 0.0,
+                }
+            )
     return out

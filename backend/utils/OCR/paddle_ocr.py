@@ -21,7 +21,10 @@ class PaddleOcrEngine:
     def __init__(self, settings: PaddleOcrSettings | None = None) -> None:
         self._settings = settings or _load_settings_from_env()
         self._langs = _split_langs(self._settings.lang)
-        self._ocrs = [_create_paddle_ocr(_settings_for_lang(self._settings, lang)) for lang in self._langs]
+        self._ocrs = [
+            _create_paddle_ocr(_settings_for_lang(self._settings, lang))
+            for lang in self._langs
+        ]
 
     def ocr_image_array(self, img: Any) -> str:
         best = ""
@@ -36,7 +39,11 @@ class PaddleOcrEngine:
 
 
 def _load_settings_from_env() -> PaddleOcrSettings:
-    use_angle_cls = (os.getenv("OCR_USE_ANGLE_CLS") or "1").strip() not in ("0", "false", "False")
+    use_angle_cls = (os.getenv("OCR_USE_ANGLE_CLS") or "1").strip() not in (
+        "0",
+        "false",
+        "False",
+    )
     use_gpu = (os.getenv("OCR_USE_GPU") or "0").strip() in ("1", "true", "True")
     lang = (os.getenv("OCR_LANG") or "ch").strip() or "ch"
 

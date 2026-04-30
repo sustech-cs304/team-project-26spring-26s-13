@@ -13,8 +13,12 @@ from backend.services import auth_service
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> AuthResponse:
+@router.post(
+    "/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
+)
+async def register(
+    body: RegisterRequest, db: AsyncSession = Depends(get_db)
+) -> AuthResponse:
     """
     注册新用户。
     - 检查 username 唯一性

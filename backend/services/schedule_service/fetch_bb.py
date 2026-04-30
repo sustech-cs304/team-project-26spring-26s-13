@@ -182,7 +182,10 @@ async def _crawl_course_upload_urls(
         to_visit.append((next_url, ref))
 
     seed_ref = referer or start_url
-    enqueue(f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=", seed_ref)
+    enqueue(
+        f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=",
+        seed_ref,
+    )
     for tool_id in ("_156_1", "_136_1"):
         enqueue(
             f"{BLACKBOARD_BASE}/webapps/blackboard/content/launchLink.jsp?course_id={course_id}&tool_id={tool_id}&tool_type=TOOL&mode=view",
@@ -204,7 +207,12 @@ async def _crawl_course_upload_urls(
             label=f"bb.course_crawl:{course_id}",
         )
         if r.status_code >= 400:
-            logger.warning("bb.course_crawl: status=%d url=%s course_id=%s", r.status_code, str(r.url), course_id)
+            logger.warning(
+                "bb.course_crawl: status=%d url=%s course_id=%s",
+                r.status_code,
+                str(r.url),
+                course_id,
+            )
             continue
 
         final_url = str(r.url)
@@ -216,8 +224,17 @@ async def _crawl_course_upload_urls(
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
-            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
+        for tag in soup.find_all(
+            ["a", "area", "frame", "iframe", "link", "script", "form"]
+        ):
+            for attr in (
+                "href",
+                "data-href",
+                "src",
+                "action",
+                "data-url",
+                "data-action",
+            ):
                 v = (tag.get(attr) or "").strip()
                 if not v:
                     continue
@@ -256,7 +273,10 @@ async def _crawl_course_upload_urls(
                 if "/webapps/blackboard/content/listContent.jsp" not in abs_url:
                     if "/webapps/blackboard/content/launchLink.jsp" not in abs_url:
                         if "/webapps/blackboard/execute/courseMain" not in abs_url:
-                            if "/webapps/blackboard/execute/announcement" not in abs_url:
+                            if (
+                                "/webapps/blackboard/execute/announcement"
+                                not in abs_url
+                            ):
                                 continue
 
             if "/webapps/blackboard/content/listContent.jsp" in abs_url:
@@ -423,7 +443,9 @@ async def _crawl_portal_upload_urls(
             label="bb.portal_crawl",
         )
         if r.status_code >= 400:
-            logger.warning("bb.portal_crawl: status=%d url=%s", r.status_code, str(r.url))
+            logger.warning(
+                "bb.portal_crawl: status=%d url=%s", r.status_code, str(r.url)
+            )
             continue
 
         final_url = str(r.url)
@@ -436,13 +458,25 @@ async def _crawl_portal_upload_urls(
             if course_id in seen_course_ids:
                 continue
             seen_course_ids.add(course_id)
-            enqueue(f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}", final_url)
+            enqueue(
+                f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}",
+                final_url,
+            )
 
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
-            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
+        for tag in soup.find_all(
+            ["a", "area", "frame", "iframe", "link", "script", "form"]
+        ):
+            for attr in (
+                "href",
+                "data-href",
+                "src",
+                "action",
+                "data-url",
+                "data-action",
+            ):
                 v = (tag.get(attr) or "").strip()
                 if not v:
                     continue
@@ -489,7 +523,10 @@ async def _crawl_portal_upload_urls(
                 enqueue(abs_url, final_url)
                 continue
 
-            if "/webapps/blackboard/execute/launcher" in abs_url and "type=Course" in abs_url:
+            if (
+                "/webapps/blackboard/execute/launcher" in abs_url
+                and "type=Course" in abs_url
+            ):
                 enqueue(abs_url, final_url)
                 continue
 
@@ -544,7 +581,7 @@ def _normalize_assignment_title(raw: str) -> str:
         "Review Submission History -",
     ):
         if title.startswith(prefix):
-            title = title[len(prefix):].strip()
+            title = title[len(prefix) :].strip()
             break
 
     return title
@@ -565,7 +602,10 @@ def _extract_assignment_title(soup: BeautifulSoup) -> str:
 
     if soup.title:
         title_text = soup.title.get_text(" ", strip=True)
-        m = re.match(r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$", title_text)
+        m = re.match(
+            r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$",
+            title_text,
+        )
         if m:
             candidates.append(m.group(1).strip())
         else:
@@ -598,7 +638,9 @@ def _extract_course_name(soup: BeautifulSoup) -> str:
     return ""
 
 
-def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Deadline | None:
+def _parse_deadline_from_upload_assignment_html(
+    html: str, page_url: str
+) -> Deadline | None:
     soup = BeautifulSoup(html, "html.parser")
 
     assignment_title = _extract_assignment_title(soup)
@@ -626,7 +668,9 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
 
     label = None
     for key in ("到期日期", "截止日期", "Due Date", "Due date"):
-        label = soup.find("div", class_="metaLabel", string=lambda s, k=key: s and k in s)
+        label = soup.find(
+            "div", class_="metaLabel", string=lambda s, k=key: s and k in s
+        )
         if label:
             break
 
@@ -671,11 +715,17 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
     logger.debug("bb.fetch: enter account=%s", cas_account)
 
     if not cas_account or not cas_password:
-        logger.error("bb.fetch: invalid credentials cas_account=%s password_len=%s", bool(cas_account), len(cas_password or ""))
+        logger.error(
+            "bb.fetch: invalid credentials cas_account=%s password_len=%s",
+            bool(cas_account),
+            len(cas_password or ""),
+        )
         raise ValueError("Missing CAS credentials")
 
     service_url = f"{BLACKBOARD_BASE}/webapps/bb-sso-BBLEARN/index.jsp"
-    tab_url = f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_1_1"
+    tab_url = (
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_1_1"
+    )
     default_tab_url = f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab"
 
     headers = {
@@ -709,8 +759,12 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
         ) as client:
 
             async def _bb_warmup(label_suffix: str) -> None:
-                await _request_with_retry(client, "GET", service_url, label=f"bb.sso{label_suffix}")
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}")
+                await _request_with_retry(
+                    client, "GET", service_url, label=f"bb.sso{label_suffix}"
+                )
+                await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}"
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -727,7 +781,9 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                 return False
 
             async def _frontdoor_home(label_suffix: str) -> httpx.Response:
-                r = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}")
+                r = await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home{label_suffix}"
+                )
 
                 for _ in range(10):
                     if not (300 <= r.status_code < 400):
@@ -736,7 +792,9 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     if not loc:
                         break
                     loc = urljoin(str(r.url), loc)
-                    r = await _request_with_retry(client, "GET", loc, label=f"bb.redirect{label_suffix}")
+                    r = await _request_with_retry(
+                        client, "GET", loc, label=f"bb.redirect{label_suffix}"
+                    )
 
                 return r
 
@@ -748,33 +806,48 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     f"{BLACKBOARD_BASE}/webapps/portal/execute/defaultTab",
                     label=f"bb.defaultTab{label_suffix}",
                 )
-                return await _request_with_retry(client, "GET", tab_url, label=f"bb.tab{label_suffix}")
+                return await _request_with_retry(
+                    client, "GET", tab_url, label=f"bb.tab{label_suffix}"
+                )
 
             r0 = await _bb_open_frontdoor(".entry")
 
             if "cas.sustech.edu.cn" in str(r0.url):
                 logger.info("bb.fetch: redirected to CAS, starting login")
-                await _cas_login_enhanced(client, cas_account, cas_password, service_url)
+                await _cas_login_enhanced(
+                    client, cas_account, cas_password, service_url
+                )
                 await _bb_warmup(".after_login")
                 r0 = await _bb_open_frontdoor(".after_login")
 
             if _looks_like_transient_bb_500(r0):
-                logger.warning("bb.fetch: detected transient 500 error, attempting recovery")
+                logger.warning(
+                    "bb.fetch: detected transient 500 error, attempting recovery"
+                )
                 for attempt in range(1, 4):
                     await asyncio.sleep(_backoff_seconds(attempt))
                     await _bb_warmup(f".recover{attempt}")
-                    r0 = await _request_with_retry(client, "GET", tab_url, label=f"bb.tab.recover{attempt}")
+                    r0 = await _request_with_retry(
+                        client, "GET", tab_url, label=f"bb.tab.recover{attempt}"
+                    )
                     if not _looks_like_transient_bb_500(r0):
-                        logger.info("bb.fetch: recovery successful on attempt %d", attempt)
+                        logger.info(
+                            "bb.fetch: recovery successful on attempt %d", attempt
+                        )
                         break
 
             if _looks_like_transient_bb_500(r0):
-                err_id = r0.headers.get("X-Blackboard-errorid") or r0.headers.get("x-blackboard-errorid")
+                err_id = r0.headers.get("X-Blackboard-errorid") or r0.headers.get(
+                    "x-blackboard-errorid"
+                )
                 raise ConnectionError(
                     f"Blackboard login unstable: status={r0.status_code} url={str(r0.url)} errorid={err_id or ''}".strip()
                 )
 
-            _BB_COOKIE_CACHE[cas_account] = (time.time(), _export_cookies(client.cookies))
+            _BB_COOKIE_CACHE[cas_account] = (
+                time.time(),
+                _export_cookies(client.cookies),
+            )
 
             base_url = str(r0.url)
             course_ids = _extract_course_ids(r0.text)
@@ -799,7 +872,9 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
             course_added = 0
             for course_id in sorted(course_ids):
                 before = len(upload_url_set)
-                course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                course_urls = await _crawl_course_upload_urls(
+                    client, course_id, tab_url
+                )
                 upload_url_set |= course_urls
                 course_added += len(upload_url_set) - before
 
@@ -817,18 +892,24 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
             )
 
             if not upload_urls:
-                logger.warning("bb.fetch: no upload urls after seed+dwr+course crawl; running portal fallback")
-                portal_course_ids2, portal_upload_urls2 = await _crawl_portal_upload_urls(
-                    client,
-                    [
-                        tab_url,
-                        default_tab_url,
-                    ],
+                logger.warning(
+                    "bb.fetch: no upload urls after seed+dwr+course crawl; running portal fallback"
+                )
+                portal_course_ids2, portal_upload_urls2 = (
+                    await _crawl_portal_upload_urls(
+                        client,
+                        [
+                            tab_url,
+                            default_tab_url,
+                        ],
+                    )
                 )
                 course_ids |= portal_course_ids2
                 upload_url_set |= portal_upload_urls2
                 for course_id in sorted(portal_course_ids2):
-                    course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                    course_urls = await _crawl_course_upload_urls(
+                        client, course_id, tab_url
+                    )
                     upload_url_set |= course_urls
                 upload_urls = sorted(upload_url_set)
 
@@ -842,7 +923,9 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                         label="bb.upload_assignment",
                     )
                 except httpx.HTTPError as exc:
-                    logger.warning("bb.fetch: request failed url=%s err=%s", u, type(exc).__name__)
+                    logger.warning(
+                        "bb.fetch: request failed url=%s err=%s", u, type(exc).__name__
+                    )
                     return None
 
                 if r.status_code >= 400:
@@ -881,24 +964,33 @@ async def fetch_blackboard(cas_account: str, cas_password: str) -> list[Deadline
                     "bb.fetch: %d upload urls fetched but 0 parsed deadlines; trying portal+course refresh",
                     len(upload_urls),
                 )
-                portal_course_ids3, portal_upload_urls3 = await _crawl_portal_upload_urls(
-                    client,
-                    [
-                        tab_url,
-                        default_tab_url,
-                    ],
+                portal_course_ids3, portal_upload_urls3 = (
+                    await _crawl_portal_upload_urls(
+                        client,
+                        [
+                            tab_url,
+                            default_tab_url,
+                        ],
+                    )
                 )
                 upload_url_set2 = set(upload_urls)
                 upload_url_set2 |= portal_upload_urls3
                 for course_id in sorted(portal_course_ids3):
-                    course_urls = await _crawl_course_upload_urls(client, course_id, tab_url)
+                    course_urls = await _crawl_course_upload_urls(
+                        client, course_id, tab_url
+                    )
                     upload_url_set2 |= course_urls
 
-                deadlines_raw2 = await asyncio.gather(*(fetch_one(u) for u in sorted(upload_url_set2)))
+                deadlines_raw2 = await asyncio.gather(
+                    *(fetch_one(u) for u in sorted(upload_url_set2))
+                )
                 deadlines = [
                     d
                     for d in deadlines_raw2
-                    if d and d.type == "assignment" and d.due_at and d.due_at >= now_local
+                    if d
+                    and d.type == "assignment"
+                    and d.due_at
+                    and d.due_at >= now_local
                 ]
 
             deadlines.sort(key=lambda x: x.due_at)

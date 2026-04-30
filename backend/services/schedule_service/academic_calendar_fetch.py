@@ -55,13 +55,22 @@ async def download_calendar_pdf(
 
     try:
         if client is not None:
-            r = await client.get(pdf_url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"})
+            r = await client.get(
+                pdf_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                },
+            )
             r.raise_for_status()
             out.write_bytes(r.content)
         else:
             req = urllib.request.Request(
                 pdf_url,
-                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"},
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                },
                 method="GET",
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -70,7 +79,12 @@ async def download_calendar_pdf(
         if own_client and client is not None and hasattr(client, "aclose"):
             await client.aclose()
 
-    logger.info("calendar.fetch: downloaded bytes=%d path=%s url=%s", out.stat().st_size, out, pdf_url)
+    logger.info(
+        "calendar.fetch: downloaded bytes=%d path=%s url=%s",
+        out.stat().st_size,
+        out,
+        pdf_url,
+    )
     return out
 
 

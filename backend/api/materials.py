@@ -27,7 +27,9 @@ async def list_materials(
     return await material_service.list_materials(db, current_user.user_id)
 
 
-@router.post("/upload", response_model=MaterialInfo, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload", response_model=MaterialInfo, status_code=status.HTTP_201_CREATED
+)
 async def upload_material(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -73,6 +75,10 @@ async def delete_material(
     try:
         await material_service.delete_material(db, current_user.user_id, file_id)
     except FileNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Material not found"
+        )
     except PermissionError:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your file")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not your file"
+        )

@@ -5,8 +5,13 @@ Frontend Relevant/components/chat_widget.py
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QVBoxLayout, QWidget,
+    QHBoxLayout,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 

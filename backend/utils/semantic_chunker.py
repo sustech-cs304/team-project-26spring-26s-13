@@ -65,7 +65,11 @@ def _is_heading_block(block: str) -> bool:
         return False
     if len(line) > 120:
         return False
-    if _CHAPTER_RE.match(line) or _SECTION_RE.match(line) or _NUM_HEADING_RE.match(line):
+    if (
+        _CHAPTER_RE.match(line)
+        or _SECTION_RE.match(line)
+        or _NUM_HEADING_RE.match(line)
+    ):
         return True
     if _CN_ENUM_RE.match(line) or _CN_PAREN_ENUM_RE.match(line):
         return True
@@ -134,7 +138,9 @@ def _group_blocks_by_headings(blocks: list[str]) -> list[tuple[tuple[str, ...], 
         if _is_heading_block(block):
             flush()
             heading = block.strip()
-            path = _update_section_path(path, level=_heading_level(heading), heading=heading)
+            path = _update_section_path(
+                path, level=_heading_level(heading), heading=heading
+            )
             continue
         buf.append(block)
 

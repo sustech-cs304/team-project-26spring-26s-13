@@ -26,7 +26,7 @@ from backend.agent.tools.rag import infer_subject_type
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # pptx
-    "application/vnd.ms-powerpoint",                                               # ppt
+    "application/vnd.ms-powerpoint",  # ppt
     "text/markdown",
     "text/plain",
 }
@@ -75,7 +75,9 @@ async def upload_and_vectorize(
     file_bytes = await file.read()
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > settings.MAX_UPLOAD_SIZE_MB:
-        raise ValueError(f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB")
+        raise ValueError(
+            f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB"
+        )
 
     file_id = uuid.uuid4()
     suffix = Path(file.filename or "file").suffix
@@ -109,14 +111,21 @@ async def upload_and_vectorize(
                 if user.llm_api_key_encrypted
                 else settings.DEEPSEEK_API_KEY
             ) or None
-            subject_type = await rag_service.classify_subject_llm(parsed.text[:2000], api_key)
+            subject_type = await rag_service.classify_subject_llm(
+                parsed.text[:2000], api_key
+            )
             material.subject_type = subject_type
         except Exception as e:
             logger.warning("学科分类失败，回退到 other: %s", e)
 
         if chunks:
             add_chunks(subject_type, str(file_id), material.file_name, chunks)
-            logger.info("向量化完成: file=%s subject=%s chunks=%d", file_id, subject_type, len(chunks))
+            logger.info(
+                "向量化完成: file=%s subject=%s chunks=%d",
+                file_id,
+                subject_type,
+                len(chunks),
+            )
 
         material.vectorized = True
         await db.commit()

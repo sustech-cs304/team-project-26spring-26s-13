@@ -17,13 +17,14 @@ from backend.services.schedule_service.conflicts import (
 from backend.services.schedule_service.constants import CourseOccurrence, Deadline
 from backend.services.schedule_service.personal import FixedPersonalEvent
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 BASE_DATE = datetime(2026, 4, 28)
 
 
-def _deadline(title: str, course_id: str, hour: int = 10, type_: str = "assignment") -> Deadline:
+def _deadline(
+    title: str, course_id: str, hour: int = 10, type_: str = "assignment"
+) -> Deadline:
     return Deadline(
         title=title,
         course_id=course_id,
@@ -51,6 +52,7 @@ def _personal(title: str, start_h: int = 9, end_h: int = 10) -> FixedPersonalEve
 
 
 # ── detect_conflicts ──────────────────────────────────────────────────────────
+
 
 def test_detect_conflicts_all_empty():
     result = detect_conflicts([], [])
@@ -122,6 +124,7 @@ def test_detect_conflicts_event_ids_are_unique():
 
 
 # ── detect_overlaps_with_personal ─────────────────────────────────────────────
+
 
 def test_overlaps_all_empty():
     result = detect_overlaps_with_personal([], [], [])
@@ -211,6 +214,7 @@ def test_overlaps_invalid_personal_event_skipped():
 
 # ── parse_personal_events ─────────────────────────────────────────────────────
 
+
 def test_parse_personal_events_none():
     assert parse_personal_events(None) == []
 
@@ -278,8 +282,16 @@ def test_parse_personal_events_missing_title_uses_default():
 def test_parse_personal_events_sorted_by_start():
     """Returned events must be sorted by start time."""
     payload = [
-        {"title": "B", "start_at": "2026-04-28T14:00:00", "end_at": "2026-04-28T15:00:00"},
-        {"title": "A", "start_at": "2026-04-28T09:00:00", "end_at": "2026-04-28T10:00:00"},
+        {
+            "title": "B",
+            "start_at": "2026-04-28T14:00:00",
+            "end_at": "2026-04-28T15:00:00",
+        },
+        {
+            "title": "A",
+            "start_at": "2026-04-28T09:00:00",
+            "end_at": "2026-04-28T10:00:00",
+        },
     ]
     events = parse_personal_events(payload)
     assert events[0].title == "A"
@@ -289,9 +301,16 @@ def test_parse_personal_events_sorted_by_start():
 def test_parse_personal_events_json_string_input():
     """A JSON string containing a list should be parsed correctly."""
     import json
-    payload = json.dumps([
-        {"title": "JSON event", "start_at": "2026-04-28T08:00:00", "end_at": "2026-04-28T09:00:00"}
-    ])
+
+    payload = json.dumps(
+        [
+            {
+                "title": "JSON event",
+                "start_at": "2026-04-28T08:00:00",
+                "end_at": "2026-04-28T09:00:00",
+            }
+        ]
+    )
     events = parse_personal_events(payload)
     assert len(events) == 1
     assert events[0].title == "JSON event"
@@ -299,10 +318,15 @@ def test_parse_personal_events_json_string_input():
 
 # ── detect_overlaps_with_personal_payload ─────────────────────────────────────
 
+
 def test_payload_wrapper_passes_through():
     """detect_overlaps_with_personal_payload must behave like the direct variant."""
     payload = [
-        {"title": "Errand", "start_at": "2026-04-28T09:00:00", "end_at": "2026-04-28T10:00:00"}
+        {
+            "title": "Errand",
+            "start_at": "2026-04-28T09:00:00",
+            "end_at": "2026-04-28T10:00:00",
+        }
     ]
     result = detect_overlaps_with_personal_payload(
         [],

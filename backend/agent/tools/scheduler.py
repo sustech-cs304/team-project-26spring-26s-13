@@ -17,13 +17,17 @@ from backend.agent.core import AgentDeps, agent
 from backend.agent.tools.base import safe_tool
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
 from backend.services import schedule_service
-from backend.services.schedule_service.academic_calendar_provider import get_calendar_overrides
+from backend.services.schedule_service.academic_calendar_provider import (
+    get_calendar_overrides,
+)
 from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY
 
 
 async def _get_week1_monday() -> datetime:
     try:
-        from backend.services.schedule_service.academic_calendar_provider import get_calendar_overrides
+        from backend.services.schedule_service.academic_calendar_provider import (
+            get_calendar_overrides,
+        )
 
         overrides = await get_calendar_overrides()
         if overrides.week1_monday is not None:
@@ -138,7 +142,9 @@ async def _fetch_adjustment_payload() -> dict[str, object]:
             "to_weekday": _weekday_label(datetime(dst.year, dst.month, dst.day)),
             "summary": f"{dst.isoformat()}（{_weekday_label(datetime(dst.year, dst.month, dst.day))}）补 {src.isoformat()}（{_weekday_label(datetime(src.year, src.month, src.day))}）的课",
         }
-        for src, dst in sorted(overrides.move_rules, key=lambda pair: (pair[1], pair[0]))
+        for src, dst in sorted(
+            overrides.move_rules, key=lambda pair: (pair[1], pair[0])
+        )
     ]
     cancel_days = [
         {
@@ -148,7 +154,9 @@ async def _fetch_adjustment_payload() -> dict[str, object]:
         for d in sorted(overrides.cancel_days)
     ]
     return {
-        "week1_monday": overrides.week1_monday.isoformat() if overrides.week1_monday else None,
+        "week1_monday": (
+            overrides.week1_monday.isoformat() if overrides.week1_monday else None
+        ),
         "source_url": overrides.source_url,
         "source_pdf_url": overrides.source_pdf_url,
         "cancel_days": cancel_days,
@@ -285,8 +293,7 @@ async def fetch_courses_on_date(ctx: RunContext[AgentDeps], target_date: str) ->
 
     target_iso = parsed.date().isoformat()
     courses = [
-        _serialize_occurrence(course, week1=week1)
-        for course in effective_day.courses
+        _serialize_occurrence(course, week1=week1) for course in effective_day.courses
     ]
     courses.sort(key=lambda x: (str(x.get("start_time", "")), str(x.get("course", ""))))
     return json.dumps(

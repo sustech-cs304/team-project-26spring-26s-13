@@ -76,9 +76,11 @@ _SUSTECH_CLASS_PERIODS: dict[int, tuple[str, str]] = {
 }
 
 
-_bb_sink_var: contextvars.ContextVar[list[tuple[str, str, int, int, str]] | None] = contextvars.ContextVar(
-    "bb_sink",
-    default=None,
+_bb_sink_var: contextvars.ContextVar[list[tuple[str, str, int, int, str]] | None] = (
+    contextvars.ContextVar(
+        "bb_sink",
+        default=None,
+    )
 )
 
 
@@ -132,7 +134,14 @@ def _bb_sink_dump(reason: str) -> None:
     sink = _bb_sink_var.get() or []
     logger.error("bb.dump: reason=%s responses=%d", reason, len(sink))
     for label, url, status, body_len, preview in sink[-30:]:
-        logger.error("bb.dump: label=%s status=%d url=%s body_len=%d\n%s", label, status, url, body_len, preview)
+        logger.error(
+            "bb.dump: label=%s status=%d url=%s body_len=%d\n%s",
+            label,
+            status,
+            url,
+            body_len,
+            preview,
+        )
 
 
 def _is_retryable_status(status_code: int) -> bool:
@@ -160,7 +169,9 @@ async def _request_with_retry(
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
-            r = await client.request(method, url, headers=headers, content=content, data=data)
+            r = await client.request(
+                method, url, headers=headers, content=content, data=data
+            )
         except httpx.HTTPError as exc:
             logger.exception(
                 "bb.http: error attempt=%d/%d method=%s url=%s label=%s err=%s",
@@ -199,11 +210,17 @@ async def _request_with_retry(
     raise RuntimeError("unreachable")
 
 
-async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
-    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
+async def _cas_login(
+    client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str
+) -> None:
+    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params(
+        {"service": service_url}
+    )
 
     if "tis.sustech.edu.cn" in str(service_url):
-        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), label="cas.login.get"
+        )
         r1.raise_for_status()
 
         soup = BeautifulSoup(r1.text, "html.parser")
@@ -282,10 +299,14 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                 and "service" not in action_url.params
                 and "service" in login_url.params
             ):
-                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+                action_url = action_url.copy_merge_params(
+                    {"service": login_url.params["service"]}
+                )
             post_url = action_url
 
-        r2 = await _request_with_retry(client, "POST", str(post_url), data=payload, label="cas.login.post")
+        r2 = await _request_with_retry(
+            client, "POST", str(post_url), data=payload, label="cas.login.post"
+        )
         r2.raise_for_status()
 
         if "cas.sustech.edu.cn" in str(r2.url) and "/cas/login" in str(r2.url):
@@ -297,9 +318,13 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                     page_title = s2.title.get_text(" ", strip=True)
                 candidates = [
                     s2.find(attrs={"role": "alert"}),
-                    s2.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
+                    s2.select_one(
+                        ".errors, .error, .alert, .alert-danger, .alert-error"
+                    ),
                     s2.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
-                    s2.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+                    s2.find(
+                        class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)
+                    ),
                 ]
                 for node in candidates:
                     if node:
@@ -334,7 +359,9 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
     last_r2: httpx.Response | None = None
 
     for attempt in range(1, max_attempts + 1):
-        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), label="cas.login.get"
+        )
         if _is_retryable_status(r1.status_code):
             logger.warning(
                 "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
@@ -345,8 +372,15 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
             )
 
             if "bb.sustech.edu.cn" in str(service_url):
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{attempt}")
-                r_sso = await _request_with_retry(client, "GET", str(service_url), label=f"bb.sso.warmup{attempt}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.warmup{attempt}",
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", str(service_url), label=f"bb.sso.warmup{attempt}"
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -361,7 +395,9 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                     return
 
             if attempt >= max_attempts:
-                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+                raise ConnectionError(
+                    f"CAS login page server error: status={r1.status_code}"
+                )
             await asyncio.sleep(_backoff_seconds(attempt))
             continue
 
@@ -443,11 +479,15 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                 and "service" not in action_url.params
                 and "service" in login_url.params
             ):
-                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+                action_url = action_url.copy_merge_params(
+                    {"service": login_url.params["service"]}
+                )
             post_url = action_url
 
         try:
-            r2 = await client.request("POST", str(post_url), headers=post_headers, data=payload)
+            r2 = await client.request(
+                "POST", str(post_url), headers=post_headers, data=payload
+            )
         except httpx.HTTPError as exc:
             logger.exception(
                 "cas.http: error attempt=%d/%d method=POST url=%s err=%s",
@@ -474,8 +514,16 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
             )
 
             u2 = str(r2.url)
-            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+            if (
+                "bb.sustech.edu.cn" in str(service_url)
+                and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2
+            ):
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.bounce{attempt}",
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -497,11 +545,18 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
 
     if r2.status_code >= 500:
         u2 = str(r2.url)
-        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+        if (
+            "bb.sustech.edu.cn" in str(service_url)
+            and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2
+        ):
             for i in range(1, 4):
                 await asyncio.sleep(_backoff_seconds(i))
-                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}")
-                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{i}")
+                r_home = await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}"
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", service_url, label=f"bb.sso.warmup{i}"
+                )
                 r_tab = await _request_with_retry(
                     client,
                     "GET",
@@ -536,7 +591,9 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
                 s2.find(attrs={"role": "alert"}),
                 s2.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
                 s2.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
-                s2.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+                s2.find(
+                    class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)
+                ),
             ]
             for node in candidates:
                 if node:
@@ -557,8 +614,12 @@ async def _cas_login(client: httpx.AsyncClient, cas_account: str, cas_password: 
         raise PermissionError(msg)
 
 
-async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
-    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
+async def _cas_login_enhanced(
+    client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str
+) -> None:
+    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params(
+        {"service": service_url}
+    )
 
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
@@ -575,7 +636,9 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
     last_r2: httpx.Response | None = None
 
     for attempt in range(1, max_attempts + 1):
-        r1 = await _request_with_retry(client, "GET", str(login_url), headers=headers, label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), headers=headers, label="cas.login.get"
+        )
         if _is_retryable_status(r1.status_code):
             logger.warning(
                 "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
@@ -585,7 +648,9 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
                 str(login_url),
             )
             if attempt >= max_attempts:
-                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+                raise ConnectionError(
+                    f"CAS login page server error: status={r1.status_code}"
+                )
             await asyncio.sleep(_backoff_seconds(attempt))
             continue
 
@@ -636,17 +701,23 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
         payload[password_field] = cas_password
         payload.setdefault("_eventId", "submit")
 
-        post_url = action if action.startswith("http") else urljoin(str(login_url), action)
+        post_url = (
+            action if action.startswith("http") else urljoin(str(login_url), action)
+        )
         if (
             httpx.URL(post_url).host == login_url.host
             and httpx.URL(post_url).path == login_url.path
             and "service" not in httpx.URL(post_url).params
             and "service" in login_url.params
         ):
-            post_url = httpx.URL(post_url).copy_merge_params({"service": login_url.params["service"]})
+            post_url = httpx.URL(post_url).copy_merge_params(
+                {"service": login_url.params["service"]}
+            )
 
         try:
-            r2 = await client.request("POST", str(post_url), headers=headers, data=payload)
+            r2 = await client.request(
+                "POST", str(post_url), headers=headers, data=payload
+            )
             _bb_sink_add("cas.login.post", r2)
             last_r2 = r2
         except httpx.HTTPError as exc:
@@ -665,14 +736,26 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
         if 300 <= r2.status_code < 400:
             location = r2.headers.get("Location", "")
             if "bb.sustech.edu.cn" in location:
-                await _request_with_retry(client, "GET", location, headers=headers, label="bb.from_cas")
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+                await _request_with_retry(
+                    client, "GET", location, headers=headers, label="bb.from_cas"
+                )
+                await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login"
+                )
                 return
 
         if _is_retryable_status(r2.status_code):
             u2 = str(r2.url)
-            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+            if (
+                "bb.sustech.edu.cn" in str(service_url)
+                and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2
+            ):
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.bounce{attempt}",
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -706,16 +789,27 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
 
     u2 = str(r2.url)
     if "bb.sustech.edu.cn" in u2:
-        await _request_with_retry(client, "GET", u2, headers=headers, label="bb.from_cas")
-        await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+        await _request_with_retry(
+            client, "GET", u2, headers=headers, label="bb.from_cas"
+        )
+        await _request_with_retry(
+            client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login"
+        )
         return
 
     if r2.status_code >= 500:
-        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2:
+        if (
+            "bb.sustech.edu.cn" in str(service_url)
+            and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in u2
+        ):
             for i in range(1, 4):
                 await asyncio.sleep(_backoff_seconds(i))
-                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}")
-                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{i}")
+                r_home = await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{i}"
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", service_url, label=f"bb.sso.warmup{i}"
+                )
                 r_tab = await _request_with_retry(
                     client,
                     "GET",
@@ -754,7 +848,9 @@ async def _cas_login_enhanced(client: httpx.AsyncClient, cas_account: str, cas_p
                 s2.find(attrs={"role": "alert"}),
                 s2.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
                 s2.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
-                s2.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+                s2.find(
+                    class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)
+                ),
             ]
             for node in candidates:
                 if node:

@@ -6,7 +6,12 @@ backend/services/user_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User
-from backend.schemas.user import UpdateCredentialsRequest, UpdateProfileRequest, UserPreferences, UserProfile
+from backend.schemas.user import (
+    UpdateCredentialsRequest,
+    UpdateProfileRequest,
+    UserPreferences,
+    UserProfile,
+)
 from backend.utils.crypto import encrypt
 
 
@@ -20,7 +25,9 @@ def to_profile(user: User) -> UserProfile:
     Returns:
         UserProfile
     """
-    prefs = UserPreferences(**user.preferences) if user.preferences else UserPreferences()
+    prefs = (
+        UserPreferences(**user.preferences) if user.preferences else UserPreferences()
+    )
     return UserProfile(
         user_id=str(user.user_id),
         display_name=user.display_name,
