@@ -17,7 +17,9 @@ from backend.agent.core import AgentDeps, agent
 from backend.agent.tools.base import safe_tool
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
 from backend.services import schedule_service
-from backend.services.schedule_service.academic_calendar_provider import get_calendar_overrides
+from backend.services.schedule_service.academic_calendar_provider import (
+    get_calendar_overrides,
+)
 from backend.services.schedule_service.enums import CourseOccurrenceKind, DeadlineType
 from backend.services.schedule_service.service_config import TIS_WEEK1_MONDAY
 

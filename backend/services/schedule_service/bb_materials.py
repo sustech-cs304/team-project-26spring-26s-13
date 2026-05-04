@@ -8,7 +8,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .bb_auth import _blackboard_authenticated_session
-from .bb_common import _crawl_portal_upload_urls, _extract_course_ids, _extract_course_name
+from .bb_common import (
+    _crawl_portal_upload_urls,
+    _extract_course_ids,
+    _extract_course_name,
+)
 from .http_utils import _request_with_retry
 from .log_utils import _bb_sink_dump, _bb_sink_var, _ensure_file_logging, logger
 from .service_config import BLACKBOARD_BASE
@@ -78,7 +82,7 @@ def _normalize_material_title(raw: str) -> str:
         return ""
     for prefix in ("文件：", "文件:", "File:", "Document:", "Item:"):
         if title.startswith(prefix):
-            return title[len(prefix):].strip()
+            return title[len(prefix) :].strip()
     return title
 
 
@@ -122,7 +126,9 @@ def _filename_from_response(response: httpx.Response, fallback_title: str) -> st
     return title or "blackboard_file"
 
 
-def _parse_blackboard_material_page(html: str, page_url: str) -> tuple[str, str, str | None, str]:
+def _parse_blackboard_material_page(
+    html: str, page_url: str
+) -> tuple[str, str, str | None, str]:
     soup = BeautifulSoup(html, "html.parser")
     title = _extract_material_title(soup)
     course_name = _extract_course_name(soup) or None
@@ -152,7 +158,10 @@ async def _crawl_course_material_urls(
         to_visit.append((next_url, ref))
 
     seed_ref = referer or start_url
-    enqueue(f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=", seed_ref)
+    enqueue(
+        f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=",
+        seed_ref,
+    )
     for tool_id in ("_156_1", "_136_1"):
         enqueue(
             f"{BLACKBOARD_BASE}/webapps/blackboard/content/launchLink.jsp?course_id={course_id}&tool_id={tool_id}&tool_type=TOOL&mode=view",
@@ -174,7 +183,12 @@ async def _crawl_course_material_urls(
             label=f"bb.course_material_crawl:{course_id}",
         )
         if response.status_code >= 400:
-            logger.warning("bb.course_material_crawl: status=%d url=%s course_id=%s", response.status_code, str(response.url), course_id)
+            logger.warning(
+                "bb.course_material_crawl: status=%d url=%s course_id=%s",
+                response.status_code,
+                str(response.url),
+                course_id,
+            )
             continue
 
         final_url = str(response.url)
@@ -186,8 +200,17 @@ async def _crawl_course_material_urls(
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
-            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
+        for tag in soup.find_all(
+            ["a", "area", "frame", "iframe", "link", "script", "form"]
+        ):
+            for attr in (
+                "href",
+                "data-href",
+                "src",
+                "action",
+                "data-url",
+                "data-action",
+            ):
                 value = (tag.get(attr) or "").strip()
                 if not value or value.lower().startswith("javascript:"):
                     continue
@@ -219,11 +242,17 @@ async def _crawl_course_material_urls(
                 material_urls.add(absolute_url)
                 continue
 
-            if course_id not in absolute_url and f"course_id={course_id}" not in absolute_url:
+            if (
+                course_id not in absolute_url
+                and f"course_id={course_id}" not in absolute_url
+            ):
                 if "/webapps/blackboard/content/listContent.jsp" not in absolute_url:
                     if "/webapps/blackboard/content/launchLink.jsp" not in absolute_url:
                         if "/webapps/blackboard/execute/courseMain" not in absolute_url:
-                            if "/webapps/blackboard/execute/announcement" not in absolute_url:
+                            if (
+                                "/webapps/blackboard/execute/announcement"
+                                not in absolute_url
+                            ):
                                 continue
 
             if "/webapps/blackboard/content/listContent.jsp" in absolute_url:
@@ -242,17 +271,29 @@ async def _crawl_course_material_urls(
     return material_urls
 
 
-async def fetch_blackboard_course_materials(cas_account: str, cas_password: str) -> list[BlackboardMaterial]:
+async def fetch_blackboard_course_materials(
+    cas_account: str, cas_password: str
+) -> list[BlackboardMaterial]:
     _ensure_file_logging()
     logger.debug("bb.materials: enter account=%s", cas_account)
 
     if not cas_account or not cas_password:
-        logger.error("bb.materials: invalid credentials cas_account=%s password_len=%s", bool(cas_account), len(cas_password or ""))
+        logger.error(
+            "bb.materials: invalid credentials cas_account=%s password_len=%s",
+            bool(cas_account),
+            len(cas_password or ""),
+        )
         raise ValueError("Missing CAS credentials")
 
     token = _bb_sink_var.set([])
     try:
-        async with _blackboard_authenticated_session(cas_account, cas_password) as (client, headers, tab_url, default_tab_url, response):
+        async with _blackboard_authenticated_session(cas_account, cas_password) as (
+            client,
+            headers,
+            tab_url,
+            default_tab_url,
+            response,
+        ):
             base_url = str(response.url)
             course_ids = _extract_course_ids(response.text)
 
@@ -262,9 +303,13 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
             )
             course_ids |= portal_course_ids
 
-            material_url_set: set[str] = set(_extract_content_file_urls(response.text, base_url))
+            material_url_set: set[str] = set(
+                _extract_content_file_urls(response.text, base_url)
+            )
             for course_id in sorted(course_ids):
-                material_url_set |= await _crawl_course_material_urls(client, course_id, tab_url)
+                material_url_set |= await _crawl_course_material_urls(
+                    client, course_id, tab_url
+                )
 
             async def fetch_one(page_url: str) -> BlackboardMaterial | None:
                 try:
@@ -276,14 +321,24 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
                         label="bb.material_page",
                     )
                 except httpx.HTTPError as exc:
-                    logger.warning("bb.materials: page fetch failed url=%s err=%s", page_url, type(exc).__name__)
+                    logger.warning(
+                        "bb.materials: page fetch failed url=%s err=%s",
+                        page_url,
+                        type(exc).__name__,
+                    )
                     return None
 
                 if page.status_code >= 400:
-                    logger.warning("bb.materials: page status=%d url=%s", page.status_code, page_url)
+                    logger.warning(
+                        "bb.materials: page status=%d url=%s",
+                        page.status_code,
+                        page_url,
+                    )
                     return None
 
-                title, content_id, course_name, download_url = _parse_blackboard_material_page(page.text, page_url)
+                title, content_id, course_name, download_url = (
+                    _parse_blackboard_material_page(page.text, page_url)
+                )
                 if not download_url:
                     logger.warning("bb.materials: no download url in page=%s", page_url)
                     return None
@@ -297,11 +352,19 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
                         label="bb.material_asset",
                     )
                 except httpx.HTTPError as exc:
-                    logger.warning("bb.materials: asset fetch failed url=%s err=%s", download_url, type(exc).__name__)
+                    logger.warning(
+                        "bb.materials: asset fetch failed url=%s err=%s",
+                        download_url,
+                        type(exc).__name__,
+                    )
                     return None
 
                 if download.status_code >= 400:
-                    logger.warning("bb.materials: asset status=%d url=%s", download.status_code, download_url)
+                    logger.warning(
+                        "bb.materials: asset status=%d url=%s",
+                        download.status_code,
+                        download_url,
+                    )
                     return None
 
                 try:
@@ -311,10 +374,20 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
                     course_id = ""
 
                 if not course_id or not content_id:
-                    logger.warning("bb.materials: missing identifiers page=%s course_id=%s content_id=%s", page_url, course_id, content_id)
+                    logger.warning(
+                        "bb.materials: missing identifiers page=%s course_id=%s content_id=%s",
+                        page_url,
+                        course_id,
+                        content_id,
+                    )
                     return None
 
-                file_type = (download.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+                file_type = (
+                    (download.headers.get("Content-Type") or "")
+                    .split(";", 1)[0]
+                    .strip()
+                    .lower()
+                )
                 file_name = _filename_from_response(download, title)
                 return BlackboardMaterial(
                     title=title or file_name,
@@ -329,7 +402,9 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
                 )
 
             material_pages = sorted(material_url_set)
-            raw_materials = await asyncio.gather(*(fetch_one(url) for url in material_pages))
+            raw_materials = await asyncio.gather(
+                *(fetch_one(url) for url in material_pages)
+            )
             deduped: dict[tuple[str, str], BlackboardMaterial] = {}
             for item in raw_materials:
                 if item is None:
@@ -338,9 +413,18 @@ async def fetch_blackboard_course_materials(cas_account: str, cas_password: str)
 
             materials = sorted(
                 deduped.values(),
-                key=lambda item: ((item.course_name or ""), item.file_name.lower(), item.content_id),
+                key=lambda item: (
+                    (item.course_name or ""),
+                    item.file_name.lower(),
+                    item.content_id,
+                ),
             )
-            logger.info("bb.materials: course_ids=%d pages=%d materials=%d", len(course_ids), len(material_pages), len(materials))
+            logger.info(
+                "bb.materials: course_ids=%d pages=%d materials=%d",
+                len(course_ids),
+                len(material_pages),
+                len(materials),
+            )
             if not materials:
                 _bb_sink_dump("materials_empty")
             return materials

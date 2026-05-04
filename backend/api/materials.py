@@ -56,7 +56,11 @@ async def upload_material(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/sync-blackboard", response_model=list[MaterialInfo], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/sync-blackboard",
+    response_model=list[MaterialInfo],
+    status_code=status.HTTP_201_CREATED,
+)
 async def sync_blackboard_materials(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -67,7 +71,9 @@ async def sync_blackboard_materials(
     try:
         return await material_service.sync_blackboard_materials(db, current_user)
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(e)
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

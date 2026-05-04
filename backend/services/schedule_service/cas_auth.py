@@ -7,7 +7,12 @@ from urllib.parse import urljoin
 
 import httpx
 
-from .http_utils import _backoff_seconds, _is_retryable_status, _request_error_summary, _request_with_retry
+from .http_utils import (
+    _backoff_seconds,
+    _is_retryable_status,
+    _request_error_summary,
+    _request_with_retry,
+)
 from .log_utils import _bb_sink_add, _bb_sink_dump, logger
 from .service_config import ACADEMIC_SYSTEM_BASE, BLACKBOARD_BASE
 
@@ -52,7 +57,9 @@ def _export_cookies(cookies: httpx.Cookies) -> list[tuple[str, str, str, str]]:
     return exported
 
 
-def _apply_cookie_state(cookies: httpx.Cookies, state: list[tuple[str, str, str, str]]) -> None:
+def _apply_cookie_state(
+    cookies: httpx.Cookies, state: list[tuple[str, str, str, str]]
+) -> None:
     for name, value, domain, path in state:
         kwargs: dict[str, str] = {"path": path or "/"}
         if domain:
@@ -74,11 +81,17 @@ def _apply_cached_cas_cookies(client: httpx.AsyncClient, cas_account: str) -> bo
         age_seconds = time.monotonic() - cached_at
         if age_seconds >= _CAS_COOKIE_CACHE_TTL_SECONDS:
             _CAS_COOKIE_CACHE.pop(cache_key, None)
-            logger.info("cas.cookie_cache: expired key=%s age_seconds=%.3f", cache_key, age_seconds)
+            logger.info(
+                "cas.cookie_cache: expired key=%s age_seconds=%.3f",
+                cache_key,
+                age_seconds,
+            )
             return False
 
     _apply_cookie_state(client.cookies, state)
-    logger.info("cas.cookie_cache: applied key=%s cookie_count=%d", cache_key, len(state))
+    logger.info(
+        "cas.cookie_cache: applied key=%s cookie_count=%d", cache_key, len(state)
+    )
     return True
 
 
@@ -94,7 +107,9 @@ def _store_cas_cookie_cache(cas_account: str, cookies: httpx.Cookies) -> None:
     with _CAS_COOKIE_CACHE_LOCK:
         _CAS_COOKIE_CACHE[cache_key] = (time.monotonic(), state)
 
-    logger.info("cas.cookie_cache: stored key=%s cookie_count=%d", cache_key, len(state))
+    logger.info(
+        "cas.cookie_cache: stored key=%s cookie_count=%d", cache_key, len(state)
+    )
 
 
 def _clear_cas_cookie_cache(cas_account: str | None = None) -> None:
@@ -131,7 +146,9 @@ def _cas_error_message(resp: httpx.Response) -> str:
                 soup.find(attrs={"role": "alert"}),
                 soup.select_one(".errors, .error, .alert, .alert-danger, .alert-error"),
                 soup.find(id=re.compile(r"^(error|errors|msg|message)$", re.I)),
-                soup.find(class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)),
+                soup.find(
+                    class_=re.compile(r"\b(error|errors|alert|msg|message)\b", re.I)
+                ),
             ]
             for node in candidates:
                 if node:
@@ -195,7 +212,11 @@ def _create_selenium_driver() -> object:
         except Exception as exc:
             last_error = exc
             if candidate == browser:
-                logger.warning("cas.browser: failed to start requested browser=%s err=%s", candidate, exc)
+                logger.warning(
+                    "cas.browser: failed to start requested browser=%s err=%s",
+                    candidate,
+                    exc,
+                )
 
     raise RuntimeError(f"unable to start selenium browser: {last_error}")
 
@@ -225,13 +246,20 @@ async def _manual_cas_browser_login(
             "CAS requires browser verification; set SUSTECH_CAS_BROWSER_FALLBACK=1 to enable selenium fallback"
         )
 
-    login_url = str(httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url}))
+    login_url = str(
+        httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params(
+            {"service": service_url}
+        )
+    )
     timeout_seconds = float(os.getenv("SUSTECH_CAS_BROWSER_TIMEOUT_SECONDS", "180"))
     driver = None
 
     try:
         driver = _create_selenium_driver()
-        logger.warning("cas.browser: launching interactive browser fallback service=%s", service_url)
+        logger.warning(
+            "cas.browser: launching interactive browser fallback service=%s",
+            service_url,
+        )
         driver.get(login_url)
 
         if By is not None:
@@ -277,14 +305,16 @@ async def _manual_cas_browser_login(
                 current_url = ""
 
             if (
-                ("bb.sustech.edu.cn" in current_url or "tis.sustech.edu.cn" in current_url)
-                and "cas.sustech.edu.cn" not in current_url
-            ):
+                "bb.sustech.edu.cn" in current_url
+                or "tis.sustech.edu.cn" in current_url
+            ) and "cas.sustech.edu.cn" not in current_url:
                 break
 
             await asyncio.sleep(1.0)
         else:
-            raise TimeoutError("browser fallback timed out waiting for CAS verification")
+            raise TimeoutError(
+                "browser fallback timed out waiting for CAS verification"
+            )
 
         _copy_browser_cookies_to_client(driver, client)
         _store_cas_cookie_cache(cas_account, client.cookies)
@@ -298,22 +328,33 @@ async def _manual_cas_browser_login(
                 pass
 
 
-async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str) -> None:
-    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
+async def _cas_login_for_tis(
+    client: httpx.AsyncClient, cas_account: str, cas_password: str, service_url: str
+) -> None:
+    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params(
+        {"service": service_url}
+    )
 
     if _apply_cached_cas_cookies(client, cas_account):
-        cached_resp = await _request_with_retry(client, "GET", service_url, label="cas.cookie_cache.validate")
+        cached_resp = await _request_with_retry(
+            client, "GET", service_url, label="cas.cookie_cache.validate"
+        )
         cached_url = str(cached_resp.url)
         if (
             cached_resp.status_code < 500
             and "cas.sustech.edu.cn" not in cached_url
-            and not ("tis.sustech.edu.cn" in str(service_url) and "/authentication/require" in cached_url)
+            and not (
+                "tis.sustech.edu.cn" in str(service_url)
+                and "/authentication/require" in cached_url
+            )
         ):
             return
         _clear_cas_cookie_cache(cas_account)
 
     if "tis.sustech.edu.cn" in str(service_url):
-        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), label="cas.login.get"
+        )
         r1.raise_for_status()
 
         soup = BeautifulSoup(r1.text, "html.parser")
@@ -389,10 +430,14 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                 and "service" not in action_url.params
                 and "service" in login_url.params
             ):
-                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+                action_url = action_url.copy_merge_params(
+                    {"service": login_url.params["service"]}
+                )
             post_url = action_url
 
-        r2 = await _request_with_retry(client, "POST", str(post_url), data=payload, label="cas.login.post")
+        r2 = await _request_with_retry(
+            client, "POST", str(post_url), data=payload, label="cas.login.post"
+        )
         if r2.status_code == 403:
             _clear_cas_cookie_cache(cas_account)
         r2.raise_for_status()
@@ -426,7 +471,9 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
     last_r2: httpx.Response | None = None
 
     for attempt in range(1, max_attempts + 1):
-        r1 = await _request_with_retry(client, "GET", str(login_url), label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), label="cas.login.get"
+        )
         if _is_retryable_status(r1.status_code):
             logger.warning(
                 "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
@@ -436,8 +483,15 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                 str(login_url),
             )
             if "bb.sustech.edu.cn" in str(service_url):
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{attempt}")
-                r_sso = await _request_with_retry(client, "GET", str(service_url), label=f"bb.sso.warmup{attempt}")
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.warmup{attempt}",
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", str(service_url), label=f"bb.sso.warmup{attempt}"
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -453,7 +507,9 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                     return
 
             if attempt >= max_attempts:
-                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+                raise ConnectionError(
+                    f"CAS login page server error: status={r1.status_code}"
+                )
             await asyncio.sleep(_backoff_seconds(attempt))
             continue
 
@@ -531,11 +587,15 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                 and "service" not in action_url.params
                 and "service" in login_url.params
             ):
-                action_url = action_url.copy_merge_params({"service": login_url.params["service"]})
+                action_url = action_url.copy_merge_params(
+                    {"service": login_url.params["service"]}
+                )
             post_url = action_url
 
         try:
-            r2 = await client.request("POST", str(post_url), headers=post_headers, data=payload)
+            r2 = await client.request(
+                "POST", str(post_url), headers=post_headers, data=payload
+            )
         except httpx.HTTPError as exc:
             logger.exception(
                 "cas.http: error attempt=%d/%d method=POST url=%s err=%s",
@@ -561,8 +621,17 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                 str(post_url),
             )
             current_url = str(r2.url)
-            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in current_url:
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+            if (
+                "bb.sustech.edu.cn" in str(service_url)
+                and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin"
+                in current_url
+            ):
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.bounce{attempt}",
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -585,11 +654,19 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
     r2 = last_r2
     if r2.status_code >= 500:
         current_url = str(r2.url)
-        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in current_url:
+        if (
+            "bb.sustech.edu.cn" in str(service_url)
+            and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin"
+            in current_url
+        ):
             for index in range(1, 4):
                 await asyncio.sleep(_backoff_seconds(index))
-                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{index}")
-                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{index}")
+                r_home = await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{index}"
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", service_url, label=f"bb.sso.warmup{index}"
+                )
                 r_tab = await _request_with_retry(
                     client,
                     "GET",
@@ -611,7 +688,9 @@ async def _cas_login_for_tis(client: httpx.AsyncClient, cas_account: str, cas_pa
                     return
 
         _bb_sink_dump(f"cas_login_{r2.status_code}")
-        raise ConnectionError(f"CAS/SSO server error: status={r2.status_code} url={current_url}")
+        raise ConnectionError(
+            f"CAS/SSO server error: status={r2.status_code} url={current_url}"
+        )
 
     if r2.status_code == 403:
         _clear_cas_cookie_cache(cas_account)
@@ -639,7 +718,9 @@ async def _cas_login_for_blackboard(
     cas_password: str,
     service_url: str,
 ) -> None:
-    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params({"service": service_url})
+    login_url = httpx.URL("https://cas.sustech.edu.cn/cas/login").copy_merge_params(
+        {"service": service_url}
+    )
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "zh-CN,zh;q=0.9",
@@ -652,12 +733,21 @@ async def _cas_login_for_blackboard(
     }
 
     if _apply_cached_cas_cookies(client, cas_account):
-        cached_resp = await _request_with_retry(client, "GET", service_url, headers=headers, label="cas.cookie_cache.validate")
+        cached_resp = await _request_with_retry(
+            client,
+            "GET",
+            service_url,
+            headers=headers,
+            label="cas.cookie_cache.validate",
+        )
         cached_url = str(cached_resp.url)
         if (
             cached_resp.status_code < 500
             and "cas.sustech.edu.cn" not in cached_url
-            and not ("tis.sustech.edu.cn" in str(service_url) and "/authentication/require" in cached_url)
+            and not (
+                "tis.sustech.edu.cn" in str(service_url)
+                and "/authentication/require" in cached_url
+            )
         ):
             return
         _clear_cas_cookie_cache(cas_account)
@@ -666,7 +756,9 @@ async def _cas_login_for_blackboard(
     last_r2: httpx.Response | None = None
 
     for attempt in range(1, max_attempts + 1):
-        r1 = await _request_with_retry(client, "GET", str(login_url), headers=headers, label="cas.login.get")
+        r1 = await _request_with_retry(
+            client, "GET", str(login_url), headers=headers, label="cas.login.get"
+        )
         if _is_retryable_status(r1.status_code):
             logger.warning(
                 "cas.http: retry attempt=%d/%d status=%d method=GET url=%s",
@@ -676,7 +768,9 @@ async def _cas_login_for_blackboard(
                 str(login_url),
             )
             if attempt >= max_attempts:
-                raise ConnectionError(f"CAS login page server error: status={r1.status_code}")
+                raise ConnectionError(
+                    f"CAS login page server error: status={r1.status_code}"
+                )
             await asyncio.sleep(_backoff_seconds(attempt))
             continue
 
@@ -724,17 +818,23 @@ async def _cas_login_for_blackboard(
         payload[password_field] = cas_password
         payload.setdefault("_eventId", "submit")
 
-        post_url = action if action.startswith("http") else urljoin(str(login_url), action)
+        post_url = (
+            action if action.startswith("http") else urljoin(str(login_url), action)
+        )
         if (
             httpx.URL(post_url).host == login_url.host
             and httpx.URL(post_url).path == login_url.path
             and "service" not in httpx.URL(post_url).params
             and "service" in login_url.params
         ):
-            post_url = httpx.URL(post_url).copy_merge_params({"service": login_url.params["service"]})
+            post_url = httpx.URL(post_url).copy_merge_params(
+                {"service": login_url.params["service"]}
+            )
 
         try:
-            r2 = await client.request("POST", str(post_url), headers=headers, data=payload)
+            r2 = await client.request(
+                "POST", str(post_url), headers=headers, data=payload
+            )
             _bb_sink_add("cas.login.post", r2)
             last_r2 = r2
         except httpx.HTTPError as exc:
@@ -753,15 +853,28 @@ async def _cas_login_for_blackboard(
         if 300 <= r2.status_code < 400:
             location = r2.headers.get("Location", "")
             if "bb.sustech.edu.cn" in location:
-                await _request_with_retry(client, "GET", location, headers=headers, label="bb.from_cas")
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+                await _request_with_retry(
+                    client, "GET", location, headers=headers, label="bb.from_cas"
+                )
+                await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login"
+                )
                 _store_cas_cookie_cache(cas_account, client.cookies)
                 return
 
         if _is_retryable_status(r2.status_code):
             current_url = str(r2.url)
-            if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in current_url:
-                await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.bounce{attempt}")
+            if (
+                "bb.sustech.edu.cn" in str(service_url)
+                and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin"
+                in current_url
+            ):
+                await _request_with_retry(
+                    client,
+                    "GET",
+                    f"{BLACKBOARD_BASE}/",
+                    label=f"bb.home.bounce{attempt}",
+                )
                 await _request_with_retry(
                     client,
                     "GET",
@@ -795,17 +908,29 @@ async def _cas_login_for_blackboard(
     r2 = last_r2
     current_url = str(r2.url)
     if "bb.sustech.edu.cn" in current_url:
-        await _request_with_retry(client, "GET", current_url, headers=headers, label="bb.from_cas")
-        await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login")
+        await _request_with_retry(
+            client, "GET", current_url, headers=headers, label="bb.from_cas"
+        )
+        await _request_with_retry(
+            client, "GET", f"{BLACKBOARD_BASE}/", label="bb.warmup_after_login"
+        )
         _store_cas_cookie_cache(cas_account, client.cookies)
         return
 
     if r2.status_code >= 500:
-        if "bb.sustech.edu.cn" in str(service_url) and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin" in current_url:
+        if (
+            "bb.sustech.edu.cn" in str(service_url)
+            and "/webapps/bb-sso-BBLEARN/execute/authValidate/customLogin"
+            in current_url
+        ):
             for index in range(1, 4):
                 await asyncio.sleep(_backoff_seconds(index))
-                r_home = await _request_with_retry(client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{index}")
-                r_sso = await _request_with_retry(client, "GET", service_url, label=f"bb.sso.warmup{index}")
+                r_home = await _request_with_retry(
+                    client, "GET", f"{BLACKBOARD_BASE}/", label=f"bb.home.warmup{index}"
+                )
+                r_sso = await _request_with_retry(
+                    client, "GET", service_url, label=f"bb.sso.warmup{index}"
+                )
                 r_tab = await _request_with_retry(
                     client,
                     "GET",
@@ -827,12 +952,16 @@ async def _cas_login_for_blackboard(
                     return
 
         _bb_sink_dump(f"cas_login_{r2.status_code}")
-        raise ConnectionError(f"CAS/SSO server error: status={r2.status_code} url={current_url}")
+        raise ConnectionError(
+            f"CAS/SSO server error: status={r2.status_code} url={current_url}"
+        )
 
     if r2.status_code == 403 and "tis.sustech.edu.cn" in str(service_url):
         _bb_sink_dump("tis_403")
         _clear_cas_cookie_cache(cas_account)
-        raise ConnectionError(f"TIS forbidden after CAS login: status=403 url={current_url}")
+        raise ConnectionError(
+            f"TIS forbidden after CAS login: status=403 url={current_url}"
+        )
 
     if r2.status_code == 403:
         _clear_cas_cookie_cache(cas_account)

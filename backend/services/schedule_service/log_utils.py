@@ -5,12 +5,13 @@ from pathlib import Path
 
 import httpx
 
-
 logger = logging.getLogger(__name__)
 
-_bb_sink_var: contextvars.ContextVar[list[tuple[str, str, int, int, str]] | None] = contextvars.ContextVar(
-    "bb_sink",
-    default=None,
+_bb_sink_var: contextvars.ContextVar[list[tuple[str, str, int, int, str]] | None] = (
+    contextvars.ContextVar(
+        "bb_sink",
+        default=None,
+    )
 )
 
 
@@ -57,11 +58,20 @@ def _bb_sink_add(label: str, response: httpx.Response) -> None:
     except Exception:
         text = ""
 
-    sink.append((label, str(response.url), int(response.status_code), len(text), text[:8000]))
+    sink.append(
+        (label, str(response.url), int(response.status_code), len(text), text[:8000])
+    )
 
 
 def _bb_sink_dump(reason: str) -> None:
     sink = _bb_sink_var.get() or []
     logger.error("bb.dump: reason=%s responses=%d", reason, len(sink))
     for label, url, status, body_len, preview in sink[-30:]:
-        logger.error("bb.dump: label=%s status=%d url=%s body_len=%d\n%s", label, status, url, body_len, preview)
+        logger.error(
+            "bb.dump: label=%s status=%d url=%s body_len=%d\n%s",
+            label,
+            status,
+            url,
+            body_len,
+            preview,
+        )

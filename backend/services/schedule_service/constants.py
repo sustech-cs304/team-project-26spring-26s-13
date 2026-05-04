@@ -20,7 +20,14 @@ from .cas_auth import (
 from .enums import CourseOccurrenceKind, DeadlineType, TaskPeriod
 from .http_utils import _backoff_seconds, _request_with_retry
 from .log_utils import _bb_sink_dump, _bb_sink_var, _ensure_file_logging, logger
-from .models import Course, CourseOccurrence, Deadline, FixedPersonalEvent, PersonalTask, TimeWindow
+from .models import (
+    Course,
+    CourseOccurrence,
+    Deadline,
+    FixedPersonalEvent,
+    PersonalTask,
+    TimeWindow,
+)
 from .service_config import (
     ACADEMIC_SYSTEM_BASE,
     BLACKBOARD_BASE,

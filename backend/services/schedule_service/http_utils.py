@@ -30,7 +30,9 @@ async def _request_with_retry(
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
-            response = await client.request(method, url, headers=headers, content=content, data=data)
+            response = await client.request(
+                method, url, headers=headers, content=content, data=data
+            )
         except httpx.HTTPError as exc:
             logger.exception(
                 "bb.http: error attempt=%d/%d method=%s url=%s label=%s err=%s",

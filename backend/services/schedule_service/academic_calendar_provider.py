@@ -11,11 +11,23 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     httpx = None  # type: ignore[assignment]
 
-from backend.services.schedule_service.academic_calendar_extract import extract_calendar_text_from_pdf
-from backend.services.schedule_service.academic_calendar_fetch import download_calendar_asset
-from backend.services.schedule_service.academic_calendar_models import CalendarOverrides, CalendarPdfRef
-from backend.services.schedule_service.academic_calendar_parse import parse_calendar_overrides
-from backend.services.schedule_service.academic_calendar_source import discover_calendar_pdfs, is_calendar_asset_url
+from backend.services.schedule_service.academic_calendar_extract import (
+    extract_calendar_text_from_pdf,
+)
+from backend.services.schedule_service.academic_calendar_fetch import (
+    download_calendar_asset,
+)
+from backend.services.schedule_service.academic_calendar_models import (
+    CalendarOverrides,
+    CalendarPdfRef,
+)
+from backend.services.schedule_service.academic_calendar_parse import (
+    parse_calendar_overrides,
+)
+from backend.services.schedule_service.academic_calendar_source import (
+    discover_calendar_pdfs,
+    is_calendar_asset_url,
+)
 from backend.services.schedule_service.log_utils import logger
 
 

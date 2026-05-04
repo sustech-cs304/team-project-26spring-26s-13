@@ -38,7 +38,9 @@ def _parse_due_at_zh_cn(text: str) -> datetime | None:
     )
     if match:
         year, month, day, hour_text, minute_text, _second = match.groups()
-        return datetime(int(year), int(month), int(day), int(hour_text), int(minute_text))
+        return datetime(
+            int(year), int(month), int(day), int(hour_text), int(minute_text)
+        )
 
     month_map = {
         "jan": 1,
@@ -142,7 +144,9 @@ def _extract_course_ids(text: str) -> set[str]:
         decoded_text = ""
     if decoded_text and decoded_text != raw:
         ids |= {match.group(1) for match in _COURSE_ID_RE.finditer(decoded_text)}
-        ids |= {match.group(1) for match in _COURSE_LAUNCHER_ID_RE.finditer(decoded_text)}
+        ids |= {
+            match.group(1) for match in _COURSE_LAUNCHER_ID_RE.finditer(decoded_text)
+        }
         ids |= {match.group(1) for match in _COURSE_TYPE_ID_RE.finditer(decoded_text)}
         ids |= {match.group(1) for match in _DATA_COURSE_ID_RE.finditer(decoded_text)}
 
@@ -155,7 +159,10 @@ def _is_upload_assignment_view_url(url: str) -> bool:
     except Exception:
         return False
 
-    if "action" in parsed.params and (parsed.params.get("action") or "").lower() == "showhistory":
+    if (
+        "action" in parsed.params
+        and (parsed.params.get("action") or "").lower() == "showhistory"
+    ):
         return False
     if "outcome_id" in parsed.params or "outcome_definition_id" in parsed.params:
         return False
@@ -284,7 +291,11 @@ async def _crawl_portal_upload_urls(
             label="bb.portal_crawl",
         )
         if response.status_code >= 400:
-            logger.warning("bb.portal_crawl: status=%d url=%s", response.status_code, str(response.url))
+            logger.warning(
+                "bb.portal_crawl: status=%d url=%s",
+                response.status_code,
+                str(response.url),
+            )
             continue
 
         final_url = str(response.url)
@@ -297,13 +308,25 @@ async def _crawl_portal_upload_urls(
             if course_id in seen_course_ids:
                 continue
             seen_course_ids.add(course_id)
-            enqueue(f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}", final_url)
+            enqueue(
+                f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}",
+                final_url,
+            )
 
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
-            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
+        for tag in soup.find_all(
+            ["a", "area", "frame", "iframe", "link", "script", "form"]
+        ):
+            for attr in (
+                "href",
+                "data-href",
+                "src",
+                "action",
+                "data-url",
+                "data-action",
+            ):
                 value = (tag.get(attr) or "").strip()
                 if not value or value.lower().startswith("javascript:"):
                     continue
@@ -344,7 +367,10 @@ async def _crawl_portal_upload_urls(
             if "/webapps/blackboard/execute/announcement" in absolute_url:
                 enqueue(absolute_url, final_url)
                 continue
-            if "/webapps/blackboard/execute/launcher" in absolute_url and "type=Course" in absolute_url:
+            if (
+                "/webapps/blackboard/execute/launcher" in absolute_url
+                and "type=Course" in absolute_url
+            ):
                 enqueue(absolute_url, final_url)
                 continue
             if "/webapps/blackboard/execute/courseMain" in absolute_url:
@@ -383,7 +409,10 @@ async def _crawl_course_upload_urls(
         to_visit.append((next_url, ref))
 
     seed_ref = referer or start_url
-    enqueue(f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=", seed_ref)
+    enqueue(
+        f"{BLACKBOARD_BASE}/webapps/blackboard/execute/courseMain?course_id={course_id}&task=true&src=",
+        seed_ref,
+    )
     for tool_id in ("_156_1", "_136_1"):
         enqueue(
             f"{BLACKBOARD_BASE}/webapps/blackboard/content/launchLink.jsp?course_id={course_id}&tool_id={tool_id}&tool_type=TOOL&mode=view",
@@ -405,7 +434,12 @@ async def _crawl_course_upload_urls(
             label=f"bb.course_upload_crawl:{course_id}",
         )
         if response.status_code >= 400:
-            logger.warning("bb.course_upload_crawl: status=%d url=%s course_id=%s", response.status_code, str(response.url), course_id)
+            logger.warning(
+                "bb.course_upload_crawl: status=%d url=%s course_id=%s",
+                response.status_code,
+                str(response.url),
+                course_id,
+            )
             continue
 
         final_url = str(response.url)
@@ -417,8 +451,17 @@ async def _crawl_course_upload_urls(
         soup = BeautifulSoup(html, "html.parser")
         raw_candidates: set[str] = set()
 
-        for tag in soup.find_all(["a", "area", "frame", "iframe", "link", "script", "form"]):
-            for attr in ("href", "data-href", "src", "action", "data-url", "data-action"):
+        for tag in soup.find_all(
+            ["a", "area", "frame", "iframe", "link", "script", "form"]
+        ):
+            for attr in (
+                "href",
+                "data-href",
+                "src",
+                "action",
+                "data-url",
+                "data-action",
+            ):
                 value = (tag.get(attr) or "").strip()
                 if not value:
                     continue
@@ -453,11 +496,17 @@ async def _crawl_course_upload_urls(
                     upload_urls.add(absolute_url)
                 continue
 
-            if course_id not in absolute_url and f"course_id={course_id}" not in absolute_url:
+            if (
+                course_id not in absolute_url
+                and f"course_id={course_id}" not in absolute_url
+            ):
                 if "/webapps/blackboard/content/listContent.jsp" not in absolute_url:
                     if "/webapps/blackboard/content/launchLink.jsp" not in absolute_url:
                         if "/webapps/blackboard/execute/courseMain" not in absolute_url:
-                            if "/webapps/blackboard/execute/announcement" not in absolute_url:
+                            if (
+                                "/webapps/blackboard/execute/announcement"
+                                not in absolute_url
+                            ):
                                 continue
 
             if "/webapps/blackboard/content/listContent.jsp" in absolute_url:
@@ -489,7 +538,7 @@ def _normalize_assignment_title(raw: str) -> str:
         "Review Submission History -",
     ):
         if title.startswith(prefix):
-            return title[len(prefix):].strip()
+            return title[len(prefix) :].strip()
 
     return title
 
@@ -508,7 +557,10 @@ def _extract_assignment_title(soup: BeautifulSoup) -> str:
 
     if soup.title:
         title_text = soup.title.get_text(" ", strip=True)
-        match = re.match(r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$", title_text)
+        match = re.match(
+            r"^(?:上载作业：|上载作业:|Upload Assignment:)\s*(.*?)\s*[–-]\s*(.+)$",
+            title_text,
+        )
         if match:
             candidates.append(match.group(1).strip())
         else:
@@ -541,7 +593,9 @@ def _extract_course_name(soup: BeautifulSoup) -> str:
     return ""
 
 
-def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Deadline | None:
+def _parse_deadline_from_upload_assignment_html(
+    html: str, page_url: str
+) -> Deadline | None:
     soup = BeautifulSoup(html, "html.parser")
     assignment_title = _extract_assignment_title(soup)
     course_name = _extract_course_name(soup)
@@ -560,14 +614,20 @@ def _parse_deadline_from_upload_assignment_html(html: str, page_url: str) -> Dea
     if not course_id:
         try:
             parsed = httpx.URL(page_url)
-            course_id = parsed.params.get("strCourseId") or parsed.params.get("course_id")
+            course_id = parsed.params.get("strCourseId") or parsed.params.get(
+                "course_id"
+            )
         except Exception:
             course_id = None
 
     due_at: datetime | None = None
     label = None
     for key in ("到期日期", "截止日期", "Due Date", "Due date"):
-        label = soup.find("div", class_="metaLabel", string=lambda value, text=key: value and text in value)
+        label = soup.find(
+            "div",
+            class_="metaLabel",
+            string=lambda value, text=key: value and text in value,
+        )
         if label:
             break
 

@@ -22,7 +22,14 @@ from .fetch_tis import (
     fetch_course_schedule_context,
     invalidate_tis_schedule_cache,
 )
-from .models import Course, CourseOccurrence, Deadline, FixedPersonalEvent, PersonalTask, TimeWindow
+from .models import (
+    Course,
+    CourseOccurrence,
+    Deadline,
+    FixedPersonalEvent,
+    PersonalTask,
+    TimeWindow,
+)
 from .refresh import refresh
 
 __all__ = [

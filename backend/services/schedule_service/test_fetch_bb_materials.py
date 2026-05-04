@@ -73,12 +73,16 @@ class TestFetchBlackboardMaterials(unittest.TestCase):
         response = httpx.Response(
             200,
             headers={"Content-Type": "application/pdf"},
-            request=httpx.Request("GET", "https://bb.sustech.edu.cn/bbcswebdav/pid-613494/xid-19121934_1"),
+            request=httpx.Request(
+                "GET", "https://bb.sustech.edu.cn/bbcswebdav/pid-613494/xid-19121934_1"
+            ),
         )
         response._request.url = httpx.URL(
             "https://bb.sustech.edu.cn/bbcswebdav/pid-613494-dt-content-rid-19121934_1/courses/CS302-30015313-2026SP/L01%20course%20intro%281%29.pdf"
         )
-        self.assertEqual(_filename_from_response(response, "fallback"), "L01 course intro(1).pdf")
+        self.assertEqual(
+            _filename_from_response(response, "fallback"), "L01 course intro(1).pdf"
+        )
 
 
 if __name__ == "__main__":

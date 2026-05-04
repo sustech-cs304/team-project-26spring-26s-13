@@ -10,7 +10,11 @@ import httpx
 
 from .academic_calendar_models import CalendarOverrides
 from .academic_calendar_provider import get_calendar_overrides
-from .cas_auth import _apply_cached_cas_cookies, _cas_login_for_tis, _clear_cas_cookie_cache
+from .cas_auth import (
+    _apply_cached_cas_cookies,
+    _cas_login_for_tis,
+    _clear_cas_cookie_cache,
+)
 from .enums import CourseOccurrenceKind
 from .http_utils import _request_with_retry
 from .log_utils import _ensure_file_logging, logger
@@ -731,7 +735,10 @@ def _tis_meetings_to_occurrences(
         end_sec = int(m["end_sec"])
         weeks = [int(x) for x in (m.get("weeks") or [])]
 
-        if start_sec not in SUSTECH_CLASS_PERIODS or end_sec not in SUSTECH_CLASS_PERIODS:
+        if (
+            start_sec not in SUSTECH_CLASS_PERIODS
+            or end_sec not in SUSTECH_CLASS_PERIODS
+        ):
             continue
 
         start_hhmm = SUSTECH_CLASS_PERIODS[start_sec][0]
@@ -858,7 +865,9 @@ async def _fetch_course_schedule_context_uncached(
         ):
             _clear_cas_cookie_cache(cas_account)
             await _cas_login_for_tis(client, cas_account, cas_password, service_url)
-            r0 = await _request_with_retry(client, "GET", main_url, label="tis.main.after_login")
+            r0 = await _request_with_retry(
+                client, "GET", main_url, label="tis.main.after_login"
+            )
 
         _raise_for_unexpected_http_status(r0, label="tis.main")
 

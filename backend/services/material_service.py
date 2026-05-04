@@ -20,7 +20,10 @@ from backend.utils.document_parser import parse_document
 
 from backend.utils.crypto import decrypt
 from backend.services import rag_service
-from backend.services.schedule_service.fetch_bb import BlackboardMaterial, fetch_blackboard_course_materials
+from backend.services.schedule_service.fetch_bb import (
+    BlackboardMaterial,
+    fetch_blackboard_course_materials,
+)
 
 logger = logging.getLogger(__name__)
 from backend.agent.tools.rag import infer_subject_type
@@ -95,7 +98,9 @@ async def sync_blackboard_materials(
         raise PermissionError(f"CAS credentials invalid: {type(exc).__name__}") from exc
 
     bb_materials = await fetch_blackboard_course_materials(cas_account, cas_password)
-    existing = await db.scalars(select(Material).where(Material.user_id == user.user_id))
+    existing = await db.scalars(
+        select(Material).where(Material.user_id == user.user_id)
+    )
     existing_names = {material.file_name for material in existing}
 
     synced: list[MaterialInfo] = []
@@ -111,7 +116,9 @@ async def sync_blackboard_materials(
                 file_bytes=item.file_bytes,
             )
         except ValueError:
-            logger.info("跳过不支持的 Blackboard 课件: %s (%s)", item.file_name, item.file_type)
+            logger.info(
+                "跳过不支持的 Blackboard 课件: %s (%s)", item.file_name, item.file_type
+            )
             continue
         synced.append(info)
         existing_names.add(info.file_name)
@@ -181,7 +188,9 @@ async def _create_material_from_bytes(
 
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > settings.MAX_UPLOAD_SIZE_MB:
-        raise ValueError(f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB")
+        raise ValueError(
+            f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB"
+        )
 
     file_id = uuid.uuid4()
     suffix = Path(file_name or "file").suffix
@@ -214,14 +223,21 @@ async def _create_material_from_bytes(
                 if user.llm_api_key_encrypted
                 else settings.DEEPSEEK_API_KEY
             ) or None
-            subject_type = await rag_service.classify_subject_llm(parsed.text[:2000], api_key)
+            subject_type = await rag_service.classify_subject_llm(
+                parsed.text[:2000], api_key
+            )
             material.subject_type = subject_type
         except Exception as e:
             logger.warning("学科分类失败，回退到 other: %s", e)
 
         if chunks:
             add_chunks(subject_type, str(file_id), material.file_name, chunks)
-            logger.info("向量化完成: file=%s subject=%s chunks=%d", file_id, subject_type, len(chunks))
+            logger.info(
+                "向量化完成: file=%s subject=%s chunks=%d",
+                file_id,
+                subject_type,
+                len(chunks),
+            )
 
         material.vectorized = True
         await db.commit()

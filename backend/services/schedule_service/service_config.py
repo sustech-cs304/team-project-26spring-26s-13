@@ -1,6 +1,5 @@
 from datetime import datetime
 
-
 BLACKBOARD_BASE = "https://bb.sustech.edu.cn"
 ACADEMIC_SYSTEM_BASE = "https://tis.sustech.edu.cn"
 
