@@ -18,9 +18,10 @@ except ModuleNotFoundError:  # pragma: no cover
 from backend.services.schedule_service.academic_calendar_models import CalendarPdfRef
 from backend.services.schedule_service.log_utils import logger
 
-
 _PDF_RE = re.compile(r"""href\s*=\s*["']([^"']+?\.pdf(?:\?[^"']*)?)["']""", re.I)
-_IMAGE_RE = re.compile(r"""href\s*=\s*["']([^"']+?\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']""", re.I)
+_IMAGE_RE = re.compile(
+    r"""href\s*=\s*["']([^"']+?\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']""", re.I
+)
 
 
 def is_calendar_asset_url(url: str) -> bool:
@@ -58,13 +59,22 @@ async def discover_calendar_pdfs(
 
     try:
         if client is not None:
-            r = await client.get(page_url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"})
+            r = await client.get(
+                page_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                },
+            )
             r.raise_for_status()
             html = r.text or ""
         else:
             req = urllib.request.Request(
                 page_url,
-                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "zh-CN,zh;q=0.9"},
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                },
                 method="GET",
             )
             with urllib.request.urlopen(req, timeout=20) as resp:
@@ -81,20 +91,28 @@ async def discover_calendar_pdfs(
             href = a.get("href")
             if not href:
                 continue
-            if ".pdf" not in href.lower() and not any(ext in href.lower() for ext in (".jpg", ".jpeg", ".png", ".webp")):
+            if ".pdf" not in href.lower() and not any(
+                ext in href.lower() for ext in (".jpg", ".jpeg", ".png", ".webp")
+            ):
                 continue
             url = urljoin(page_url, href)
             title = (a.get_text(" ", strip=True) or "").strip() or None
-            pdfs.append(CalendarPdfRef(url=url, title=title, media_type=_guess_media_type(url)))
+            pdfs.append(
+                CalendarPdfRef(url=url, title=title, media_type=_guess_media_type(url))
+            )
 
     if not pdfs:
         for m in _PDF_RE.finditer(html):
             url = urljoin(page_url, m.group(1))
-            pdfs.append(CalendarPdfRef(url=url, title=None, media_type=_guess_media_type(url)))
+            pdfs.append(
+                CalendarPdfRef(url=url, title=None, media_type=_guess_media_type(url))
+            )
     if not pdfs:
         for m in _IMAGE_RE.finditer(html):
             url = urljoin(page_url, m.group(1))
-            pdfs.append(CalendarPdfRef(url=url, title=None, media_type=_guess_media_type(url)))
+            pdfs.append(
+                CalendarPdfRef(url=url, title=None, media_type=_guess_media_type(url))
+            )
 
     seen: set[str] = set()
     deduped: list[CalendarPdfRef] = []

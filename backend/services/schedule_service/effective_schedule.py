@@ -32,7 +32,9 @@ class EffectiveScheduleConflict:
     conflicting_courses: list[CourseOccurrence]
 
 
-def resolve_teaching_day(calendar_date: date, overrides: CalendarOverrides) -> TeachingDayResolution:
+def resolve_teaching_day(
+    calendar_date: date, overrides: CalendarOverrides
+) -> TeachingDayResolution:
     move_sources = [src for src, dst in overrides.move_rules if dst == calendar_date]
     if move_sources:
         source_date = sorted(move_sources)[0]
@@ -59,7 +61,9 @@ def resolve_teaching_day(calendar_date: date, overrides: CalendarOverrides) -> T
     )
 
 
-def _clone_occurrence_to_date(occ: CourseOccurrence, target_date: date, *, note_prefix: str | None = None) -> CourseOccurrence:
+def _clone_occurrence_to_date(
+    occ: CourseOccurrence, target_date: date, *, note_prefix: str | None = None
+) -> CourseOccurrence:
     start_at = datetime.combine(target_date, occ.start_at.timetz().replace(tzinfo=None))
     end_at = datetime.combine(target_date, occ.end_at.timetz().replace(tzinfo=None))
     note = occ.notes or occ.course_id
@@ -137,7 +141,9 @@ async def query_effective_schedule_conflicts(
     activity_start_time: time,
     activity_end_time: time,
 ) -> EffectiveScheduleConflict:
-    effective_day = await query_effective_schedule_for_date(cas_account, cas_password, target_date)
+    effective_day = await query_effective_schedule_for_date(
+        cas_account, cas_password, target_date
+    )
     activity_start = datetime.combine(target_date, activity_start_time)
     activity_end = datetime.combine(target_date, activity_end_time)
 

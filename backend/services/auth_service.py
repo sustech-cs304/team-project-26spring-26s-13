@@ -30,12 +30,12 @@ async def register(db: AsyncSession, body: RegisterRequest) -> AuthResponse:
 
     # 2. 创建用户（进行绝对安全的截断）
     password_bytes = body.password.encode("utf-8")
-    
+
     if len(password_bytes) > 72:
         password_bytes = password_bytes[:72]
-        
+
     hashed_password = bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
-    
+
     user = User(
         username=body.username,
         password_hash=hashed_password,
@@ -64,12 +64,14 @@ async def login(db: AsyncSession, body: LoginRequest) -> AuthResponse:
         ValueError: 用户名不存在或密码错误
     """
     user = await db.scalar(select(User).where(User.username == body.username))
-    
+
     password_bytes = body.password.encode("utf-8")
     if len(password_bytes) > 72:
         password_bytes = password_bytes[:72]
-        
-    if not user or not bcrypt.checkpw(password_bytes, user.password_hash.encode("utf-8")):
+
+    if not user or not bcrypt.checkpw(
+        password_bytes, user.password_hash.encode("utf-8")
+    ):
         raise ValueError("invalid credentials")
 
     token = _create_token(str(user.user_id))
@@ -102,6 +104,8 @@ def _create_token(user_id: str) -> str:
     Returns:
         JWT token 字符串
     """
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
     payload = {"sub": user_id, "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)

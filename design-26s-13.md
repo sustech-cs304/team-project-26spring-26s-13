@@ -3,7 +3,7 @@
 ### 1.1 Architectural Pattern: Monolithic Layered Architecture
 The Student Productivity Agent (SPA) follows a **Monolithic Layered Architecture** within a **Client-Server RESTful** framework. This design ensures a strict separation of concerns through clearly defined tiers, as illustrated below.
 
-![Overall Architecture](Guideline/整体架构图.jpg)
+![Overall Architecture](Guideline/整体架构图(有点丑).jpg)
 
 
 *   **Presentation Layer (Client)**: A state-of-the-art `PyQt6` desktop application. It is responsible for UI rendering, user interaction, and progressive display of reasoning traces. **Crucially, the Presentation Layer has no direct access to the database**; it relies entirely on the backend services for all data persistence and retrieval.

@@ -61,7 +61,9 @@ def _get_cached_tis_schedule_context(cache_key: str) -> TisScheduleContext | Non
     age_seconds = time.monotonic() - entry.cached_at_monotonic
     if age_seconds >= _TIS_SCHEDULE_CACHE_TTL_SECONDS:
         _TIS_SCHEDULE_CACHE.pop(cache_key, None)
-        logger.info("tis.cache: expired key=%s age_seconds=%.3f", cache_key, age_seconds)
+        logger.info(
+            "tis.cache: expired key=%s age_seconds=%.3f", cache_key, age_seconds
+        )
         return None
 
     logger.info("tis.cache: hit key=%s age_seconds=%.3f", cache_key, age_seconds)
@@ -73,7 +75,11 @@ def _store_tis_schedule_context(cache_key: str, context: TisScheduleContext) -> 
         cached_at_monotonic=time.monotonic(),
         context=context,
     )
-    logger.info("tis.cache: stored key=%s items=%d", cache_key, len(context.effective_occurrences))
+    logger.info(
+        "tis.cache: stored key=%s items=%d",
+        cache_key,
+        len(context.effective_occurrences),
+    )
 
 
 async def _get_tis_schedule_cache_lock(cache_key: str) -> asyncio.Lock:
@@ -175,10 +181,16 @@ def _raise_for_unexpected_http_status(resp: httpx.Response, *, label: str) -> No
     if status < 400:
         return
     if status in (401, 403):
-        raise PermissionError(f"Academic system rejected request: label={label} status={status}")
+        raise PermissionError(
+            f"Academic system rejected request: label={label} status={status}"
+        )
     if status == 429 or status >= 500:
-        raise ConnectionError(f"Academic system endpoint failed: label={label} status={status}")
-    raise RuntimeError(f"Academic system endpoint returned unexpected status: label={label} status={status}")
+        raise ConnectionError(
+            f"Academic system endpoint failed: label={label} status={status}"
+        )
+    raise RuntimeError(
+        f"Academic system endpoint returned unexpected status: label={label} status={status}"
+    )
 
 
 def _tis_dump_test5(
@@ -214,7 +226,9 @@ def _tis_dump_test5(
             lines.append(f"kb.content_type={r_kb.headers.get('content-type','')}")
 
         if isinstance(kb_payload, dict):
-            lines.append(f"kb_payload.type=dict keys={sorted(list(kb_payload.keys()))[:80]}")
+            lines.append(
+                f"kb_payload.type=dict keys={sorted(list(kb_payload.keys()))[:80]}"
+            )
         elif isinstance(kb_payload, list):
             lines.append(f"kb_payload.type=list len={len(kb_payload)}")
         else:
@@ -225,14 +239,25 @@ def _tis_dump_test5(
         for d in _tis_iter_dicts(kb_payload):
             if not isinstance(d, dict):
                 continue
-            if not any(k in d for k in ("SKSJ", "SKSJ_EN", "KEY", "ZC", "KSJC", "JSJC", "RWH")):
+            if not any(
+                k in d for k in ("SKSJ", "SKSJ_EN", "KEY", "ZC", "KSJC", "JSJC", "RWH")
+            ):
                 continue
             interesting += 1
             if len(samples) < 8:
                 samples.append(
                     {
                         k: d.get(k)
-                        for k in ("RWH", "KEY", "XB", "KSJC", "JSJC", "ZC", "SKSJ", "SKSJ_EN")
+                        for k in (
+                            "RWH",
+                            "KEY",
+                            "XB",
+                            "KSJC",
+                            "JSJC",
+                            "ZC",
+                            "SKSJ",
+                            "SKSJ_EN",
+                        )
                         if k in d
                     }
                 )
@@ -290,8 +315,14 @@ def _coerce_term_pair(xn: object, xq: object) -> tuple[str, str] | None:
 def _tis_extract_xn_xq_from_obj(payload: object) -> tuple[str, str] | None:
     if isinstance(payload, dict):
         pair = _coerce_term_pair(
-            payload.get("xn") or payload.get("XN") or payload.get("xndm") or payload.get("XNDM"),
-            payload.get("xq") or payload.get("XQ") or payload.get("xqdm") or payload.get("XQDM"),
+            payload.get("xn")
+            or payload.get("XN")
+            or payload.get("xndm")
+            or payload.get("XNDM"),
+            payload.get("xq")
+            or payload.get("XQ")
+            or payload.get("xqdm")
+            or payload.get("XQDM"),
         )
         if pair:
             return pair
@@ -334,10 +365,28 @@ def _tis_parse_weekday(v: object) -> int | None:
                 return n
         m = re.search(r"(?:星期|周)([一二三四五六日天])", s)
         if m:
-            mp = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7}
+            mp = {
+                "一": 1,
+                "二": 2,
+                "三": 3,
+                "四": 4,
+                "五": 5,
+                "六": 6,
+                "日": 7,
+                "天": 7,
+            }
             return mp.get(m.group(1))
         if len(s) == 1 and s in "一二三四五六日天":
-            mp = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7}
+            mp = {
+                "一": 1,
+                "二": 2,
+                "三": 3,
+                "四": 4,
+                "五": 5,
+                "六": 6,
+                "日": 7,
+                "天": 7,
+            }
             return mp.get(s)
     return None
 
@@ -447,7 +496,18 @@ def _has_any_key(d: dict[str, object], keys: tuple[str, ...]) -> bool:
 
 
 def _is_candidate_meeting_dict(d: dict[str, object]) -> bool:
-    name_keys = ("kcmc", "KCMC", "course", "courseName", "name", "title", "RWH", "rwh", "kch", "KCH")
+    name_keys = (
+        "kcmc",
+        "KCMC",
+        "course",
+        "courseName",
+        "name",
+        "title",
+        "RWH",
+        "rwh",
+        "kch",
+        "KCH",
+    )
     schedule_keys = (
         "SKSJ",
         "SKSJ_EN",
@@ -501,7 +561,14 @@ def _summarize_unparsed_meeting(
         missing.append("sections")
     if not weeks:
         missing.append("weeks")
-    ident = d.get("RWH") or d.get("rwh") or d.get("kch") or d.get("KCH") or course_name or "<unknown>"
+    ident = (
+        d.get("RWH")
+        or d.get("rwh")
+        or d.get("kch")
+        or d.get("KCH")
+        or course_name
+        or "<unknown>"
+    )
     return f"id={ident} missing={','.join(missing)}"
 
 
@@ -528,7 +595,9 @@ def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
             or d.get("name")
             or d.get("title")
         )
-        teacher = d.get("jsxm") or d.get("JSXM") or d.get("teacher") or d.get("instructor")
+        teacher = (
+            d.get("jsxm") or d.get("JSXM") or d.get("teacher") or d.get("instructor")
+        )
         location = d.get("cdmc") or d.get("CDMC") or d.get("room") or d.get("location")
 
         weekday = None
@@ -547,7 +616,9 @@ def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
 
         sections = None
         if ("ksjc" in d and "jsjc" in d) or ("KSJC" in d and "JSJC" in d):
-            sections = _tis_parse_sections((d.get("ksjc") or d.get("KSJC"), d.get("jsjc") or d.get("JSJC")))
+            sections = _tis_parse_sections(
+                (d.get("ksjc") or d.get("KSJC"), d.get("jsjc") or d.get("JSJC"))
+            )
 
         if not sections:
             for k in ("jcs", "JCS", "jc", "JC", "qzjc", "QZJC"):
@@ -620,7 +691,14 @@ def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
 
         meetings.append(
             {
-                "course_id": str(d.get("RWH") or d.get("rwh") or d.get("kch") or d.get("KCH") or d.get("courseCode") or course_name),
+                "course_id": str(
+                    d.get("RWH")
+                    or d.get("rwh")
+                    or d.get("kch")
+                    or d.get("KCH")
+                    or d.get("courseCode")
+                    or course_name
+                ),
                 "course_name": str(course_name),
                 "weekday": weekday,
                 "start_sec": start_sec,
@@ -740,13 +818,20 @@ def _apply_calendar_overrides(
             )
 
     override_days = {dst for _, dst in move_rules}
-    kept = [o for o in occs if o.start_at.date() not in cancel_days and o.start_at.date() not in override_days]
+    kept = [
+        o
+        for o in occs
+        if o.start_at.date() not in cancel_days
+        and o.start_at.date() not in override_days
+    ]
     kept.extend(moved)
     kept.sort(key=lambda x: (x.start_at, x.course_id))
     return kept
 
 
-async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password: str) -> TisScheduleContext:
+async def _fetch_course_schedule_context_uncached(
+    cas_account: str, cas_password: str
+) -> TisScheduleContext:
     _ensure_file_logging()
 
     service_url = f"{ACADEMIC_SYSTEM_BASE}/cas"
@@ -790,9 +875,14 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
             label: str,
         ) -> httpx.Response:
             url = f"{ACADEMIC_SYSTEM_BASE}{path}"
-            req_headers = {**xhr_headers, "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
+            req_headers = {
+                **xhr_headers,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            }
 
-            r = await _request_with_retry(client, "POST", url, headers=req_headers, data=data or {}, label=label)
+            r = await _request_with_retry(
+                client, "POST", url, headers=req_headers, data=data or {}, label=label
+            )
             if _tis_needs_auth_response(r):
                 _clear_cas_cookie_cache(cas_account)
                 await _cas_login_for_tis(client, cas_account, cas_password, service_url)
@@ -836,7 +926,9 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
         ):
             await _tis_post(ep, data={"xn": xn, "xq": xq}, label=label)
 
-        r_kb = await _tis_post("/xszykb/queryxszykbzong", data={"xn": xn, "xq": xq}, label="tis.kb.zong")
+        r_kb = await _tis_post(
+            "/xszykb/queryxszykbzong", data={"xn": xn, "xq": xq}, label="tis.kb.zong"
+        )
 
         kb_payload = _parse_json_payload(r_kb)
         extraction = _tis_extract_meetings(kb_payload)
@@ -849,7 +941,9 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
                 extraction.skipped_count,
                 extraction.skipped_examples,
             )
-        if extraction.candidate_count and extraction.skipped_count >= max(1, extraction.candidate_count // 2):
+        if extraction.candidate_count and extraction.skipped_count >= max(
+            1, extraction.candidate_count // 2
+        ):
             _tis_dump_test5(
                 reason="meetings_partially_unparseable",
                 r_term=r_term,
@@ -885,8 +979,12 @@ async def _fetch_course_schedule_context_uncached(cas_account: str, cas_password
             overrides.week1_monday.day,
         )
         raw_occs = _tis_meetings_to_occurrences(meetings, week1_monday=week1_monday)
-        cancel_days, move_rules = _filter_relevant_override_rules(raw_occs, overrides.cancel_days, overrides.move_rules)
-        effective_occs = _apply_calendar_overrides(raw_occs, cancel_days=cancel_days, move_rules=move_rules)
+        cancel_days, move_rules = _filter_relevant_override_rules(
+            raw_occs, overrides.cancel_days, overrides.move_rules
+        )
+        effective_occs = _apply_calendar_overrides(
+            raw_occs, cancel_days=cancel_days, move_rules=move_rules
+        )
         return TisScheduleContext(
             raw_occurrences=raw_occs,
             effective_occurrences=effective_occs,
@@ -918,7 +1016,9 @@ async def fetch_course_schedule_context(
             if cached is not None:
                 return cached
 
-        context = await _fetch_course_schedule_context_uncached(cas_account, cas_password)
+        context = await _fetch_course_schedule_context_uncached(
+            cas_account, cas_password
+        )
         _store_tis_schedule_context(cache_key, context)
         return context
 

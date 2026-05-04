@@ -50,18 +50,20 @@ from backend.agent.tool_policy import normalize_route_for_prompt
 from backend.agent.validators import ResponseValidationContext, detect_alignment_issue
 import traceback
 
-
 TraceEmitter = Callable[[TraceItem], Awaitable[None] | None]
 
 
 # ── HITL 异常 ─────────────────────────────────────────────────────────────────
+
 
 class HITLInterrupt(Exception):
     """
     工具函数检测到高风险操作时抛出此异常，由 run_agent 捕获。
     """
 
-    def __init__(self, pending_state: HITLPendingState, payload: list[str], reason: str) -> None:
+    def __init__(
+        self, pending_state: HITLPendingState, payload: list[str], reason: str
+    ) -> None:
         super().__init__(reason)
         self.pending_state = pending_state
         self.payload = payload
@@ -91,6 +93,7 @@ def wait_for_user_interrupt(
 
 
 # ── 主入口 ────────────────────────────────────────────────────────────────────
+
 
 async def run_agent(
     db: AsyncSession,
@@ -129,7 +132,9 @@ async def run_agent(
     )
     llm_api_key = (llm_api_key or "").strip()
     cas_account = user.cas_account
-    cas_password = decrypt(user.cas_password_encrypted) if user.cas_password_encrypted else None
+    cas_password = (
+        decrypt(user.cas_password_encrypted) if user.cas_password_encrypted else None
+    )
 
     if not llm_api_key:
         await emit_trace(
@@ -171,7 +176,9 @@ async def run_agent(
 
     user_prompt = request.message
     if hitl_context and request.hitl_reply is not None:
-        user_prompt = build_hitl_continuation_prompt(hitl_context.action, request.hitl_reply.approved)
+        user_prompt = build_hitl_continuation_prompt(
+            hitl_context.action, request.hitl_reply.approved
+        )
 
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (
@@ -239,9 +246,15 @@ async def run_agent(
 
         tool_names = _extract_tool_names(raw_messages)
         print(f"tool_names={tool_names}")
-        blackboard_result = _extract_tool_return_content(raw_messages, "fetch_blackboard_deadlines")
-        final_data = _normalize_blackboard_deadline_response(user_prompt, final_data, blackboard_result)
-        blackboard_schedule = _build_blackboard_schedule_data(user_prompt, blackboard_result)
+        blackboard_result = _extract_tool_return_content(
+            raw_messages, "fetch_blackboard_deadlines"
+        )
+        final_data = _normalize_blackboard_deadline_response(
+            user_prompt, final_data, blackboard_result
+        )
+        blackboard_schedule = _build_blackboard_schedule_data(
+            user_prompt, blackboard_result
+        )
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
         chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
@@ -267,11 +280,15 @@ async def run_agent(
             )
 
         # 持久化会话与消息
-        stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
+        stmt_session = select(ChatSession).where(
+            ChatSession.session_id == request.session_id
+        )
         chat_session = (await db.execute(stmt_session)).scalar_one_or_none()
         print("=== session loaded ===")
         if chat_session is None:
-            chat_session = ChatSession(session_id=request.session_id, user_id=user.user_id)
+            chat_session = ChatSession(
+                session_id=request.session_id, user_id=user.user_id
+            )
             db.add(chat_session)
             print("=== session created ===")
         chat_session.updated_at = datetime.now(timezone.utc)
@@ -329,13 +346,19 @@ async def run_agent(
         )
         await emit_trace(wait_trace)
 
-        stmt_session = select(ChatSession).where(ChatSession.session_id == request.session_id)
+        stmt_session = select(ChatSession).where(
+            ChatSession.session_id == request.session_id
+        )
         chat_session = (await db.execute(stmt_session)).scalar_one_or_none()
         if chat_session is None:
-            chat_session = ChatSession(session_id=request.session_id, user_id=user.user_id)
+            chat_session = ChatSession(
+                session_id=request.session_id, user_id=user.user_id
+            )
             db.add(chat_session)
         chat_session.updated_at = datetime.now(timezone.utc)
-        db.add(ChatMessage(session_id=request.session_id, role="user", content=user_prompt))
+        db.add(
+            ChatMessage(session_id=request.session_id, role="user", content=user_prompt)
+        )
         await db.commit()
 
         return AgentResponse(
@@ -428,41 +451,59 @@ def _build_trace(raw_messages: list) -> list[TraceItem]:
         if isinstance(msg, ModelRequest):
             for part in msg.parts:
                 if isinstance(part, ToolReturnPart):
-                    is_error = isinstance(part.content, str) and part.content.startswith("ERROR:")
-                    traces.append(TraceItem(
-                        phase="Observation",
-                        title=f"检查工具 [{part.tool_name}] 的返回结果",
-                        detail=str(part.content)[:240] if part.content is not None else "",
-                        status="error" if is_error else "done",
-                        timestamp=datetime.now(timezone.utc),
-                    ))
+                    is_error = isinstance(
+                        part.content, str
+                    ) and part.content.startswith("ERROR:")
+                    traces.append(
+                        TraceItem(
+                            phase="Observation",
+                            title=f"检查工具 [{part.tool_name}] 的返回结果",
+                            detail=(
+                                str(part.content)[:240]
+                                if part.content is not None
+                                else ""
+                            ),
+                            status="error" if is_error else "done",
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                    )
                 elif isinstance(part, UserPromptPart):
-                    traces.append(TraceItem(
-                        phase="Observation",
-                        title="解析用户输入",
-                        detail=str(part.content)[:240],
-                        status="done",
-                        timestamp=datetime.now(timezone.utc),
-                    ))
+                    traces.append(
+                        TraceItem(
+                            phase="Observation",
+                            title="解析用户输入",
+                            detail=str(part.content)[:240],
+                            status="done",
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                    )
 
         elif isinstance(msg, ModelResponse):
             for part in msg.parts:
                 if isinstance(part, ToolCallPart):
-                    traces.append(TraceItem(
-                        phase="Tool Use",
-                        title=f"调用工具: {part.tool_name}",
-                        detail=f"call_id={getattr(part, 'tool_call_id', '')}",
-                        status="done",
-                        timestamp=datetime.now(timezone.utc),
-                    ))
-                elif hasattr(part, "content") and isinstance(part.content, str) and part.content.strip():
-                    traces.append(TraceItem(
-                        phase="Reasoning",
-                        title="思考下一步行动",
-                        detail=part.content[:240],
-                        status="done",
-                        timestamp=datetime.now(timezone.utc),
-                    ))
+                    traces.append(
+                        TraceItem(
+                            phase="Tool Use",
+                            title=f"调用工具: {part.tool_name}",
+                            detail=f"call_id={getattr(part, 'tool_call_id', '')}",
+                            status="done",
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                    )
+                elif (
+                    hasattr(part, "content")
+                    and isinstance(part.content, str)
+                    and part.content.strip()
+                ):
+                    traces.append(
+                        TraceItem(
+                            phase="Reasoning",
+                            title="思考下一步行动",
+                            detail=part.content[:240],
+                            status="done",
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                    )
 
     return traces
 
@@ -490,7 +531,20 @@ def _extract_tool_return_content(raw_messages: list, tool_name: str) -> str | No
 
 def _is_deadline_query(text: str) -> bool:
     lowered = (text or "").lower()
-    return any(k in text or k in lowered for k in ("作业", "ddl", "截止", "deadline", "deadlines", "assignment", "homework", "quiz", "exam"))
+    return any(
+        k in text or k in lowered
+        for k in (
+            "作业",
+            "ddl",
+            "截止",
+            "deadline",
+            "deadlines",
+            "assignment",
+            "homework",
+            "quiz",
+            "exam",
+        )
+    )
 
 
 def _format_deadline_label(value: str) -> str:
@@ -504,13 +558,21 @@ def _format_deadline_label(value: str) -> str:
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
-def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalResponse, blackboard_result: str | None) -> FinalResponse:
+def _normalize_blackboard_deadline_response(
+    user_prompt: str, final_data: FinalResponse, blackboard_result: str | None
+) -> FinalResponse:
     if not _is_deadline_query(user_prompt) or not blackboard_result:
         return final_data
     if blackboard_result == "ERROR:CAS_LOGIN_FAILED":
-        return FinalResponse(content="我暂时无法获取 Blackboard 作业，因为未配置或无法使用 CAS 账号密码。请先在设置中保存正确的 CAS 凭据后重试。", route="scheduler")
+        return FinalResponse(
+            content="我暂时无法获取 Blackboard 作业，因为未配置或无法使用 CAS 账号密码。请先在设置中保存正确的 CAS 凭据后重试。",
+            route="scheduler",
+        )
     if blackboard_result == "ERROR:BLACKBOARD_UNREACHABLE":
-        return FinalResponse(content="抱歉，暂时无法访问 Blackboard 系统来获取您的未完成作业信息。请稍后重试，或直接登录 Blackboard 查看最新作业截止时间。", route="scheduler")
+        return FinalResponse(
+            content="抱歉，暂时无法访问 Blackboard 系统来获取您的未完成作业信息。请稍后重试，或直接登录 Blackboard 查看最新作业截止时间。",
+            route="scheduler",
+        )
     try:
         payload = json.loads(blackboard_result)
     except Exception:
@@ -518,10 +580,14 @@ def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalR
     if not isinstance(payload, list):
         return final_data
     if not payload:
-        return FinalResponse(content="当前没有查询到未完成的 Blackboard 作业或考试。", route="scheduler")
+        return FinalResponse(
+            content="当前没有查询到未完成的 Blackboard 作业或考试。", route="scheduler"
+        )
 
     lines = ["您目前有以下未完成的作业：", "", "## 作业列表", ""]
-    for idx, item in enumerate(sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1):
+    for idx, item in enumerate(
+        sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1
+    ):
         title = str(item.get("title") or "未命名任务")
         course_id = str(item.get("course_id") or "").strip()
         course_name = str(item.get("course_name") or "").strip()
@@ -529,7 +595,11 @@ def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalR
         estimated_minutes = item.get("estimated_minutes")
         priority = item.get("priority")
         url = str(item.get("url") or "").strip()
-        course_label = f"课程名称：{course_name}" if course_name and course_name != course_id else f"课程ID：{course_id or course_name}"
+        course_label = (
+            f"课程名称：{course_name}"
+            if course_name and course_name != course_id
+            else f"课程ID：{course_id or course_name}"
+        )
         type_label = {
             "assignment": "作业",
             "quiz": "测验",
@@ -541,7 +611,9 @@ def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalR
 
         lines.append(f"{idx}. **{title}**")
         lines.append(f"   - {course_label}")
-        lines.append(f"   - 截止时间：{_format_deadline_label(str(item.get('deadline') or ''))}")
+        lines.append(
+            f"   - 截止时间：{_format_deadline_label(str(item.get('deadline') or ''))}"
+        )
         lines.append(f"   - 类型：{type_label}")
         if estimated_minutes is not None:
             lines.append(f"   - 预计耗时：{estimated_minutes} 分钟")
@@ -553,7 +625,9 @@ def _normalize_blackboard_deadline_response(user_prompt: str, final_data: FinalR
     return FinalResponse(content="\n".join(lines), route="scheduler")
 
 
-def _build_blackboard_schedule_data(user_prompt: str, blackboard_result: str | None) -> ScheduleData | None:
+def _build_blackboard_schedule_data(
+    user_prompt: str, blackboard_result: str | None
+) -> ScheduleData | None:
     if not _is_deadline_query(user_prompt) or not blackboard_result:
         return None
     if blackboard_result.startswith("ERROR:"):
@@ -566,7 +640,9 @@ def _build_blackboard_schedule_data(user_prompt: str, blackboard_result: str | N
         return None
 
     events: list[ScheduleEvent] = []
-    for idx, item in enumerate(sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1):
+    for idx, item in enumerate(
+        sorted(payload, key=lambda x: str(x.get("deadline") or "")), start=1
+    ):
         title = str(item.get("title") or "未命名任务")
         course_id = str(item.get("course_id") or "").strip()
         course_name = str(item.get("course_name") or "").strip()
@@ -610,13 +686,17 @@ def _build_blackboard_schedule_data(user_prompt: str, blackboard_result: str | N
     return ScheduleData(events=events, conflicts=[])
 
 
-def _build_message_history(history_messages: list[ChatMessage]) -> list[ModelRequest | ModelResponse]:
+def _build_message_history(
+    history_messages: list[ChatMessage],
+) -> list[ModelRequest | ModelResponse]:
     """Convert persisted chat messages into the PydanticAI message history format."""
     message_history: list[ModelRequest | ModelResponse] = []
     for item in history_messages:
         if item.role == "user":
             message_history.append(
-                ModelRequest(parts=[UserPromptPart(item.content)], timestamp=item.timestamp)
+                ModelRequest(
+                    parts=[UserPromptPart(item.content)], timestamp=item.timestamp
+                )
             )
         elif item.role == "assistant":
             message_history.append(

@@ -42,7 +42,9 @@ class TestFetchTisCache(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         invalidate_tis_schedule_cache()
 
-    async def test_fetch_course_schedule_context_uses_cache_for_same_account(self) -> None:
+    async def test_fetch_course_schedule_context_uses_cache_for_same_account(
+        self,
+    ) -> None:
         context = _make_context("CS101", 3)
 
         with patch(
@@ -56,7 +58,9 @@ class TestFetchTisCache(unittest.IsolatedAsyncioTestCase):
         self.assertIs(second, context)
         self.assertEqual(fetch_mock.await_count, 1)
 
-    async def test_fetch_course_schedule_context_force_refresh_replaces_cache(self) -> None:
+    async def test_fetch_course_schedule_context_force_refresh_replaces_cache(
+        self,
+    ) -> None:
         first_context = _make_context("CS101", 3)
         refreshed_context = _make_context("CS102", 4)
 
@@ -65,7 +69,9 @@ class TestFetchTisCache(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(side_effect=[first_context, refreshed_context]),
         ) as fetch_mock:
             cached = await fetch_course_schedule_context("student_b", "secret")
-            refreshed = await fetch_course_schedule_context("student_b", "secret", force_refresh=True)
+            refreshed = await fetch_course_schedule_context(
+                "student_b", "secret", force_refresh=True
+            )
             after_refresh = await fetch_course_schedule_context("student_b", "secret")
 
         self.assertIs(cached, first_context)
@@ -83,7 +89,9 @@ class TestFetchTisCache(unittest.IsolatedAsyncioTestCase):
         ) as fetch_mock:
             initial = await fetch_course_schedule_context("student_c", "secret")
             invalidate_tis_schedule_cache("student_c")
-            after_invalidate = await fetch_course_schedule_context("student_c", "secret")
+            after_invalidate = await fetch_course_schedule_context(
+                "student_c", "secret"
+            )
 
         self.assertIs(initial, first_context)
         self.assertIs(after_invalidate, second_context)

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from frontend.config import API_BASE_URL
 
+
 def wait_for_backend(timeout: int = 10) -> bool:
     """
     轮询后端 /health 接口，等待 FastAPI 服务就绪。

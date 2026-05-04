@@ -35,8 +35,12 @@ async def refresh_schedule(
     try:
         return await schedule_service.refresh(db, current_user)
     except PermissionError as exc:
-        raise HTTPException(status_code=424, detail=str(exc) or "CAS login failed") from exc
+        raise HTTPException(
+            status_code=424, detail=str(exc) or "CAS login failed"
+        ) from exc
     except ConnectionError as exc:
-        raise HTTPException(status_code=503, detail=str(exc) or "Service unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail=str(exc) or "Service unavailable"
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Internal Server Error") from exc

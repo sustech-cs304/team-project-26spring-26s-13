@@ -7,8 +7,12 @@ HITL 高风险操作授权弹窗。
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog, QDialogButtonBox, QLabel,
-    QListWidget, QVBoxLayout, QWidget,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QListWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -21,8 +25,8 @@ class HITLDialog(QDialog):
         rejected(request_id: str):  用户点击"拒绝"时 emit
     """
 
-    approved = pyqtSignal(str)   # str = request_id
-    rejected = pyqtSignal(str)   # str = request_id
+    approved = pyqtSignal(str)  # str = request_id
+    rejected = pyqtSignal(str)  # str = request_id
 
     def __init__(self, hitl_request: dict, parent: QWidget | None = None) -> None:
         """

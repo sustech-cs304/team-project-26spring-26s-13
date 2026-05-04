@@ -12,7 +12,13 @@ from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User, ChatSession, ChatMessage, get_db
-from backend.schemas.agent import AgentRequest, AgentResponse, ChatMessage as ChatMessageSchema, SessionDetail, SessionSummary
+from backend.schemas.agent import (
+    AgentRequest,
+    AgentResponse,
+    ChatMessage as ChatMessageSchema,
+    SessionDetail,
+    SessionSummary,
+)
 from backend.agent.loop import run_agent
 from backend.agent.hitl import hitl_manager
 from backend.api.deps import get_current_user
@@ -94,15 +100,24 @@ async def agent_run_stream(
         try:
             result = await task
         except HTTPException as exc:
-            payload = {"event": "error", "data": {"message": str(exc.detail), "status_code": exc.status_code}}
+            payload = {
+                "event": "error",
+                "data": {"message": str(exc.detail), "status_code": exc.status_code},
+            }
             yield json.dumps(payload, ensure_ascii=False) + "\n"
             return
         except Exception as exc:  # noqa: BLE001
-            payload = {"event": "error", "data": {"message": str(exc), "status_code": 500}}
+            payload = {
+                "event": "error",
+                "data": {"message": str(exc), "status_code": 500},
+            }
             yield json.dumps(payload, ensure_ascii=False) + "\n"
             return
 
-        yield json.dumps({"event": "final", "data": result.model_dump(mode="json")}, ensure_ascii=False) + "\n"
+        yield json.dumps(
+            {"event": "final", "data": result.model_dump(mode="json")},
+            ensure_ascii=False,
+        ) + "\n"
 
     return StreamingResponse(stream_gen(), media_type="application/x-ndjson")
 
@@ -148,7 +163,9 @@ async def list_sessions(
             .limit(1)
         )
         title_content = (await db.execute(title_stmt)).scalar_one_or_none() or ""
-        preview_content = (await db.execute(preview_stmt)).scalar_one_or_none() or title_content
+        preview_content = (
+            await db.execute(preview_stmt)
+        ).scalar_one_or_none() or title_content
         results.append(
             SessionSummary(
                 session_id=sess.session_id,
@@ -251,12 +268,20 @@ async def _run_agent_with_hitl_resolution(
     if body.hitl_reply is not None:
         pending = hitl_manager.get(body.hitl_reply.request_id)
         if pending is None:
-            raise HTTPException(status_code=404, detail="HITL request not found or expired")
+            raise HTTPException(
+                status_code=404, detail="HITL request not found or expired"
+            )
         if pending.session_id != body.session_id:
-            raise HTTPException(status_code=403, detail="HITL request does not belong to this session")
-        resolved = hitl_manager.resolve(body.hitl_reply.request_id, body.hitl_reply.approved)
+            raise HTTPException(
+                status_code=403, detail="HITL request does not belong to this session"
+            )
+        resolved = hitl_manager.resolve(
+            body.hitl_reply.request_id, body.hitl_reply.approved
+        )
         if not resolved:
-            raise HTTPException(status_code=404, detail="HITL request not found or expired")
+            raise HTTPException(
+                status_code=404, detail="HITL request not found or expired"
+            )
 
     return await run_agent(
         db=db,

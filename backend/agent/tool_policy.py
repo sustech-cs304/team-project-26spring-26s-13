@@ -17,7 +17,6 @@ from pydantic_ai.tools import ToolDefinition
 
 from backend.schemas.agent import RouteType
 
-
 FILE_TOOL_NAMES = {
     "file_read",
     "file_create",

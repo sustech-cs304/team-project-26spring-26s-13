@@ -18,7 +18,8 @@
 6. [API 接口速览](#6-api-接口速览)
 7. [数据库概览](#7-数据库概览)
 8. [开发规范](#8-开发规范)
-9. [参考文档](#9-参考文档)
+9. [测试指南](#9-测试指南)
+10. [参考文档](#10-参考文档)
 
 ---
 
@@ -380,13 +381,25 @@ python frontend/app.py
 python -m frontend.main
 ```
 
-### 5.3 完整开发环境启动顺序
+### 5.3 一键启动（推荐）
+
+项目根目录提供 `run.py` 自动化脚本，可同时启动前后端，无需开两个终端：
+
+```bash
+python run.py          # 同时启动后端 + 前端（默认）
+python run.py test     # 运行测试套件
+python run.py format   # 用 black 格式化代码
+python run.py lint     # 用 flake8 检查代码
+```
+
+脚本会先启动后端并等待 2 秒，再拉起前端（自动注入 `SPA_API_BASE_URL`），按 `Ctrl+C` 可同时关闭两个进程。
+
+### 5.4 完整开发环境启动顺序
 
 ```
 1. 启动 PostgreSQL 服务
 2. 确认数据库表已建好（见 4.4）
-3. python -m backend.main      # 启动后端（新终端）
-4. python frontend/app.py      # 启动前端（新终端）
+3. python run.py        # 一键启动前后端（或分终端手动启动）
 ```
 
 ---
@@ -493,7 +506,257 @@ DELETE / RENAME 等高危操作 → 工具抛出 `HITLInterrupt` → `run_agent(
 
 ---
 
-## 9. 参考文档
+## 9. 测试指南
+
+### 9.1 概览
+
+测试套件使用 **pytest + pytest-asyncio**，以 SQLite（`test.db`）替代 PostgreSQL，无需启动任何外部服务即可在本地或 CI 中运行。全套 90 个测试用例覆盖后端 API 路由、业务逻辑与工具层。
+
+| 测试文件 | 覆盖范围 | 测试数 |
+|---|---|---|
+| `tests/test_main.py` | 健康检查、OpenAPI 文档可访问性 | 3 |
+| `tests/test_auth.py` | 注册、登录、登出（含边界校验） | 8 |
+| `tests/test_user.py` | 获取/更新用户 Profile | 6 |
+| `tests/test_user_credentials.py` | 更新 CAS 账号/密码、LLM API Key | 8 |
+| `tests/test_materials.py` | 教材列表/上传/删除（向量化已 mock） | 7 |
+| `tests/test_schedule.py` | 日程刷新（爬虫已 mock） | 4 |
+| `tests/test_dashboard.py` | Dashboard bootstrap 初始化数据 | 6 |
+| `tests/test_agent_sessions.py` | 会话列表/详情/删除 + `/agent/run` HTTP 契约 | 12 |
+| `tests/test_crypto.py` | `encrypt`/`decrypt` 纯单元测试 | 8 |
+| `tests/test_conflicts.py` | 冲突检测算法纯单元测试 | 28 |
+
+---
+
+### 9.2 依赖安装
+
+测试专用依赖定义在 `requirements-dev.txt`，在项目 conda 环境中一次性安装：
+
+```bash
+# 激活环境
+conda activate software-engineering
+
+# 安装测试依赖
+pip install -r requirements-dev.txt
+```
+
+`requirements-dev.txt` 包含：
+
+```
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+httpx>=0.27.0
+aiosqlite>=0.19.0
+pytest-mock>=3.14.0
+flake8>=7.0.0
+black>=24.0.0
+```
+
+---
+
+### 9.3 运行测试
+
+在项目根目录下执行（需先激活 conda 环境）：
+
+```bash
+# 运行全部测试（必须用 python -m pytest，否则 backend 模块找不到）
+python -m pytest tests/
+
+# 带覆盖率报告
+python -m pytest tests/ --cov=backend --cov-report=term-missing
+
+# 生成 XML 覆盖率报告（CI 用）
+python -m pytest tests/ --cov=backend --cov-report=xml
+
+# 只运行某个文件
+python -m pytest tests/test_auth.py
+
+# 只运行某个测试函数
+python -m pytest tests/test_auth.py::test_register_success
+
+# 失败立刻停止（调试用）
+python -m pytest tests/ -x
+
+# 详细输出
+python -m pytest tests/ -v
+```
+
+> **注意**：测试运行后会在项目根目录生成 `test.db`（SQLite 测试数据库），已加入 `.gitignore`，不应提交。
+
+---
+
+### 9.4 conftest 设计说明
+
+`tests/conftest.py` 是整个测试套件的基础，解决了几个关键兼容性问题：
+
+#### 环境变量预注入
+
+```python
+# conftest.py 顶部 — 必须在所有 backend 模块导入前执行
+os.environ.setdefault("POSTGRES_DSN", "sqlite+aiosqlite:///./test.db")
+os.environ.setdefault("SECRET_KEY",   "test-secret-key-for-pytest")
+os.environ.setdefault("FERNET_KEY",   "dmFsaWRiYXNlNjRlbmNvZGVkZmVybmV0a2V5MDAwMDA=")
+```
+
+这使得 `backend/config.py` 的 `Settings` 读取到测试值，而不会尝试连接真实的 PostgreSQL。
+
+#### SQLite 类型兼容补丁
+
+ORM 模型使用 PostgreSQL 专用类型（`JSONB`、`UUID`），SQLite 不认识，需在导入 backend 前打补丁：
+
+```python
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
+
+# DDL 补丁：建表时将 JSONB/UUID 映射为 SQLite 支持的类型
+SQLiteTypeCompiler.visit_JSONB = lambda self, type_, **kw: "JSON"
+SQLiteTypeCompiler.visit_UUID  = lambda self, type_, **kw: "VARCHAR(36)"
+
+# 运行时补丁：UUID bind/result processor 支持字符串形式的 UUID
+# （JWT decode 后 user_id 是 str，需能直接传给 db.get(User, user_id)）
+from sqlalchemy.sql import sqltypes as _sa_sqltypes
+_sa_sqltypes.Uuid.bind_processor   = _patched_uuid_bind
+_sa_sqltypes.Uuid.result_processor = _patched_uuid_result
+```
+
+#### 数据库隔离
+
+每个测试函数执行前建表、执行后删表，保证测试间完全隔离：
+
+```python
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def setup_database():
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+```
+
+#### 内置 Fixtures
+
+| Fixture | 类型 | 说明 |
+|---|---|---|
+| `async_client` | `AsyncClient` | 绑定到 FastAPI app 的异步 HTTP 客户端 |
+| `registered_user` | `dict` | 已注册的测试用户，返回 `AuthResponse` dict（含 `token`, `user_id`） |
+| `auth_headers` | `dict` | 含有效 JWT 的 `Authorization` 请求头 |
+| `setup_database` | autouse | 每个测试函数前建表/后删表，自动注入 |
+
+---
+
+### 9.5 编写新测试
+
+#### 基本模板
+
+```python
+# tests/test_my_feature.py
+from httpx import AsyncClient
+
+# 需要认证的接口
+async def test_something_authenticated(async_client: AsyncClient, auth_headers: dict):
+    resp = await async_client.get("/api/some/endpoint", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "expected_field" in resp.json()
+
+# 不需要认证的接口
+async def test_something_public(async_client: AsyncClient):
+    resp = await async_client.get("/health")
+    assert resp.status_code == 200
+```
+
+#### Mock 外部依赖
+
+涉及 LLM 调用、文件系统、网络爬虫的测试，必须 mock 对应的 service 函数：
+
+```python
+from unittest.mock import AsyncMock, patch
+
+async def test_upload_material(async_client: AsyncClient, auth_headers: dict):
+    with patch(
+        "backend.services.material_service.upload_and_vectorize",
+        new_callable=AsyncMock,
+        return_value={"file_id": "...", "file_name": "test.pdf", ...},
+    ):
+        resp = await async_client.post("/api/materials/upload", ...)
+    assert resp.status_code == 201
+```
+
+#### 直接操作测试数据库
+
+如需在测试中预置数据（不通过 HTTP），使用 `TestSessionLocal`：
+
+```python
+from tests.conftest import TestSessionLocal
+from backend.database.postgres import ChatSession
+import uuid, datetime
+
+@pytest_asyncio.fixture
+async def seeded_session(registered_user):
+    async with TestSessionLocal() as db:
+        sess = ChatSession(
+            session_id="sess_test_001",
+            user_id=uuid.UUID(registered_user["user_id"]),  # 注意：必须传 uuid.UUID 对象
+            created_at=datetime.datetime.utcnow(),
+            updated_at=datetime.datetime.utcnow(),
+        )
+        db.add(sess)
+        await db.commit()
+    return "sess_test_001"
+```
+
+> ⚠️ 预置数据时 `user_id` 必须传 `uuid.UUID` 对象而非字符串，否则 SQLAlchemy 的 bind processor 会报错。
+
+#### 无需数据库的纯单元测试
+
+对于 `backend/services/schedule_service/conflicts.py` 这类纯函数，直接导入测试，无需任何 fixture：
+
+```python
+from backend.services.schedule_service.conflicts import detect_conflicts
+from backend.services.schedule_service.constants import Deadline, CourseOccurrence
+from datetime import datetime
+
+def test_no_conflicts():
+    result = detect_conflicts([], [])
+    assert result.events == []
+    assert result.conflicts == []
+```
+
+#### 认证状态码说明
+
+FastAPI 0.135+ 对缺少 Bearer token 的请求返回 **401**（而非旧版的 403）。编写未认证测试时请使用：
+
+```python
+assert resp.status_code in (401, 403)  # 兼容不同 FastAPI 版本
+```
+
+---
+
+### 9.6 CI 自动化（GitHub Actions）
+
+CI 配置位于 `.github/workflows/ci.yml`，每次向 `main` 分支 push 或发起 PR 时自动触发，执行以下步骤：
+
+```
+1. 检出代码
+2. 设置 Python 3.10
+3. pip install -r requirements.txt -r requirements-dev.txt
+4. black --check .          # 格式检查
+5. flake8 .                 # Lint 检查
+6. python -m pytest tests/ --cov=backend --cov-report=xml
+7. 上传覆盖率报告到 Codecov
+```
+
+> **注意**：CI 中测试同样使用 SQLite，无需配置真实数据库。所有网络/LLM 调用均通过 `unittest.mock` 在测试层面拦截。
+
+如需在本地模拟 CI 完整流程：
+
+```bash
+black --check .
+flake8 .
+python -m pytest tests/ --cov=backend --cov-report=term-missing
+```
+
+---
+
+## 10. 参考文档
 
 | 文档 | 说明 |
 |------|------|

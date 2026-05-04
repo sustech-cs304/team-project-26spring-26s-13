@@ -110,13 +110,16 @@ def main() -> int:
                 "overlap": int(args.overlap),
             },
         }
-        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        meta_path.write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         index.append(meta)
 
-    (out_dir / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out_dir / "index.json").write_text(
+        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

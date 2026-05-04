@@ -23,6 +23,7 @@ class HITLPendingState:
     Agent loop 在创建此对象后挂起等待；
     API 路由在收到审批回传后调用 resolve() 恢复执行。
     """
+
     request_id: str
     session_id: str
     action: str
@@ -121,7 +122,9 @@ class HITLManager:
         with self._lock:
             self._pending.pop(request_id, None)
 
-    def to_schema(self, state: HITLPendingState, payload: list[str], reason: str) -> HITLRequest:
+    def to_schema(
+        self, state: HITLPendingState, payload: list[str], reason: str
+    ) -> HITLRequest:
         """
         将内部 HITLPendingState 转换为 API 响应中的 HITLRequest schema。
 

@@ -221,7 +221,10 @@ SCHEDULE_EVENTS = [
         },
     },
     {
-        "title": {"en": "Blackboard Deadline: OOAD Report", "zh": "Blackboard 截止：OOAD 报告"},
+        "title": {
+            "en": "Blackboard Deadline: OOAD Report",
+            "zh": "Blackboard 截止：OOAD 报告",
+        },
         "time": {"en": "Thu 15:30", "zh": "周四 15:30"},
         "source": {"en": "Blackboard", "zh": "Blackboard"},
         "detail": {

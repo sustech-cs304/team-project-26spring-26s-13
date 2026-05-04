@@ -11,6 +11,7 @@ from frontend.api_client import BackendApiClient, BackendApiError
 
 class APIError(Exception):
     """后端返回非 2xx 时抛出，携带 HTTP 状态码和错误信息。"""
+
     def __init__(self, status_code: int, detail: str) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -39,7 +40,9 @@ class APIClient:
 
     # ── Auth ─────────────────────────────────────────────────────────────────
 
-    def register(self, username: str, password: str, display_name: str, major: str) -> dict:
+    def register(
+        self, username: str, password: str, display_name: str, major: str
+    ) -> dict:
         """
         POST /api/auth/register
 
@@ -69,7 +72,9 @@ class APIClient:
         Raises:
             APIError: 401 认证失败
         """
-        response = self._wrap_error(lambda: self._client.login(username=username, password=password))
+        response = self._wrap_error(
+            lambda: self._client.login(username=username, password=password)
+        )
         token = str(response.get("token", "")).strip()
         if token:
             self.set_token(token)
@@ -180,7 +185,9 @@ class APIClient:
 
     def delete_material(self, file_id: str) -> None:
         """DELETE /api/materials/{file_id}"""
-        self._wrap_error(lambda: self._client._request("DELETE", f"/api/materials/{file_id}"))
+        self._wrap_error(
+            lambda: self._client._request("DELETE", f"/api/materials/{file_id}")
+        )
 
     # ── Schedule ─────────────────────────────────────────────────────────────
 

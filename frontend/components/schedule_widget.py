@@ -4,8 +4,13 @@ Frontend Relevant/components/schedule_widget.py
 """
 
 from PyQt6.QtWidgets import (
-    QGroupBox, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QVBoxLayout, QWidget,
+    QGroupBox,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from frontend.api.client import api_client

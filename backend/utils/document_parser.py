@@ -13,9 +13,10 @@ import re
 @dataclass
 class ParsedDocument:
     """解析结果，携带原始元信息便于后续处理。"""
-    text: str           # 提取的完整纯文本（已去除多余空行）
-    page_count: int     # PDF 页数 / PPT 幻灯片数（TXT/MD 为 1）
-    file_type: str      # MIME type
+
+    text: str  # 提取的完整纯文本（已去除多余空行）
+    page_count: int  # PDF 页数 / PPT 幻灯片数（TXT/MD 为 1）
+    file_type: str  # MIME type
 
 
 def parse_document(file_path: str, mime_type: str) -> ParsedDocument:
@@ -44,7 +45,10 @@ def parse_document(file_path: str, mime_type: str) -> ParsedDocument:
     """
     if mime_type == "application/pdf":
         return _parse_pdf(file_path)
-    if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    if (
+        mime_type
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
         return _parse_docx(file_path)
     if "presentation" in mime_type or "powerpoint" in mime_type:
         return _parse_pptx(file_path)
@@ -80,6 +84,7 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
 
         if ocr_engine is None:
             from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
+
             ocr_engine = PaddleOcrEngine()
 
         mat = fitz.Matrix(2, 2)
@@ -88,7 +93,9 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
         import numpy as np  # type: ignore[import-not-found]
 
         channels = 3
-        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, channels))
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+            (pix.height, pix.width, channels)
+        )
         img = img[:, :, ::-1]
         ocr_t = (ocr_engine.ocr_image_array(img) or "").strip()
         if ocr_t:
@@ -124,7 +131,11 @@ def _parse_pptx(file_path: str) -> ParsedDocument:
                 slides_text.append(f"[Slide {index}]\n{block}")
 
     text = _normalize_text("\n\n".join(slides_text))
-    return ParsedDocument(text=text, page_count=len(prs.slides), file_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+    return ParsedDocument(
+        text=text,
+        page_count=len(prs.slides),
+        file_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
 
 
 def _parse_docx(file_path: str) -> ParsedDocument:

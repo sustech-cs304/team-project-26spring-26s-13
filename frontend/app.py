@@ -81,8 +81,8 @@ except ImportError:
 class ApiWorker(QThread):
     """Run a single blocking API call on a background thread and emit the result."""
 
-    finished = pyqtSignal(object)   # emits the return value (any type)
-    errored = pyqtSignal(str)       # emits the error message string
+    finished = pyqtSignal(object)  # emits the return value (any type)
+    errored = pyqtSignal(str)  # emits the error message string
 
     def __init__(self, fn, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -122,7 +122,9 @@ class InfoCard(QFrame):
 
 
 class BubbleWidget(QWidget):
-    def __init__(self, sender: str, sender_label: str, text: str, message_type_label: str) -> None:
+    def __init__(
+        self, sender: str, sender_label: str, text: str, message_type_label: str
+    ) -> None:
         super().__init__()
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 10)
@@ -346,7 +348,12 @@ class TraceItem(QFrame):
 
 
 class HitlDialog(QDialog):
-    def __init__(self, parent: QWidget | None, texts: dict[str, str], request_payload: dict[str, str | list[str]]) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None,
+        texts: dict[str, str],
+        request_payload: dict[str, str | list[str]],
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(texts["hitl_dialog_title"])
         self.setMinimumWidth(520)
@@ -620,7 +627,9 @@ class MainWindow(QMainWindow):
     def _open_mode_menu(self) -> None:
         if self.mode_menu is None or self.mode_button is None:
             return
-        position = self.mode_button.mapToGlobal(QPoint(0, self.mode_button.height() + 6))
+        position = self.mode_button.mapToGlobal(
+            QPoint(0, self.mode_button.height() + 6)
+        )
         self.mode_menu.exec(position)
 
     def _response_chunk_size(self, text: str, cursor: int) -> int:
@@ -653,7 +662,11 @@ class MainWindow(QMainWindow):
         self.response_stream_state = None
         self.pending_hitl_request = state.get("pending_hitl_request")
         self._sync_active_conversation()
-        if open_dialog and self.pending_hitl_request and state.get("auto_open_hitl", True):
+        if (
+            open_dialog
+            and self.pending_hitl_request
+            and state.get("auto_open_hitl", True)
+        ):
             self.open_hitl_dialog()
 
     def _flush_response_stream(self, *, open_dialog: bool) -> None:
@@ -663,7 +676,9 @@ class MainWindow(QMainWindow):
         state = self.response_stream_state
         assistant_index = state.get("assistant_index")
         assistant_text = str(state.get("assistant_text", ""))
-        if assistant_index is not None and 0 <= assistant_index < len(self.chat_messages):
+        if assistant_index is not None and 0 <= assistant_index < len(
+            self.chat_messages
+        ):
             self.chat_messages[assistant_index]["text"] = assistant_text
 
         trace_index = int(state.get("trace_index", 0))
@@ -700,15 +715,22 @@ class MainWindow(QMainWindow):
         assistant_text = str(state.get("assistant_text", ""))
         cursor = int(state.get("assistant_cursor", 0))
         if assistant_index is not None and cursor < len(assistant_text):
-            next_cursor = min(len(assistant_text), cursor + self._response_chunk_size(assistant_text, cursor))
+            next_cursor = min(
+                len(assistant_text),
+                cursor + self._response_chunk_size(assistant_text, cursor),
+            )
             state["assistant_cursor"] = next_cursor
             if 0 <= assistant_index < len(self.chat_messages):
-                self.chat_messages[assistant_index]["text"] = assistant_text[:next_cursor]
+                self.chat_messages[assistant_index]["text"] = assistant_text[
+                    :next_cursor
+                ]
                 chat_changed = True
 
         extra_messages = list(state.get("extra_messages", []))
         extra_index = int(state.get("extra_index", 0))
-        assistant_done = assistant_index is None or int(state.get("assistant_cursor", 0)) >= len(assistant_text)
+        assistant_done = assistant_index is None or int(
+            state.get("assistant_cursor", 0)
+        ) >= len(assistant_text)
         trace_done = int(state.get("trace_index", 0)) >= len(trace_queue)
         if assistant_done and trace_done and extra_index < len(extra_messages):
             self.chat_messages.append(extra_messages[extra_index])
@@ -722,7 +744,9 @@ class MainWindow(QMainWindow):
             self._load_trace_events(self.trace_events)
 
         trace_done = int(state.get("trace_index", 0)) >= len(trace_queue)
-        assistant_done = assistant_index is None or int(state.get("assistant_cursor", 0)) >= len(assistant_text)
+        assistant_done = assistant_index is None or int(
+            state.get("assistant_cursor", 0)
+        ) >= len(assistant_text)
         extras_done = int(state.get("extra_index", 0)) >= len(extra_messages)
         if trace_done and assistant_done and extras_done:
             self._finalize_response_stream(open_dialog=True)
@@ -743,8 +767,12 @@ class MainWindow(QMainWindow):
         assistant_index: int | None = None
         initial_cursor = 0
         if assistant_text:
-            initial_cursor = min(len(assistant_text), self._response_chunk_size(assistant_text, 0))
-            self.chat_messages.append(self._create_text_message("agent", assistant_text[:initial_cursor]))
+            initial_cursor = min(
+                len(assistant_text), self._response_chunk_size(assistant_text, 0)
+            )
+            self.chat_messages.append(
+                self._create_text_message("agent", assistant_text[:initial_cursor])
+            )
             assistant_index = len(self.chat_messages) - 1
             self._load_chat_messages(self.chat_messages)
 
@@ -786,7 +814,13 @@ class MainWindow(QMainWindow):
     def _build_new_chat_messages(self) -> list[dict[str, Any]]:
         for item in CHAT_MESSAGES:
             if item["sender"] == "agent":
-                return [{"kind": "text", "sender": "agent", "text": self.local(item["text"])}]
+                return [
+                    {
+                        "kind": "text",
+                        "sender": "agent",
+                        "text": self.local(item["text"]),
+                    }
+                ]
         return []
 
     def _create_text_message(self, sender: str, text: str) -> dict[str, Any]:
@@ -850,7 +884,10 @@ class MainWindow(QMainWindow):
         ui_payload: dict[str, Any] = {"schedule": None, "encyclopedia": None}
         hitl_request: dict[str, Any] | None = None
 
-        if any(keyword in lowered for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")):
+        if any(
+            keyword in lowered
+            for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")
+        ):
             route = "os_automation"
             assistant_text = self.ui("reply_hitl")
             trace = [
@@ -889,7 +926,10 @@ class MainWindow(QMainWindow):
                 {
                     "phase": self.local({"en": "Observation", "zh": "观察"}),
                     "title": self.ui("trace_rendered_encyclopedia_title"),
-                    "detail": self.ui("trace_rendered_encyclopedia_detail", query=self.local(payload["query"])),
+                    "detail": self.ui(
+                        "trace_rendered_encyclopedia_detail",
+                        query=self.local(payload["query"]),
+                    ),
                     "status": "done",
                 }
             )
@@ -933,14 +973,21 @@ class MainWindow(QMainWindow):
 
         encyclopedia_payload = ui_payload.get("encyclopedia")
         if isinstance(encyclopedia_payload, dict):
-            answer_markdown = str(encyclopedia_payload.get("answer_markdown", "")).strip()
+            answer_markdown = str(
+                encyclopedia_payload.get("answer_markdown", "")
+            ).strip()
             citations = encyclopedia_payload.get("citations", [])
             cards.append(
                 self._create_encyclopedia_message(
                     intro=self.ui("encyclopedia_card_intro"),
                     query=str(encyclopedia_payload.get("query", "")).strip(),
-                    answer_markdown=answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
-                    citations=[str(item) for item in citations] if isinstance(citations, list) else [],
+                    answer_markdown=answer_markdown
+                    or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
+                    citations=(
+                        [str(item) for item in citations]
+                        if isinstance(citations, list)
+                        else []
+                    ),
                 )
             )
 
@@ -959,7 +1006,11 @@ class MainWindow(QMainWindow):
     ) -> dict[str, Any]:
         return {
             "session_id": session_id or self._new_session_id(),
-            "messages": list(messages) if messages is not None else self._build_new_chat_messages(),
+            "messages": (
+                list(messages)
+                if messages is not None
+                else self._build_new_chat_messages()
+            ),
             "trace": list(trace or []),
             "pending_hitl_request": pending_hitl_request,
             "title": title,
@@ -980,7 +1031,10 @@ class MainWindow(QMainWindow):
     def _conversation_meta(self, conversation: dict[str, Any]) -> str:
         updated_at = str(conversation.get("remote_updated_at", "")).strip()
         if updated_at:
-            return self.ui("conversation_meta_remote", updated=self._format_remote_timestamp(updated_at))
+            return self.ui(
+                "conversation_meta_remote",
+                updated=self._format_remote_timestamp(updated_at),
+            )
         return self.ui(
             "conversation_meta",
             messages=len(conversation["messages"]),
@@ -1005,7 +1059,9 @@ class MainWindow(QMainWindow):
                 text = text.split("+", 1)[0]
             return text[:16] if len(text) > 16 else text
 
-    def _normalize_backend_chat_history(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _normalize_backend_chat_history(
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         normalized: list[dict[str, Any]] = []
         for item in messages:
             if not isinstance(item, dict):
@@ -1015,7 +1071,9 @@ class MainWindow(QMainWindow):
             if role not in {"user", "assistant"}:
                 continue
             normalized.append(
-                self._create_text_message("user" if role == "user" else "agent", content)
+                self._create_text_message(
+                    "user" if role == "user" else "agent", content
+                )
             )
         return normalized
 
@@ -1024,7 +1082,9 @@ class MainWindow(QMainWindow):
 
     def _resource_meta(self, resource_name: str) -> str:
         display_name = self._resource_display_name(resource_name)
-        suffix = display_name.rsplit(".", 1)[-1].upper() if "." in display_name else "FILE"
+        suffix = (
+            display_name.rsplit(".", 1)[-1].upper() if "." in display_name else "FILE"
+        )
         return f"{suffix}  |  {self.ui('resource_ready')}"
 
     def _active_conversation(self) -> dict[str, Any] | None:
@@ -1049,7 +1109,9 @@ class MainWindow(QMainWindow):
         if conversation is None:
             return
         self.conversations = [conversation] + [
-            item for item in self.conversations if item["session_id"] != conversation["session_id"]
+            item
+            for item in self.conversations
+            if item["session_id"] != conversation["session_id"]
         ]
 
     def _activate_conversation(self, session_id: str) -> None:
@@ -1094,7 +1156,9 @@ class MainWindow(QMainWindow):
                     continue
                 conversation["messages"] = normalized_messages
                 conversation["messages_loaded"] = True
-                conversation["remote_updated_at"] = updated_at or conversation.get("remote_updated_at")
+                conversation["remote_updated_at"] = updated_at or conversation.get(
+                    "remote_updated_at"
+                )
                 if title:
                     conversation["title"] = title
                 if self.active_conversation_id == session_id:
@@ -1162,7 +1226,9 @@ class MainWindow(QMainWindow):
             "payload": self.local(HITL_REQUEST["payload"]),
         }
 
-    def _normalize_backend_trace_events(self, events: list[dict[str, Any]]) -> list[dict[str, str]]:
+    def _normalize_backend_trace_events(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, str]]:
         normalized = []
         for item in events:
             status = str(item.get("status", "running")).lower()
@@ -1178,7 +1244,9 @@ class MainWindow(QMainWindow):
             )
         return normalized
 
-    def _normalize_schedule_events(self, events: list[dict[str, Any]]) -> list[dict[str, str]]:
+    def _normalize_schedule_events(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, str]]:
         normalized = []
         for item in events:
             normalized.append(
@@ -1191,7 +1259,9 @@ class MainWindow(QMainWindow):
             )
         return normalized
 
-    def _normalize_conflicts(self, conflicts: list[dict[str, Any]]) -> list[dict[str, str]]:
+    def _normalize_conflicts(
+        self, conflicts: list[dict[str, Any]]
+    ) -> list[dict[str, str]]:
         normalized = []
         for item in conflicts:
             normalized.append(
@@ -1237,7 +1307,10 @@ class MainWindow(QMainWindow):
         def _on_done(summaries):
             if not summaries:
                 return
-            existing = {conversation["session_id"]: conversation for conversation in self.conversations}
+            existing = {
+                conversation["session_id"]: conversation
+                for conversation in self.conversations
+            }
             merged: list[dict[str, Any]] = []
             seen: set[str] = set()
             for item in summaries:
@@ -1258,7 +1331,9 @@ class MainWindow(QMainWindow):
                         messages_loaded=False,
                     )
                 else:
-                    conversation["title"] = title or preview or conversation.get("title")
+                    conversation["title"] = (
+                        title or preview or conversation.get("title")
+                    )
                     conversation["remote_updated_at"] = updated_at
                 merged.append(conversation)
                 seen.add(session_id)
@@ -1267,7 +1342,9 @@ class MainWindow(QMainWindow):
                 merged.insert(0, active)
             if merged:
                 self.conversations = merged
-                if active and active["session_id"] in {item["session_id"] for item in merged}:
+                if active and active["session_id"] in {
+                    item["session_id"] for item in merged
+                }:
                     self.active_conversation_id = active["session_id"]
                 else:
                     self.active_conversation_id = merged[0]["session_id"]
@@ -1307,17 +1384,29 @@ class MainWindow(QMainWindow):
 
         if self.remote_profile:
             self.current_user = {
-                "name": str(self.remote_profile.get("name", self.current_username or self.local(PROFILE["name"]))),
-                "major": str(self.remote_profile.get("major", self.local(PROFILE["major"]))),
+                "name": str(
+                    self.remote_profile.get(
+                        "name", self.current_username or self.local(PROFILE["name"])
+                    )
+                ),
+                "major": str(
+                    self.remote_profile.get("major", self.local(PROFILE["major"]))
+                ),
                 "focus": self.ui("authenticated_focus"),
             }
             return
 
         if self.current_username:
             record = self.registered_users.get(self.current_username)
-            major = self.local(record["major"]) if record else self.local(PROFILE["major"])
+            major = (
+                self.local(record["major"]) if record else self.local(PROFILE["major"])
+            )
             self.current_user = {
-                "name": str(self.local(record["display_name"])) if record and "display_name" in record else self.current_username,
+                "name": (
+                    str(self.local(record["display_name"]))
+                    if record and "display_name" in record
+                    else self.current_username
+                ),
                 "major": major,
                 "focus": self.ui("authenticated_focus"),
             }
@@ -1330,7 +1419,9 @@ class MainWindow(QMainWindow):
         self.resource_list.clear()
         for resource in self.resource_files:
             display_name = self._resource_display_name(resource)
-            item = QListWidgetItem(f"{display_name}\n{self._resource_meta(resource)}", self.resource_list)
+            item = QListWidgetItem(
+                f"{display_name}\n{self._resource_meta(resource)}", self.resource_list
+            )
             item.setToolTip(resource)
             item.setSizeHint(QSize(0, 58))
         self._refresh_profile_views()
@@ -1350,7 +1441,9 @@ class MainWindow(QMainWindow):
         selected_row = 0
         for index, conversation in enumerate(self.conversations):
             title = self._derive_conversation_title(conversation)
-            item = QListWidgetItem(f"{title}\n{self._conversation_meta(conversation)}", self.history_list)
+            item = QListWidgetItem(
+                f"{title}\n{self._conversation_meta(conversation)}", self.history_list
+            )
             item.setData(Qt.ItemDataRole.UserRole, conversation["session_id"])
             item.setToolTip(title)
             item.setSizeHint(QSize(0, 62))
@@ -1361,7 +1454,9 @@ class MainWindow(QMainWindow):
         self.history_list.blockSignals(False)
         self._refresh_profile_views()
 
-    def handle_history_selection(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
+    def handle_history_selection(
+        self, current: QListWidgetItem | None, _previous: QListWidgetItem | None
+    ) -> None:
         if current is None:
             return
 
@@ -1373,14 +1468,34 @@ class MainWindow(QMainWindow):
 
     def toggle_language(self) -> None:
         self._flush_response_stream(open_dialog=False)
-        current_page = self.stack.currentWidget().objectName() if hasattr(self, "stack") else "HomePage"
-        auth_tab_index = self.auth_tabs.currentIndex() if hasattr(self, "auth_tabs") else 0
-        login_username = self.login_username_input.text() if hasattr(self, "login_username_input") else ""
-        register_username = self.register_username_input.text() if hasattr(self, "register_username_input") else ""
-        register_display_name = (
-            self.register_display_name_input.text() if hasattr(self, "register_display_name_input") else ""
+        current_page = (
+            self.stack.currentWidget().objectName()
+            if hasattr(self, "stack")
+            else "HomePage"
         )
-        register_major = self.register_major_input.text() if hasattr(self, "register_major_input") else ""
+        auth_tab_index = (
+            self.auth_tabs.currentIndex() if hasattr(self, "auth_tabs") else 0
+        )
+        login_username = (
+            self.login_username_input.text()
+            if hasattr(self, "login_username_input")
+            else ""
+        )
+        register_username = (
+            self.register_username_input.text()
+            if hasattr(self, "register_username_input")
+            else ""
+        )
+        register_display_name = (
+            self.register_display_name_input.text()
+            if hasattr(self, "register_display_name_input")
+            else ""
+        )
+        register_major = (
+            self.register_major_input.text()
+            if hasattr(self, "register_major_input")
+            else ""
+        )
 
         self.language = "zh" if self.language == "en" else "en"
         self._reset_dynamic_state()
@@ -1943,7 +2058,9 @@ class MainWindow(QMainWindow):
         ):
             action = self.mode_menu.addAction(self.ui(label_key))
             action.setCheckable(True)
-            action.triggered.connect(lambda _checked=False, value=mode: self._set_selected_mode(value))
+            action.triggered.connect(
+                lambda _checked=False, value=mode: self._set_selected_mode(value)
+            )
             self.mode_actions[mode] = action
 
         send_button = QPushButton(self.ui("send"))
@@ -1991,7 +2108,9 @@ class MainWindow(QMainWindow):
         self.trace_layout.addStretch(1)
         scroll_area.setWidget(self.trace_container)
 
-        approval_hint = InfoCard(self.ui("pending_hitl_title"), self.ui("pending_hitl_body"))
+        approval_hint = InfoCard(
+            self.ui("pending_hitl_title"), self.ui("pending_hitl_body")
+        )
         open_dialog_button = QPushButton(self.ui("open_authorization_dialog"))
         open_dialog_button.setObjectName("PrimaryButton")
         open_dialog_button.clicked.connect(self.open_hitl_dialog)
@@ -2023,8 +2142,16 @@ class MainWindow(QMainWindow):
                     self._sender_label(sender),
                     self.ui("chat_schedule_card_title"),
                     str(message.get("text", "")),
-                    list(payload.get("events", [])) if isinstance(payload, dict) else [],
-                    list(payload.get("conflicts", [])) if isinstance(payload, dict) else [],
+                    (
+                        list(payload.get("events", []))
+                        if isinstance(payload, dict)
+                        else []
+                    ),
+                    (
+                        list(payload.get("conflicts", []))
+                        if isinstance(payload, dict)
+                        else []
+                    ),
                     UI_TEXTS[self.language],
                 )
             elif kind == "encyclopedia":
@@ -2034,8 +2161,16 @@ class MainWindow(QMainWindow):
                     self.ui("chat_encyclopedia_card_title"),
                     str(message.get("text", "")),
                     str(payload.get("query", "")) if isinstance(payload, dict) else "",
-                    str(payload.get("answer_markdown", "")) if isinstance(payload, dict) else "",
-                    [str(item) for item in payload.get("citations", [])] if isinstance(payload, dict) else [],
+                    (
+                        str(payload.get("answer_markdown", ""))
+                        if isinstance(payload, dict)
+                        else ""
+                    ),
+                    (
+                        [str(item) for item in payload.get("citations", [])]
+                        if isinstance(payload, dict)
+                        else []
+                    ),
                     UI_TEXTS[self.language],
                 )
             else:
@@ -2070,7 +2205,9 @@ class MainWindow(QMainWindow):
         self._sync_active_conversation()
 
     def _refresh_profile_views(self) -> None:
-        self.header_user_label.setText(self.ui("signed_in_as", name=self.current_user["name"]))
+        self.header_user_label.setText(
+            self.ui("signed_in_as", name=self.current_user["name"])
+        )
         self.backend_mode_label.setText(self.backend_status_text())
         if hasattr(self, "workspace_name_label"):
             self.workspace_name_label.setText(self.current_user["name"])
@@ -2090,7 +2227,9 @@ class MainWindow(QMainWindow):
             )
 
     def open_settings_dialog(self) -> None:
-        dialog = SettingsDialog(self, UI_TEXTS[self.language], self.cas_settings, self.api_settings)
+        dialog = SettingsDialog(
+            self, UI_TEXTS[self.language], self.cas_settings, self.api_settings
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.intent:
             return
 
@@ -2191,7 +2330,11 @@ class MainWindow(QMainWindow):
         self.sync_bootstrap_data(record_trace=True)
 
     def sync_bootstrap_data(self, record_trace: bool) -> None:
-        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
+        if not (
+            self.api_client.enabled
+            and self.api_client.authenticated
+            and self.current_username
+        ):
             return
 
         _record_trace = record_trace
@@ -2220,9 +2363,15 @@ class MainWindow(QMainWindow):
     def _apply_bootstrap_payload(self, payload: dict[str, Any]) -> None:
         self._flush_response_stream(open_dialog=False)
         user_profile = payload.get("user_profile", {})
-        display_name = str(user_profile.get("display_name") or self.current_username or self.local(PROFILE["name"]))
+        display_name = str(
+            user_profile.get("display_name")
+            or self.current_username
+            or self.local(PROFILE["name"])
+        )
         major = str(user_profile.get("major") or self.local(PROFILE["major"]))
-        self.current_user_id_value = str(user_profile.get("user_id") or self.current_user_id())
+        self.current_user_id_value = str(
+            user_profile.get("user_id") or self.current_user_id()
+        )
         self.remote_profile = {
             "name": display_name,
             "major": major,
@@ -2259,7 +2408,9 @@ class MainWindow(QMainWindow):
 
         materials = payload.get("materials", [])
         if isinstance(materials, list):
-            self.material_records = [item for item in materials if isinstance(item, dict)]
+            self.material_records = [
+                item for item in materials if isinstance(item, dict)
+            ]
             self.resource_files = [
                 str(
                     item.get("file_name")
@@ -2283,7 +2434,9 @@ class MainWindow(QMainWindow):
         self._sync_remote_sessions()
         self._refresh_profile_views()
 
-    def _apply_agent_response(self, response: dict[str, Any], auto_open_hitl: bool = True) -> None:
+    def _apply_agent_response(
+        self, response: dict[str, Any], auto_open_hitl: bool = True
+    ) -> None:
         assistant_message = response.get("assistant_message", {})
         assistant_text = str(assistant_message.get("content", "")).strip()
         trace_items: list[dict[str, str]] = []
@@ -2305,7 +2458,11 @@ class MainWindow(QMainWindow):
                 )
 
         hitl_request = response.get("hitl_request")
-        pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
+        pending_hitl_request = (
+            self._normalize_hitl_request(hitl_request)
+            if isinstance(hitl_request, dict)
+            else None
+        )
         extra_messages = self._build_response_cards(response)
         self._queue_response_stream(
             assistant_text=assistant_text,
@@ -2323,8 +2480,20 @@ class MainWindow(QMainWindow):
         worker.finished.connect(on_finished)
         if on_error:
             worker.errored.connect(on_error)
-        worker.finished.connect(lambda _: self._active_workers.remove(worker) if worker in self._active_workers else None)
-        worker.errored.connect(lambda _: self._active_workers.remove(worker) if worker in self._active_workers else None)
+        worker.finished.connect(
+            lambda _: (
+                self._active_workers.remove(worker)
+                if worker in self._active_workers
+                else None
+            )
+        )
+        worker.errored.connect(
+            lambda _: (
+                self._active_workers.remove(worker)
+                if worker in self._active_workers
+                else None
+            )
+        )
         worker.start()
         return worker
 
@@ -2336,7 +2505,11 @@ class MainWindow(QMainWindow):
         hitl_reply: dict[str, Any] | None = None,
         auto_open_hitl: bool = True,
     ) -> bool:
-        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
+        if not (
+            self.api_client.enabled
+            and self.api_client.authenticated
+            and self.current_username
+        ):
             return False
 
         user_id = self.current_user_id()
@@ -2371,7 +2544,9 @@ class MainWindow(QMainWindow):
         username = self.login_username_input.text().strip()
         password = self.login_password_input.text()
         if not username or not password:
-            QMessageBox.warning(self, self.ui("login_failed"), self.ui("enter_both_username_password"))
+            QMessageBox.warning(
+                self, self.ui("login_failed"), self.ui("enter_both_username_password")
+            )
             return
 
         if self.api_client.enabled:
@@ -2397,7 +2572,9 @@ class MainWindow(QMainWindow):
 
         record = self.registered_users.get(username)
         if record is None or record["password"] != password:
-            QMessageBox.warning(self, self.ui("login_failed"), self.ui("invalid_credentials"))
+            QMessageBox.warning(
+                self, self.ui("login_failed"), self.ui("invalid_credentials")
+            )
             return
 
         self._complete_login(username)
@@ -2410,19 +2587,29 @@ class MainWindow(QMainWindow):
         confirm = self.register_confirm_input.text()
 
         if not username:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_username"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("choose_username")
+            )
             return
         if not display_name:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_display_name"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("choose_display_name")
+            )
             return
         if not major:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("choose_major"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("choose_major")
+            )
             return
         if not password or not confirm:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("enter_confirm_password"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("enter_confirm_password")
+            )
             return
         if password != confirm:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("passwords_do_not_match"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("passwords_do_not_match")
+            )
             return
 
         if self.api_client.enabled:
@@ -2431,7 +2618,9 @@ class MainWindow(QMainWindow):
             _major = major
 
             def _call():
-                return self.api_client.register(_username, password, _display_name, _major)
+                return self.api_client.register(
+                    _username, password, _display_name, _major
+                )
 
             def _on_done(response):
                 self._complete_login(
@@ -2448,7 +2637,9 @@ class MainWindow(QMainWindow):
             return
 
         if username in self.registered_users:
-            QMessageBox.warning(self, self.ui("register_failed"), self.ui("username_exists"))
+            QMessageBox.warning(
+                self, self.ui("register_failed"), self.ui("username_exists")
+            )
             return
 
         self.registered_users[username] = {
@@ -2457,7 +2648,9 @@ class MainWindow(QMainWindow):
             "major": major,
         }
 
-        QMessageBox.information(self, self.ui("registration_complete"), self.ui("registration_success"))
+        QMessageBox.information(
+            self, self.ui("registration_complete"), self.ui("registration_success")
+        )
         self.login_username_input.setText(username)
         self.register_username_input.clear()
         self.register_display_name_input.clear()
@@ -2470,7 +2663,9 @@ class MainWindow(QMainWindow):
         self._flush_response_stream(open_dialog=False)
         conversation = self._active_conversation()
         if conversation is not None:
-            has_user_messages = any(item["sender"] == "user" for item in conversation["messages"])
+            has_user_messages = any(
+                item["sender"] == "user" for item in conversation["messages"]
+            )
             has_trace = bool(conversation["trace"])
             if not has_user_messages and not has_trace:
                 self._activate_conversation(conversation["session_id"])
@@ -2499,18 +2694,30 @@ class MainWindow(QMainWindow):
             return
 
         session_id = str(conversation["session_id"])
-        should_delete_remote = any(item.get("sender") == "user" for item in conversation.get("messages", []))
-        should_delete_remote = should_delete_remote or bool(str(conversation.get("remote_updated_at", "")).strip())
-        should_delete_remote = should_delete_remote or bool(str(conversation.get("title", "")).strip())
+        should_delete_remote = any(
+            item.get("sender") == "user" for item in conversation.get("messages", [])
+        )
+        should_delete_remote = should_delete_remote or bool(
+            str(conversation.get("remote_updated_at", "")).strip()
+        )
+        should_delete_remote = should_delete_remote or bool(
+            str(conversation.get("title", "")).strip()
+        )
 
-        if self.api_client.enabled and self.api_client.authenticated and should_delete_remote:
+        if (
+            self.api_client.enabled
+            and self.api_client.authenticated
+            and should_delete_remote
+        ):
             try:
                 self.api_client.delete_session(session_id)
             except BackendApiError as exc:
                 QMessageBox.warning(self, self.ui("delete_chat_failed_title"), str(exc))
                 return
 
-        self.conversations = [item for item in self.conversations if item["session_id"] != session_id]
+        self.conversations = [
+            item for item in self.conversations if item["session_id"] != session_id
+        ]
         if not self.conversations:
             self.session_id = self._new_session_id()
             replacement = self._create_conversation(session_id=self.session_id)
@@ -2564,11 +2771,17 @@ class MainWindow(QMainWindow):
 
     def open_hitl_dialog(self) -> None:
         self._flush_response_stream(open_dialog=False)
-        request_payload = self.pending_hitl_request or self._build_localized_hitl_request()
+        request_payload = (
+            self.pending_hitl_request or self._build_localized_hitl_request()
+        )
         dialog = HitlDialog(self, UI_TEXTS[self.language], request_payload)
         accepted = dialog.exec()
 
-        request_id = str(request_payload.get("request_id", "")).strip() if isinstance(request_payload, dict) else ""
+        request_id = (
+            str(request_payload.get("request_id", "")).strip()
+            if isinstance(request_payload, dict)
+            else ""
+        )
         if request_id and self._run_remote_agent(
             message="",
             hitl_reply={"request_id": request_id, "approved": bool(accepted)},
@@ -2576,7 +2789,11 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        detail = self.ui("trace_hitl_approved") if accepted else self.ui("trace_hitl_pending")
+        detail = (
+            self.ui("trace_hitl_approved")
+            if accepted
+            else self.ui("trace_hitl_pending")
+        )
         self._append_trace(
             self.local({"en": "Tool Use", "zh": "工具调用"}),
             self.ui("trace_hitl_update_title"),
@@ -2593,11 +2810,17 @@ class MainWindow(QMainWindow):
         self.pending_hitl_request = None
         self._reset_dynamic_state()
         self._build_root()
-        self.stack.setCurrentWidget(self.dashboard_page if self.current_username else self.home_page)
+        self.stack.setCurrentWidget(
+            self.dashboard_page if self.current_username else self.home_page
+        )
 
     def refresh_schedule_data(self) -> None:
         self._flush_response_stream(open_dialog=False)
-        if not (self.api_client.enabled and self.api_client.authenticated and self.current_username):
+        if not (
+            self.api_client.enabled
+            and self.api_client.authenticated
+            and self.current_username
+        ):
             self.refresh_mock_content()
             return
 
@@ -2648,7 +2871,10 @@ class MainWindow(QMainWindow):
         if not selected_files:
             return
 
-        existing_names = {self._resource_display_name(resource).lower() for resource in self.resource_files}
+        existing_names = {
+            self._resource_display_name(resource).lower()
+            for resource in self.resource_files
+        }
         files_to_upload: list[tuple[str, str]] = []  # (file_path, display_name)
         local_only: list[str] = []
         skipped_count = 0
@@ -2706,7 +2932,12 @@ class MainWindow(QMainWindow):
             if materials:
                 self.material_records = materials
                 self.resource_files = [
-                    str(item.get("file_name") or item.get("name") or item.get("file_id") or "resource")
+                    str(
+                        item.get("file_name")
+                        or item.get("name")
+                        or item.get("file_id")
+                        or "resource"
+                    )
                     for item in materials
                 ]
             self._load_resource_files()
@@ -2719,19 +2950,29 @@ class MainWindow(QMainWindow):
                 self._append_trace(
                     self.local({"en": "Observation", "zh": "观察"}),
                     self.ui("trace_loaded_materials_title"),
-                    self.ui("trace_loaded_materials_detail", count=len(all_added), files=preview),
+                    self.ui(
+                        "trace_loaded_materials_detail",
+                        count=len(all_added),
+                        files=preview,
+                    ),
                     "done",
                 )
                 QMessageBox.information(
                     self,
                     self.ui("resource_added_title"),
-                    self.ui("resource_added_body", count=len(all_added), skipped=_skipped_count),
+                    self.ui(
+                        "resource_added_body",
+                        count=len(all_added),
+                        skipped=_skipped_count,
+                    ),
                 )
             if errors:
                 QMessageBox.warning(
                     self,
                     self.ui("resource_upload_failed_title"),
-                    self.ui("resource_upload_failed_body", details="\n".join(errors[:4])),
+                    self.ui(
+                        "resource_upload_failed_body", details="\n".join(errors[:4])
+                    ),
                 )
 
         def _on_error(err):
@@ -2742,7 +2983,6 @@ class MainWindow(QMainWindow):
             )
 
         self._start_worker(_upload_all, _on_done, _on_error)
-
 
 
 def main() -> int:

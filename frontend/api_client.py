@@ -24,7 +24,9 @@ class BackendApiClient:
 
     @classmethod
     def from_env(cls) -> "BackendApiClient":
-        base_url = os.getenv("SPA_API_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+        base_url = (
+            os.getenv("SPA_API_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+        )
         timeout_text = os.getenv("SPA_API_TIMEOUT", "8").strip()
         token = os.getenv("SPA_API_TOKEN", "").strip()
         try:
@@ -60,7 +62,9 @@ class BackendApiClient:
             self.set_token(token)
         return payload
 
-    def register(self, username: str, password: str, display_name: str, major: str) -> dict[str, Any]:
+    def register(
+        self, username: str, password: str, display_name: str, major: str
+    ) -> dict[str, Any]:
         payload = self._request(
             "POST",
             "/api/auth/register",
@@ -176,7 +180,9 @@ class BackendApiClient:
         on_event 会收到每一行 JSON 事件。
         """
         if not self.enabled or not self.base_url:
-            raise BackendApiError("REST backend is disabled. Set SPA_API_BASE_URL to enable it.")
+            raise BackendApiError(
+                "REST backend is disabled. Set SPA_API_BASE_URL to enable it."
+            )
 
         url = f"{self.base_url}/api/agent/run/stream"
         headers = {
@@ -220,7 +226,9 @@ class BackendApiClient:
                         if isinstance(data, dict):
                             final_payload = data
                 if final_payload is None:
-                    raise BackendApiError("Stream ended without final response payload.")
+                    raise BackendApiError(
+                        "Stream ended without final response payload."
+                    )
                 return final_payload
         except error.HTTPError as exc:
             detail = self._parse_http_error(exc)
@@ -259,7 +267,9 @@ class BackendApiClient:
         timeout: float | None = None,
     ) -> Any:
         if not self.enabled or not self.base_url:
-            raise BackendApiError("REST backend is disabled. Set SPA_API_BASE_URL to enable it.")
+            raise BackendApiError(
+                "REST backend is disabled. Set SPA_API_BASE_URL to enable it."
+            )
 
         url = f"{self.base_url}{path}"
         headers = {"Accept": "application/json"}
@@ -315,7 +325,9 @@ class BackendApiClient:
         boundary = f"----SPAFormBoundary{uuid4().hex}"
         field_name = str(file_upload["field_name"])
         file_name = str(file_upload["file_name"])
-        content_type = str(file_upload.get("content_type") or "application/octet-stream")
+        content_type = str(
+            file_upload.get("content_type") or "application/octet-stream"
+        )
         content = bytes(file_upload["content"])
 
         parts: list[bytes] = [

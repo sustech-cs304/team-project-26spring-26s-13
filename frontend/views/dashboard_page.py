@@ -32,7 +32,9 @@ class DashboardPage(QWidget):
       └── 右栏（RightPanel）:   TraceWidget
     """
 
-    def __init__(self, user_id: str, display_name: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, user_id: str, display_name: str, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self._user_id = user_id
         self._session_id = f"sess_{uuid.uuid4().hex[:8]}"
@@ -43,6 +45,7 @@ class DashboardPage(QWidget):
 
     def _setup_ui(self) -> None:
         """初始化三栏 QSplitter 布局，实例化所有子组件。"""
+
         def _safe_make(factory):
             try:
                 return factory(self)

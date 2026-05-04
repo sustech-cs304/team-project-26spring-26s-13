@@ -6,11 +6,17 @@ Dashboard bootstrap 数据组装服务。
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.database.postgres import ChatMessage as ChatMessageORM, ChatSession, Material, User
+from backend.database.postgres import (
+    ChatMessage as ChatMessageORM,
+    ChatSession,
+    Material,
+    User,
+)
 from backend.schemas.agent import ChatMessage as ChatMessageSchema, ScheduleData
 from backend.schemas.dashboard import BootstrapResponse
 from backend.schemas.user import UserPreferences, UserProfile
 from backend.schemas.material import MaterialInfo
+
 
 async def build_bootstrap(db: AsyncSession, user: User) -> BootstrapResponse:
     """
@@ -39,7 +45,9 @@ async def build_bootstrap(db: AsyncSession, user: User) -> BootstrapResponse:
 
 def _build_profile(user: User) -> UserProfile:
     """将 User ORM 转换为 UserProfile schema（不含敏感字段）。"""
-    prefs = UserPreferences(**user.preferences) if user.preferences else UserPreferences()
+    prefs = (
+        UserPreferences(**user.preferences) if user.preferences else UserPreferences()
+    )
     return UserProfile(
         user_id=str(user.user_id),
         display_name=user.display_name,
@@ -58,7 +66,9 @@ async def _load_latest_session_id(db: AsyncSession, user_id) -> str | None:
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
-async def _load_session_history(db: AsyncSession, session_id: str | None) -> list[ChatMessageSchema]:
+async def _load_session_history(
+    db: AsyncSession, session_id: str | None
+) -> list[ChatMessageSchema]:
     """加载单个会话的完整历史消息，按时间正序返回。"""
     if not session_id:
         return []

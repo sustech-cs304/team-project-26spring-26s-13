@@ -7,7 +7,6 @@ from datetime import date, timedelta
 from backend.services.schedule_service.academic_calendar_models import CalendarOverrides
 from backend.services.schedule_service.log_utils import logger
 
-
 _YMD_RE = re.compile(r"(?P<y>20\d{2})[./\-](?P<m>\d{1,2})[./\-](?P<d>\d{1,2})")
 _YMD_CN_RE = re.compile(r"(?P<y>20\d{2})年(?P<m>\d{1,2})月(?P<d>\d{1,2})日")
 _MD_CN_RE = re.compile(r"(?P<m>\d{1,2})月(?P<d>\d{1,2})日")
@@ -19,8 +18,23 @@ _MOVE_RE = re.compile(
     r"(?P<src>\d{1,2}月\d{1,2}日).*?(?:调至|调整至|顺延至|改为|补到|补上|补课于|补课在|补课至|安排至)(?P<dst>\d{1,2}月\d{1,2}日)"
 )
 _CLASS_START_RE = re.compile(r"(?P<m>\d{1,2})月(?P<d>\d{1,2})日?(?:本科生|研究生)?上课")
-_MAKEUP_WEEKDAY_RE = re.compile(r"(?P<m>\d{1,2})月(?P<d>\d{1,2})日上(?:单周|双周)?周(?P<w>[一二三四五六日天])的课")
-_HOLIDAY_KEYWORDS = ("停课", "不上课", "放假", "休假", "补休", "劳动节", "清明节", "端午节", "中秋节", "国庆节", "元旦", "春节")
+_MAKEUP_WEEKDAY_RE = re.compile(
+    r"(?P<m>\d{1,2})月(?P<d>\d{1,2})日上(?:单周|双周)?周(?P<w>[一二三四五六日天])的课"
+)
+_HOLIDAY_KEYWORDS = (
+    "停课",
+    "不上课",
+    "放假",
+    "休假",
+    "补休",
+    "劳动节",
+    "清明节",
+    "端午节",
+    "中秋节",
+    "国庆节",
+    "元旦",
+    "春节",
+)
 _WEEKDAY_MAP = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 
 
@@ -65,7 +79,14 @@ def _expand_range(y: int, m1: int, d1: int, m2: int, d2: int) -> list[date]:
     return days
 
 
-def parse_calendar_overrides(text: str, *, source_url: str | None = None, source_pdf_url: str | None = None, source_pdf_path: str | None = None, extracted_pages: int | None = None) -> CalendarOverrides:
+def parse_calendar_overrides(
+    text: str,
+    *,
+    source_url: str | None = None,
+    source_pdf_url: str | None = None,
+    source_pdf_path: str | None = None,
+    extracted_pages: int | None = None,
+) -> CalendarOverrides:
     raw = text or ""
     s = _norm(raw)
     default_year = _infer_default_year(s)
@@ -181,7 +202,25 @@ def _parse_md(default_year: int, s: str) -> date | None:
 
 def _is_cancel_context(text: str, start: int, end: int) -> bool:
     window = text[max(0, start - 24) : min(len(text), end + 24)]
-    return any(k in window for k in ("停课", "不上课", "放假", "休假", "法定节假日", "假期", "补休", "劳动节", "清明节", "端午节", "中秋节", "国庆节", "元旦", "春节"))
+    return any(
+        k in window
+        for k in (
+            "停课",
+            "不上课",
+            "放假",
+            "休假",
+            "法定节假日",
+            "假期",
+            "补休",
+            "劳动节",
+            "清明节",
+            "端午节",
+            "中秋节",
+            "国庆节",
+            "元旦",
+            "春节",
+        )
+    )
 
 
 def _extract_line_dates(line: str, default_year: int) -> list[date]:
@@ -220,7 +259,9 @@ def _extract_line_dates(line: str, default_year: int) -> list[date]:
     return deduped
 
 
-def _parse_makeup_weekday_line(line: str, default_year: int, cancel_days: set[date]) -> tuple[date, date] | None:
+def _parse_makeup_weekday_line(
+    line: str, default_year: int, cancel_days: set[date]
+) -> tuple[date, date] | None:
     m = _MAKEUP_WEEKDAY_RE.search(line)
     if not m:
         return None
@@ -230,7 +271,11 @@ def _parse_makeup_weekday_line(line: str, default_year: int, cancel_days: set[da
     target_weekday = _WEEKDAY_MAP.get(m.group("w"))
     if target_weekday is None:
         return None
-    candidates = [d for d in cancel_days if d < dst and d.weekday() == target_weekday and (dst - d).days <= 21]
+    candidates = [
+        d
+        for d in cancel_days
+        if d < dst and d.weekday() == target_weekday and (dst - d).days <= 21
+    ]
     if candidates:
         return (max(candidates), dst)
     delta = (dst.weekday() - target_weekday) % 7
@@ -239,7 +284,9 @@ def _parse_makeup_weekday_line(line: str, default_year: int, cancel_days: set[da
     return (src, dst)
 
 
-def _apply_term_start_cancellations(lines: list[str], default_year: int, cancel_days: set[date]) -> None:
+def _apply_term_start_cancellations(
+    lines: list[str], default_year: int, cancel_days: set[date]
+) -> None:
     monday = _infer_week1_monday(lines, default_year)
     if monday is None:
         return
@@ -274,13 +321,19 @@ def _infer_week1_monday(lines: list[str], default_year: int) -> date | None:
     return start - timedelta(days=start.weekday())
 
 
-def _apply_substitute_holidays(explicit_holidays: set[date], cancel_days: set[date]) -> None:
+def _apply_substitute_holidays(
+    explicit_holidays: set[date], cancel_days: set[date]
+) -> None:
     for d0 in explicit_holidays:
         if d0.weekday() == 6:
             cancel_days.add(d0 + timedelta(days=1))
 
 
-def _expand_bridge_holidays(explicit_holidays: set[date], move_rules: list[tuple[date, date]], cancel_days: set[date]) -> None:
+def _expand_bridge_holidays(
+    explicit_holidays: set[date],
+    move_rules: list[tuple[date, date]],
+    cancel_days: set[date],
+) -> None:
     for src, _ in move_rules:
         anchors = [d for d in explicit_holidays if 0 <= (src - d).days <= 4]
         if not anchors:
@@ -293,7 +346,9 @@ def _expand_bridge_holidays(explicit_holidays: set[date], move_rules: list[tuple
             cur = cur + timedelta(days=1)
 
 
-def _dedupe_and_sanitize(cancel_days: set[date], move_rules: list[tuple[date, date]]) -> tuple[set[date], list[tuple[date, date]]]:
+def _dedupe_and_sanitize(
+    cancel_days: set[date], move_rules: list[tuple[date, date]]
+) -> tuple[set[date], list[tuple[date, date]]]:
     cleaned_moves: list[tuple[date, date]] = []
     seen: set[tuple[date, date]] = set()
     for src, dst in move_rules:

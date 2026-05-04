@@ -23,7 +23,9 @@ async def extract_calendar_text_from_pdf(pdf_path: Path) -> ExtractedCalendarTex
         suffix = pdf_path.suffix.lower()
         if suffix == ".pdf":
             parsed = parse_document(str(pdf_path), "application/pdf")
-            return ExtractedCalendarText(text=parsed.text or "", page_count=int(parsed.page_count or 0))
+            return ExtractedCalendarText(
+                text=parsed.text or "", page_count=int(parsed.page_count or 0)
+            )
         if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
             from PIL import Image
             import numpy as np
@@ -36,5 +38,10 @@ async def extract_calendar_text_from_pdf(pdf_path: Path) -> ExtractedCalendarTex
 
     logger.info("calendar.extract: start path=%s", pdf_path)
     out = await asyncio.to_thread(_work)
-    logger.info("calendar.extract: done pages=%d chars=%d path=%s", out.page_count, len(out.text), pdf_path)
+    logger.info(
+        "calendar.extract: done pages=%d chars=%d path=%s",
+        out.page_count,
+        len(out.text),
+        pdf_path,
+    )
     return out

@@ -5,12 +5,16 @@ Frontend Relevant/components/materials_widget.py
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QListWidget,
-    QListWidgetItem, QPushButton, QVBoxLayout, QWidget,
+    QFileDialog,
+    QHBoxLayout,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from frontend.api.client import APIError, api_client
-
 
 ALLOWED_EXTENSIONS = (".pdf", ".pptx", ".ppt", ".md", ".txt")
 
@@ -21,8 +25,8 @@ class MaterialsWidget(QWidget):
     上传完成后 emit material_uploaded，供 DashboardPage 更新状态。
     """
 
-    material_uploaded = pyqtSignal(dict)   # 上传完成的 MaterialInfo dict
-    material_deleted = pyqtSignal(str)     # 被删除的 file_id
+    material_uploaded = pyqtSignal(dict)  # 上传完成的 MaterialInfo dict
+    material_deleted = pyqtSignal(str)  # 被删除的 file_id
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
