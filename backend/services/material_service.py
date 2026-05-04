@@ -71,22 +71,9 @@ async def upload_and_vectorize(
     7. 更新 materials 表 vectorized=True
     """
     file_bytes = await file.read()
-    size_mb = len(file_bytes) / (1024 * 1024)
-    if size_mb > settings.MAX_UPLOAD_SIZE_MB:
-        raise ValueError(
-            f"File size {size_mb:.1f}MB exceeds limit {settings.MAX_UPLOAD_SIZE_MB}MB"
-        )
-
-    file_id = uuid.uuid4()
-    suffix = Path(file.filename or "file").suffix
-    user_dir = Path(settings.UPLOAD_DIR) / str(user.user_id)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    file_path = user_dir / f"{file_id}{suffix}"
-    file_path.write_bytes(file_bytes)
-
-    material = Material(
-        file_id=file_id,
-        user_id=user.user_id,
+    return await _create_material_from_bytes(
+        db=db,
+        user=user,
         file_name=file.filename or "unknown",
         content_type=file.content_type or "",
         file_bytes=file_bytes,
@@ -116,34 +103,19 @@ async def sync_blackboard_materials(
         if item.file_name in existing_names:
             continue
         try:
-            api_key = (
-                decrypt(user.llm_api_key_encrypted)
-                if user.llm_api_key_encrypted
-                else settings.DEEPSEEK_API_KEY
-            ) or None
-            subject_type = await rag_service.classify_subject_llm(
-                parsed.text[:2000], api_key
+            info = await _create_material_from_bytes(
+                db=db,
+                user=user,
+                file_name=item.file_name,
+                content_type=item.file_type,
+                file_bytes=item.file_bytes,
             )
-            material.subject_type = subject_type
-        except Exception as e:
-            logger.warning("学科分类失败，回退到 other: %s", e)
-
-        if chunks:
-            add_chunks(subject_type, str(file_id), material.file_name, chunks)
-            logger.info(
-                "向量化完成: file=%s subject=%s chunks=%d",
-                file_id,
-                subject_type,
-                len(chunks),
-            )
-
-        material.vectorized = True
-        await db.commit()
-    except Exception as e:
-        # 向量化失败不影响文件上传成功，仅保持 vectorized=False
-        logger.error("向量化流程失败 (file=%s): %s", file_id, e, exc_info=True)
-
-    return _to_schema(material)
+        except ValueError:
+            logger.info("跳过不支持的 Blackboard 课件: %s (%s)", item.file_name, item.file_type)
+            continue
+        synced.append(info)
+        existing_names.add(info.file_name)
+    return synced
 
 
 async def delete_material(
