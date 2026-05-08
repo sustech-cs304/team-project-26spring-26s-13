@@ -28,7 +28,7 @@ from backend.services.schedule_service.academic_calendar_source import (
     discover_calendar_pdfs,
     is_calendar_asset_url,
 )
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 
 
 def _cache_dir() -> Path:

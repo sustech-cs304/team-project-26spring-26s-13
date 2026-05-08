@@ -56,6 +56,28 @@ async def upload_material(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.post(
+    "/sync-blackboard",
+    response_model=list[MaterialInfo],
+    status_code=status.HTTP_201_CREATED,
+)
+async def sync_blackboard_materials(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[MaterialInfo]:
+    """
+    从 Blackboard 同步当前用户可访问的课件，并复用现有解析与向量化流程入库。
+    """
+    try:
+        return await material_service.sync_blackboard_materials(db, current_user)
+    except PermissionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(e)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_material(
     file_id: uuid.UUID,

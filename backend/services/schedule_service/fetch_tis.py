@@ -5,21 +5,24 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 import time
-from typing import Literal
 
 import httpx
 
 from .academic_calendar_models import CalendarOverrides
 from .academic_calendar_provider import get_calendar_overrides
-from .constants import (
+from .cas_auth import (
+    _apply_cached_cas_cookies,
+    _cas_login_for_tis,
+    _clear_cas_cookie_cache,
+)
+from .enums import CourseOccurrenceKind
+from .http_utils import _request_with_retry
+from .log_utils import _ensure_file_logging, logger
+from .models import CourseOccurrence
+from .service_config import (
     ACADEMIC_SYSTEM_BASE,
-    CourseOccurrence,
-    _SUSTECH_CLASS_PERIODS,
-    _TIS_WEEK1_MONDAY,
-    _cas_login,
-    _ensure_file_logging,
-    _request_with_retry,
-    logger,
+    SUSTECH_CLASS_PERIODS,
+    TIS_WEEK1_MONDAY,
 )
 
 
@@ -685,10 +688,10 @@ def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
             continue
 
         start_sec, end_sec = sections
-        kind: Literal["lecture", "experiment", "other"] = "lecture"
+        kind = CourseOccurrenceKind.LECTURE
         name_lower = str(course_name).lower()
         if "实验" in str(course_name) or "lab" in name_lower:
-            kind = "experiment"
+            kind = CourseOccurrenceKind.EXPERIMENT
 
         meetings.append(
             {
@@ -722,7 +725,7 @@ def _tis_extract_meetings(payload: object) -> TisMeetingExtraction:
 def _tis_meetings_to_occurrences(
     meetings: list[dict[str, object]],
     *,
-    week1_monday: datetime = _TIS_WEEK1_MONDAY,
+    week1_monday: datetime = TIS_WEEK1_MONDAY,
 ) -> list[CourseOccurrence]:
     occs: list[CourseOccurrence] = []
 
@@ -733,13 +736,13 @@ def _tis_meetings_to_occurrences(
         weeks = [int(x) for x in (m.get("weeks") or [])]
 
         if (
-            start_sec not in _SUSTECH_CLASS_PERIODS
-            or end_sec not in _SUSTECH_CLASS_PERIODS
+            start_sec not in SUSTECH_CLASS_PERIODS
+            or end_sec not in SUSTECH_CLASS_PERIODS
         ):
             continue
 
-        start_hhmm = _SUSTECH_CLASS_PERIODS[start_sec][0]
-        end_hhmm = _SUSTECH_CLASS_PERIODS[end_sec][1]
+        start_hhmm = SUSTECH_CLASS_PERIODS[start_sec][0]
+        end_hhmm = SUSTECH_CLASS_PERIODS[end_sec][1]
 
         for w in weeks:
             day0 = week1_monday + timedelta(days=(w - 1) * 7 + (weekday - 1))
@@ -753,7 +756,7 @@ def _tis_meetings_to_occurrences(
                     start_at=start_at,
                     end_at=end_at,
                     location=str(m.get("location") or ""),
-                    kind=m.get("kind") or "lecture",
+                    kind=m.get("kind") or CourseOccurrenceKind.LECTURE,
                     instructor=m.get("teacher"),
                     notes=str(m.get("course_name") or ""),
                 )
@@ -852,9 +855,16 @@ async def _fetch_course_schedule_context_uncached(
         headers=headers,
         trust_env=False,
     ) as client:
+        _apply_cached_cas_cookies(client, cas_account)
         r0 = await _request_with_retry(client, "GET", main_url, label="tis.main")
-        if "cas.sustech.edu.cn" in str(r0.url):
-            await _cas_login(client, cas_account, cas_password, service_url)
+        r0_url = str(r0.url)
+        if (
+            r0.status_code == 403
+            or "/session/invalid" in r0_url
+            or "cas.sustech.edu.cn" in r0_url
+        ):
+            _clear_cas_cookie_cache(cas_account)
+            await _cas_login_for_tis(client, cas_account, cas_password, service_url)
             r0 = await _request_with_retry(
                 client, "GET", main_url, label="tis.main.after_login"
             )
@@ -883,7 +893,8 @@ async def _fetch_course_schedule_context_uncached(
                 client, "POST", url, headers=req_headers, data=data or {}, label=label
             )
             if _tis_needs_auth_response(r):
-                await _cas_login(client, cas_account, cas_password, service_url)
+                _clear_cas_cookie_cache(cas_account)
+                await _cas_login_for_tis(client, cas_account, cas_password, service_url)
                 r = await _request_with_retry(
                     client,
                     "POST",

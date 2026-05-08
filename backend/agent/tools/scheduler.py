@@ -20,7 +20,8 @@ from backend.services import schedule_service
 from backend.services.schedule_service.academic_calendar_provider import (
     get_calendar_overrides,
 )
-from backend.services.schedule_service.constants import _TIS_WEEK1_MONDAY
+from backend.services.schedule_service.enums import CourseOccurrenceKind, DeadlineType
+from backend.services.schedule_service.service_config import TIS_WEEK1_MONDAY
 
 
 async def _get_week1_monday() -> datetime:
@@ -34,8 +35,8 @@ async def _get_week1_monday() -> datetime:
             d = overrides.week1_monday
             return datetime(d.year, d.month, d.day)
     except Exception:
-        return _TIS_WEEK1_MONDAY
-    return _TIS_WEEK1_MONDAY
+        return TIS_WEEK1_MONDAY
+    return TIS_WEEK1_MONDAY
 
 
 def _serialize_occurrences(
@@ -207,7 +208,7 @@ async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
             "course_id": d.course_id,
             "course_name": (d.course_name or d.course_id),
             "deadline": d.due_at.isoformat(),
-            "type": d.type,
+            "type": d.type.value,
             "estimated_minutes": d.estimated_minutes,
             "priority": d.priority,
             "url": d.url,
@@ -374,8 +375,8 @@ async def detect_schedule_conflicts(
     if not isinstance(dl_raw, list) or not isinstance(cs_raw, list):
         return "ERROR:INVALID_INPUT"
 
-    allowed_types = {"assignment", "quiz", "project", "presentation", "other"}
-    type_map = {"exam": "other"}
+    allowed_types = {member.value for member in DeadlineType}
+    type_map = {"exam": DeadlineType.OTHER.value}
 
     deadlines: list[schedule_service.Deadline] = []
     for item in dl_raw:
@@ -448,7 +449,7 @@ async def detect_schedule_conflicts(
                     start_at=start_at,
                     end_at=end_at,
                     location=location,
-                    kind="lecture",
+                    kind=CourseOccurrenceKind.LECTURE,
                     notes=course,
                 )
             )
@@ -479,7 +480,7 @@ async def detect_schedule_conflicts(
                     start_at=start_at,
                     end_at=end_at,
                     location=location,
-                    kind="lecture",
+                    kind=CourseOccurrenceKind.LECTURE,
                     notes=course,
                 )
             )

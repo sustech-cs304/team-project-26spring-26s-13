@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.services.schedule_service.constants import logger
+from backend.services.schedule_service.log_utils import logger
 from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
 from backend.utils.document_parser import parse_document
 

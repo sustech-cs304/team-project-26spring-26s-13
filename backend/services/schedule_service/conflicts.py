@@ -4,8 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend.schemas.agent import ScheduleConflict, ScheduleData, ScheduleEvent
 
-from .constants import CourseOccurrence, Deadline
-from .personal import FixedPersonalEvent
+from .models import CourseOccurrence, Deadline, FixedPersonalEvent
 
 
 def _safe_id(prefix: str, raw: str) -> str:
@@ -160,7 +159,7 @@ def detect_conflicts(
         due = d.due_at
         time_s = due.isoformat()
 
-        detail_parts: list[str] = [f"course_id={d.course_id}", f"type={d.type}"]
+        detail_parts: list[str] = [f"course_id={d.course_id}", f"type={d.type.value}"]
         if d.url:
             detail_parts.append(f"url={d.url}")
         detail = " ".join(detail_parts)
@@ -290,7 +289,7 @@ def detect_overlaps_with_personal(
         due = d.due_at
         time_s = due.isoformat()
 
-        detail_parts: list[str] = [f"course_id={d.course_id}", f"type={d.type}"]
+        detail_parts: list[str] = [f"course_id={d.course_id}", f"type={d.type.value}"]
         if d.url:
             detail_parts.append(f"url={d.url}")
         detail = " ".join(detail_parts)
