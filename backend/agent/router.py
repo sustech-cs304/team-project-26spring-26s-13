@@ -24,7 +24,10 @@ def determine_route(tool_names_called: list[str]) -> RouteType:
     tool_to_route: dict[str, RouteType] = {
         "fetch_blackboard_deadlines": "scheduler",
         "fetch_course_schedule": "scheduler",
+        "fetch_courses_on_date": "scheduler",
+        "fetch_schedule_adjustments": "scheduler",
         "detect_schedule_conflicts": "scheduler",
+        "build_proactive_schedule_context": "scheduler",
         "save_personal_task": "scheduler",
         "list_personal_tasks": "scheduler",
         "mark_task_done": "scheduler",
