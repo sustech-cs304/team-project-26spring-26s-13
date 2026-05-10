@@ -703,7 +703,10 @@ async def build_proactive_schedule_context(
             if not deadline:
                 continue
             course = str(
-                item.get("course_name") or item.get("course") or item.get("course_id") or ""
+                item.get("course_name")
+                or item.get("course")
+                or item.get("course_id")
+                or ""
             )
             detail_parts = []
             if course:
@@ -769,9 +772,7 @@ async def build_proactive_schedule_context(
 
     filtered_events.sort(key=_event_sort_key)
     derived_conflicts = _detect_simple_overlaps(filtered_events)
-    all_conflicts = conflicts + [
-        c for c in derived_conflicts if c not in conflicts
-    ]
+    all_conflicts = conflicts + [c for c in derived_conflicts if c not in conflicts]
     sources = sorted(
         {
             event.get("source", "").strip()
