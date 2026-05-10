@@ -7,7 +7,6 @@ from datetime import date, datetime, time, timedelta
 import re
 from typing import Any
 
-
 _DATE_PATTERN = re.compile(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})")
 
 
@@ -61,7 +60,9 @@ def event_sort_key(event: dict[str, Any]) -> tuple[datetime, str]:
     return sort_time, str(event.get("title", "")).lower()
 
 
-def next_event_date(events: list[dict[str, Any]], today: date | None = None) -> date | None:
+def next_event_date(
+    events: list[dict[str, Any]], today: date | None = None
+) -> date | None:
     today = today or date.today()
     all_days = sorted({day for event in events for day in event_dates(event)})
     if not all_days:
@@ -85,7 +86,9 @@ def format_event_time(event: dict[str, Any], selected_day: date | None = None) -
             return f"{start_day.isoformat()} {start:%H:%M} - {end_day.isoformat()} {end:%H:%M}"
         if start_day == end_day:
             return f"{start:%H:%M} - {end:%H:%M}"
-        return f"{start_day.isoformat()} {start:%H:%M} - {end_day.isoformat()} {end:%H:%M}"
+        return (
+            f"{start_day.isoformat()} {start:%H:%M} - {end_day.isoformat()} {end:%H:%M}"
+        )
 
     if selected_day == start_day and start.time() != time.min:
         return f"{start:%H:%M}"

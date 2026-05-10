@@ -56,7 +56,12 @@ try:
         SCHEDULE_EVENTS,
         TRACE_EVENTS,
     )
-    from .schedule_utils import event_sort_key, events_by_date, format_event_time, next_event_date
+    from .schedule_utils import (
+        event_sort_key,
+        events_by_date,
+        format_event_time,
+        next_event_date,
+    )
     from .styles import APP_STYLE
 except ImportError:
     from api_client import BackendApiClient, BackendApiError  # type: ignore
@@ -620,7 +625,11 @@ class MainWindow(QMainWindow):
             mode = "agent_chat"
         self.selected_mode = mode
         self._refresh_mode_selector()
-        if hasattr(self, "center_tabs") and hasattr(self, "schedule_tab") and mode == "scheduler":
+        if (
+            hasattr(self, "center_tabs")
+            and hasattr(self, "schedule_tab")
+            and mode == "scheduler"
+        ):
             self.center_tabs.setCurrentWidget(self.schedule_tab)
         elif hasattr(self, "center_tabs") and hasattr(self, "chat_tab"):
             self.center_tabs.setCurrentWidget(self.chat_tab)
@@ -2141,7 +2150,9 @@ class MainWindow(QMainWindow):
 
         header_layout.addLayout(title_row)
         header_layout.addWidget(body)
-        header_layout.addWidget(self.schedule_summary_label, 0, Qt.AlignmentFlag.AlignLeft)
+        header_layout.addWidget(
+            self.schedule_summary_label, 0, Qt.AlignmentFlag.AlignLeft
+        )
 
         content = QVBoxLayout()
         content.setSpacing(14)
@@ -2159,9 +2170,13 @@ class MainWindow(QMainWindow):
         self.schedule_calendar.setObjectName("ScheduleCalendar")
         self.schedule_calendar.setGridVisible(True)
         self.schedule_calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
-        self.schedule_calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+        self.schedule_calendar.setVerticalHeaderFormat(
+            QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
+        )
         self.schedule_calendar.setMinimumHeight(420)
-        self.schedule_calendar.selectionChanged.connect(self._on_schedule_selection_changed)
+        self.schedule_calendar.selectionChanged.connect(
+            self._on_schedule_selection_changed
+        )
         calendar_layout.addWidget(calendar_title)
         calendar_layout.addWidget(self.schedule_calendar, 1)
 
@@ -2373,11 +2388,17 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "schedule_summary_label"):
             self.schedule_summary_label.setText(
-                self.ui("schedule_summary", days=len(grouped), events=len(self.schedule_events))
+                self.ui(
+                    "schedule_summary",
+                    days=len(grouped),
+                    events=len(self.schedule_events),
+                )
             )
 
         if self.selected_schedule_day is None:
-            self.selected_schedule_day = next_event_date(self.schedule_events) or date.today()
+            self.selected_schedule_day = (
+                next_event_date(self.schedule_events) or date.today()
+            )
 
         selected_qdate = self._qdate_from_day(self.selected_schedule_day)
         if self.schedule_calendar.selectedDate() != selected_qdate:
@@ -2387,10 +2408,14 @@ class MainWindow(QMainWindow):
         self._render_upcoming_schedule(grouped)
         self._render_schedule_conflicts()
 
-    def _apply_schedule_date_marks(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
+    def _apply_schedule_date_marks(
+        self, grouped: dict[date, list[dict[str, Any]]]
+    ) -> None:
         empty_format = QTextCharFormat()
         for marked_day in self._highlighted_schedule_dates:
-            self.schedule_calendar.setDateTextFormat(self._qdate_from_day(marked_day), empty_format)
+            self.schedule_calendar.setDateTextFormat(
+                self._qdate_from_day(marked_day), empty_format
+            )
 
         event_format = QTextCharFormat()
         event_format.setBackground(QColor(90, 124, 255, 95))
@@ -2405,7 +2430,9 @@ class MainWindow(QMainWindow):
         conflict_days = self._conflict_dates(grouped)
         for day_value in grouped:
             fmt = conflict_format if day_value in conflict_days else event_format
-            self.schedule_calendar.setDateTextFormat(self._qdate_from_day(day_value), fmt)
+            self.schedule_calendar.setDateTextFormat(
+                self._qdate_from_day(day_value), fmt
+            )
         self._highlighted_schedule_dates = set(grouped)
 
     def _conflict_dates(self, grouped: dict[date, list[dict[str, Any]]]) -> set[date]:
@@ -2420,8 +2447,12 @@ class MainWindow(QMainWindow):
     def _on_schedule_selection_changed(self) -> None:
         if not hasattr(self, "schedule_calendar"):
             return
-        self.selected_schedule_day = self._day_from_qdate(self.schedule_calendar.selectedDate())
-        self._render_selected_day_schedule(self.selected_schedule_day, events_by_date(self.schedule_events))
+        self.selected_schedule_day = self._day_from_qdate(
+            self.schedule_calendar.selectedDate()
+        )
+        self._render_selected_day_schedule(
+            self.selected_schedule_day, events_by_date(self.schedule_events)
+        )
 
     def _render_selected_day_schedule(
         self,
@@ -2432,20 +2463,34 @@ class MainWindow(QMainWindow):
             return
 
         self.selected_day_label.setText(
-            self.ui("selected_day", date=self._qdate_from_day(selected_day).toString("yyyy-MM-dd ddd"))
+            self.ui(
+                "selected_day",
+                date=self._qdate_from_day(selected_day).toString("yyyy-MM-dd ddd"),
+            )
         )
         self.daily_schedule_list.clear()
         day_events = grouped.get(selected_day, [])
         if not day_events:
-            self._add_placeholder_item(self.daily_schedule_list, self.ui("no_events_for_day"))
-            self._fit_schedule_list_to_contents(self.daily_schedule_list, min_height=74, max_height=150)
+            self._add_placeholder_item(
+                self.daily_schedule_list, self.ui("no_events_for_day")
+            )
+            self._fit_schedule_list_to_contents(
+                self.daily_schedule_list, min_height=74, max_height=150
+            )
             return
 
         for event in day_events:
-            self._add_schedule_item(self.daily_schedule_list, self._format_schedule_item(event, selected_day))
-        self._fit_schedule_list_to_contents(self.daily_schedule_list, min_height=120, max_height=240)
+            self._add_schedule_item(
+                self.daily_schedule_list,
+                self._format_schedule_item(event, selected_day),
+            )
+        self._fit_schedule_list_to_contents(
+            self.daily_schedule_list, min_height=120, max_height=240
+        )
 
-    def _render_upcoming_schedule(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
+    def _render_upcoming_schedule(
+        self, grouped: dict[date, list[dict[str, Any]]]
+    ) -> None:
         if not hasattr(self, "upcoming_schedule_list"):
             return
 
@@ -2467,13 +2512,24 @@ class MainWindow(QMainWindow):
                 upcoming.append((day_value, event))
 
         if not upcoming:
-            self._add_placeholder_item(self.upcoming_schedule_list, self.ui("no_upcoming_events"))
-            self._fit_schedule_list_to_contents(self.upcoming_schedule_list, min_height=74, max_height=150)
+            self._add_placeholder_item(
+                self.upcoming_schedule_list, self.ui("no_upcoming_events")
+            )
+            self._fit_schedule_list_to_contents(
+                self.upcoming_schedule_list, min_height=74, max_height=150
+            )
             return
 
-        for day_value, event in sorted(upcoming, key=lambda item: event_sort_key(item[1]))[:5]:
-            self._add_schedule_item(self.upcoming_schedule_list, self._format_schedule_item(event, day_value))
-        self._fit_schedule_list_to_contents(self.upcoming_schedule_list, min_height=96, max_height=190)
+        for day_value, event in sorted(
+            upcoming, key=lambda item: event_sort_key(item[1])
+        )[:5]:
+            self._add_schedule_item(
+                self.upcoming_schedule_list,
+                self._format_schedule_item(event, day_value),
+            )
+        self._fit_schedule_list_to_contents(
+            self.upcoming_schedule_list, min_height=96, max_height=190
+        )
 
     def _render_schedule_conflicts(self) -> None:
         if not hasattr(self, "schedule_conflict_list"):
@@ -2481,18 +2537,28 @@ class MainWindow(QMainWindow):
 
         self.schedule_conflict_list.clear()
         if not self.conflicts:
-            self._add_placeholder_item(self.schedule_conflict_list, self.ui("no_conflicts"))
-            self._fit_schedule_list_to_contents(self.schedule_conflict_list, min_height=74, max_height=150)
+            self._add_placeholder_item(
+                self.schedule_conflict_list, self.ui("no_conflicts")
+            )
+            self._fit_schedule_list_to_contents(
+                self.schedule_conflict_list, min_height=74, max_height=150
+            )
             return
 
         for conflict in self.conflicts[:5]:
-            title = str(conflict.get("title", "")).strip() or self.ui("conflict_notifications")
+            title = str(conflict.get("title", "")).strip() or self.ui(
+                "conflict_notifications"
+            )
             detail = str(conflict.get("detail", "")).strip()
             text = f"{title}\n{detail}" if detail else title
             self._add_schedule_item(self.schedule_conflict_list, text)
-        self._fit_schedule_list_to_contents(self.schedule_conflict_list, min_height=96, max_height=180)
+        self._fit_schedule_list_to_contents(
+            self.schedule_conflict_list, min_height=96, max_height=180
+        )
 
-    def _format_schedule_item(self, event: dict[str, Any], selected_day: date | None = None) -> str:
+    def _format_schedule_item(
+        self, event: dict[str, Any], selected_day: date | None = None
+    ) -> str:
         title = str(event.get("title", "")).strip() or self.ui("upcoming_events")
         source = str(event.get("source", "")).strip()
         time_text = format_event_time(event, selected_day)
@@ -2509,7 +2575,9 @@ class MainWindow(QMainWindow):
         item = self._add_schedule_item(list_widget, text)
         item.setFlags(Qt.ItemFlag.NoItemFlags)
 
-    def _add_schedule_item(self, list_widget: QListWidget, text: str) -> QListWidgetItem:
+    def _add_schedule_item(
+        self, list_widget: QListWidget, text: str
+    ) -> QListWidgetItem:
         item = QListWidgetItem(text, list_widget)
         item.setSizeHint(QSize(0, self._schedule_item_height(text)))
         return item
@@ -2538,7 +2606,9 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _schedule_item_height(text: str) -> int:
         explicit_lines = text.count("\n") + 1
-        wrapped_lines = sum(max(1, (len(line) + 42) // 43) for line in text.splitlines() or [""])
+        wrapped_lines = sum(
+            max(1, (len(line) + 42) // 43) for line in text.splitlines() or [""]
+        )
         line_count = max(explicit_lines, wrapped_lines)
         return max(46, min(150, 24 + line_count * 22))
 

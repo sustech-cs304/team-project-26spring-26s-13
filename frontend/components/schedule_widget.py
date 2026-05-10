@@ -23,7 +23,12 @@ from PyQt6.QtWidgets import (
 )
 
 from frontend.api.client import api_client
-from frontend.schedule_utils import event_sort_key, events_by_date, format_event_time, next_event_date
+from frontend.schedule_utils import (
+    event_sort_key,
+    events_by_date,
+    format_event_time,
+    next_event_date,
+)
 
 
 class ScheduleRefreshWorker(QThread):
@@ -99,7 +104,9 @@ class ScheduleWidget(QWidget):
         self._calendar.setObjectName("ScheduleCalendar")
         self._calendar.setGridVisible(True)
         self._calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
-        self._calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+        self._calendar.setVerticalHeaderFormat(
+            QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader
+        )
         self._calendar.setMinimumHeight(420)
         self._calendar.selectionChanged.connect(self._on_date_selected)
         calendar_layout.addWidget(self._calendar)
@@ -196,7 +203,9 @@ class ScheduleWidget(QWidget):
     def _refresh_calendar(self) -> None:
         events = self._events()
         grouped = events_by_date(events)
-        self._summary_label.setText(f"{len(grouped)} 天有安排 · 共 {len(events)} 个事件")
+        self._summary_label.setText(
+            f"{len(grouped)} 天有安排 · 共 {len(events)} 个事件"
+        )
         self._mark_calendar_dates(grouped)
 
         if self._selected_day is None:
@@ -210,14 +219,18 @@ class ScheduleWidget(QWidget):
     def _mark_calendar_dates(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
         empty_format = QTextCharFormat()
         for old_day in self._highlighted_dates:
-            self._calendar.setDateTextFormat(self._qdate_from_day(old_day), empty_format)
+            self._calendar.setDateTextFormat(
+                self._qdate_from_day(old_day), empty_format
+            )
 
         event_format = QTextCharFormat()
         event_format.setBackground(QColor(90, 124, 255, 95))
         event_format.setForeground(QColor("#ffffff"))
         event_format.setFontWeight(QFont.Weight.Bold)
         for day_value in grouped:
-            self._calendar.setDateTextFormat(self._qdate_from_day(day_value), event_format)
+            self._calendar.setDateTextFormat(
+                self._qdate_from_day(day_value), event_format
+            )
         self._highlighted_dates = set(grouped)
 
     def _on_date_selected(self) -> None:
@@ -226,33 +239,49 @@ class ScheduleWidget(QWidget):
 
     def _render_selected_day(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
         selected = self._selected_day or date.today()
-        self._day_label.setText(f"选中日期：{self._qdate_from_day(selected).toString('yyyy-MM-dd ddd')}")
+        self._day_label.setText(
+            f"选中日期：{self._qdate_from_day(selected).toString('yyyy-MM-dd ddd')}"
+        )
         self._events_list.clear()
         day_events = grouped.get(selected, [])
         if not day_events:
             self._add_placeholder(self._events_list, "当天暂无安排。")
-            self._fit_schedule_list_to_contents(self._events_list, min_height=74, max_height=150)
+            self._fit_schedule_list_to_contents(
+                self._events_list, min_height=74, max_height=150
+            )
             return
         for event in sorted(day_events, key=event_sort_key):
-            self._add_schedule_item(self._events_list, self._format_event(event, selected))
-        self._fit_schedule_list_to_contents(self._events_list, min_height=120, max_height=240)
+            self._add_schedule_item(
+                self._events_list, self._format_event(event, selected)
+            )
+        self._fit_schedule_list_to_contents(
+            self._events_list, min_height=120, max_height=240
+        )
 
     def _render_conflicts(self) -> None:
         self._conflicts_list.clear()
         conflicts = self._schedule_data.get("conflicts", [])
         if not conflicts:
             self._add_placeholder(self._conflicts_list, "暂无冲突提醒。")
-            self._fit_schedule_list_to_contents(self._conflicts_list, min_height=74, max_height=150)
+            self._fit_schedule_list_to_contents(
+                self._conflicts_list, min_height=74, max_height=150
+            )
             return
         for conflict in conflicts[:5]:
             title = str(conflict.get("title", "冲突提醒")).strip()
             detail = str(conflict.get("detail", "")).strip()
             text = f"{title}\n{detail}" if detail else title
             self._add_schedule_item(self._conflicts_list, text)
-        self._fit_schedule_list_to_contents(self._conflicts_list, min_height=96, max_height=180)
+        self._fit_schedule_list_to_contents(
+            self._conflicts_list, min_height=96, max_height=180
+        )
 
     def _events(self) -> list[dict[str, Any]]:
-        return [event for event in self._schedule_data.get("events", []) if isinstance(event, dict)]
+        return [
+            event
+            for event in self._schedule_data.get("events", [])
+            if isinstance(event, dict)
+        ]
 
     @staticmethod
     def _format_event(event: dict[str, Any], selected: date) -> str:
@@ -299,7 +328,9 @@ class ScheduleWidget(QWidget):
     @staticmethod
     def _schedule_item_height(text: str) -> int:
         explicit_lines = text.count("\n") + 1
-        wrapped_lines = sum(max(1, (len(line) + 42) // 43) for line in text.splitlines() or [""])
+        wrapped_lines = sum(
+            max(1, (len(line) + 42) // 43) for line in text.splitlines() or [""]
+        )
         line_count = max(explicit_lines, wrapped_lines)
         return max(46, min(150, 24 + line_count * 22))
 
