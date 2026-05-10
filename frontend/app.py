@@ -2101,7 +2101,18 @@ class MainWindow(QMainWindow):
 
     def _build_schedule_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
+        outer_layout = QVBoxLayout(tab)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        schedule_scroll = QScrollArea()
+        schedule_scroll.setObjectName("SchedulePageScroll")
+        schedule_scroll.setWidgetResizable(True)
+        schedule_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        schedule_content = QWidget()
+        schedule_content.setObjectName("SchedulePageContent")
+        layout = QVBoxLayout(schedule_content)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(14)
 
@@ -2137,7 +2148,7 @@ class MainWindow(QMainWindow):
 
         calendar_panel = QFrame()
         calendar_panel.setObjectName("PanelCard")
-        calendar_panel.setMaximumHeight(360)
+        calendar_panel.setMinimumHeight(500)
         calendar_layout = QVBoxLayout(calendar_panel)
         calendar_layout.setContentsMargins(16, 16, 16, 16)
         calendar_layout.setSpacing(10)
@@ -2149,7 +2160,7 @@ class MainWindow(QMainWindow):
         self.schedule_calendar.setGridVisible(True)
         self.schedule_calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
         self.schedule_calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
-        self.schedule_calendar.setMinimumHeight(260)
+        self.schedule_calendar.setMinimumHeight(420)
         self.schedule_calendar.selectionChanged.connect(self._on_schedule_selection_changed)
         calendar_layout.addWidget(calendar_title)
         calendar_layout.addWidget(self.schedule_calendar, 1)
@@ -2162,9 +2173,11 @@ class MainWindow(QMainWindow):
         detail_layout.setSpacing(0)
 
         detail_scroll = QScrollArea()
+        detail_scroll.setObjectName("ScheduleDetailScroll")
         detail_scroll.setWidgetResizable(True)
         detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
         detail_content = QWidget()
+        detail_content.setObjectName("ScheduleDetailContent")
         detail_content_layout = QVBoxLayout(detail_content)
         detail_content_layout.setContentsMargins(0, 0, 0, 0)
         detail_content_layout.setSpacing(14)
@@ -2223,6 +2236,8 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(header)
         layout.addLayout(content, 1)
+        schedule_scroll.setWidget(schedule_content)
+        outer_layout.addWidget(schedule_scroll, 1)
         self._refresh_schedule_views()
         return tab
 
