@@ -375,7 +375,9 @@ QTextEdit {
 }
 
 QListWidget#ConversationList,
-QListWidget#ResourceList {
+QListWidget#ResourceList,
+QListWidget#DailyScheduleList,
+QListWidget#ScheduleConflictList {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
@@ -384,7 +386,9 @@ QListWidget#ResourceList {
 }
 
 QListWidget#ConversationList::item,
-QListWidget#ResourceList::item {
+QListWidget#ResourceList::item,
+QListWidget#DailyScheduleList::item,
+QListWidget#ScheduleConflictList::item {
     margin: 4px 0;
     padding: 10px 12px;
     border-radius: 12px;
@@ -398,6 +402,16 @@ QListWidget#ConversationList::item {
 
 QListWidget#ResourceList::item {
     background: rgba(255, 255, 255, 0.025);
+}
+
+QListWidget#DailyScheduleList::item {
+    background: rgba(90, 124, 255, 0.12);
+    border: 1px solid rgba(121, 156, 255, 0.16);
+}
+
+QListWidget#ScheduleConflictList::item {
+    background: rgba(255, 121, 121, 0.10);
+    border: 1px solid rgba(255, 160, 160, 0.18);
 }
 
 QListWidget#ConversationList::item:selected {
@@ -431,6 +445,37 @@ QTabBar::tab {
 QTabBar::tab:selected {
     background: rgba(90, 124, 255, 0.28);
     color: #ffffff;
+}
+
+QCalendarWidget#ScheduleCalendar {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    color: #eef3ff;
+}
+
+QCalendarWidget#ScheduleCalendar QWidget {
+    alternate-background-color: rgba(255, 255, 255, 0.03);
+    background: transparent;
+    color: #eef3ff;
+}
+
+QCalendarWidget#ScheduleCalendar QToolButton {
+    min-height: 30px;
+    border-radius: 10px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #eef3ff;
+}
+
+QCalendarWidget#ScheduleCalendar QAbstractItemView {
+    background: rgba(8, 14, 27, 0.74);
+    border: none;
+    border-radius: 12px;
+    color: #eef3ff;
+    selection-background-color: rgba(115, 193, 255, 0.34);
+    selection-color: #ffffff;
+    outline: none;
 }
 
 QScrollArea {
