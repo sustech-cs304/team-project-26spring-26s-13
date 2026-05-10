@@ -37,6 +37,8 @@ from backend.schemas.agent import (
     AssistantMessage,
     EncyclopediaResult,
     ErrorDetail,
+    LibraryRoom,
+    LibraryRoomResult,
     RiskLevel,
     ScheduleConflict,
     ScheduleData,
@@ -268,6 +270,7 @@ async def run_agent(
             final_data.content,
             raw_messages,
         )
+        library_payload = _build_library_payload(raw_messages)
         print(f"chosen_route={chosen_route}")
 
         alignment_issue = detect_alignment_issue(
@@ -344,6 +347,7 @@ async def run_agent(
             ui_payload=UIPayload(
                 schedule=schedule_payload,
                 encyclopedia=encyclopedia_payload,
+                library=library_payload,
             ),
             hitl_request=None,
             error=None,
@@ -612,6 +616,37 @@ def _build_encyclopedia_payload(
         query=user_prompt,
         answer_markdown=answer_markdown,
         citations=citations,
+    )
+
+
+def _build_library_payload(
+    raw_messages: list,
+) -> LibraryRoomResult | None:
+    """从 query_library_rooms 工具返回中构建 LibraryRoomResult。"""
+    raw = _extract_tool_return_content(raw_messages, "query_library_rooms")
+    payload = _load_json_object(raw)
+    if not isinstance(payload, dict):
+        return None
+
+    rooms: list[LibraryRoom] = []
+    for item in payload.get("rooms", []):
+        if not isinstance(item, dict):
+            continue
+        rooms.append(
+            LibraryRoom(
+                room_id=str(item.get("room_id", "")),
+                room_name=str(item.get("room_name", "")),
+                location=str(item.get("location", "")),
+                capacity=int(item.get("capacity", 0)),
+                time_slots=item.get("time_slots", []),
+            )
+        )
+    return LibraryRoomResult(
+        query_location=str(payload.get("query_location", "")),
+        query_time=str(payload.get("query_time", "")),
+        query_capacity=payload.get("query_capacity"),
+        has_available=bool(payload.get("has_available", False)),
+        rooms=rooms,
     )
 
 

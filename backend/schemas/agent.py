@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 # ── 枚举常量 ──────────────────────────────────────────────────────────────────
 
-RouteType = Literal["chat", "scheduler", "encyclopedia", "os_automation"]
+RouteType = Literal["chat", "scheduler", "encyclopedia", "library", "os_automation"]
 TraceStatus = Literal["pending", "running", "done", "error"]
 TracePhase = Literal["Observation", "Reasoning", "Tool Use", "Reflection"]
 RiskLevel = Literal["low", "medium", "high"]
@@ -90,6 +90,33 @@ class EncyclopediaResult(BaseModel):
     citations: list[str]  # 来源路径，如 "Student Handbook / Degree Requirements"
 
 
+class LibraryRoom(BaseModel):
+    """单个讨论间的信息。"""
+
+    room_id: str = Field(..., description="讨论间唯一标识")
+    room_name: str = Field(..., description="讨论间名称，如 '图书馆一楼 A01'")
+    location: str = Field(..., description="位置，如 '图书馆一楼'")
+    capacity: int = Field(..., description="容纳人数，如 4、6、8")
+    time_slots: list[str] = Field(
+        default_factory=list,
+        description="空闲时间段列表，如 ['08:00-10:00', '14:00-16:00']",
+    )
+
+
+class LibraryRoomResult(BaseModel):
+    """图书馆讨论间查询结果。"""
+
+    query_location: str = Field(..., description="用户查询的地点")
+    query_time: str = Field(..., description="用户查询的时间段")
+    query_capacity: int | None = Field(
+        None, description="用户要求的容量（几人间），None 表示不限"
+    )
+    rooms: list[LibraryRoom] = Field(
+        default_factory=list, description="符合要求的讨论间列表"
+    )
+    has_available: bool = Field(False, description="是否有符合要求的讨论间")
+
+
 class UIPayload(BaseModel):
     """
     结构化展示数据，与 route 对应。
@@ -98,6 +125,7 @@ class UIPayload(BaseModel):
 
     schedule: ScheduleData | None = None
     encyclopedia: EncyclopediaResult | None = None
+    library: LibraryRoomResult | None = None
 
 
 class HITLRequest(BaseModel):

@@ -9,3 +9,4 @@ from backend.agent.tools import rag  # noqa: F401
 from backend.agent.tools import os_automation  # noqa: F401
 from backend.agent.tools import study_copilot  # noqa: F401
 from backend.agent.tools import personal_tasks  # noqa: F401
+from backend.agent.tools import library_room  # noqa: F401

@@ -25,6 +25,11 @@ FILE_TOOL_NAMES = {
     "batch_rename",
 }
 
+# 预约类工具名称：这些工具涉及资源锁定，需要 HITL 审批
+BOOKING_TOOL_NAMES = {
+    "book_library_room",
+}
+
 _FILE_ACTION_TERMS = {
     "read",
     "open",
@@ -79,6 +84,16 @@ _FILE_TARGET_TERMS = {
     "路径",
     "本地",
     "工作区",
+}
+
+_LIBRARY_TERMS = {
+    "图书馆",
+    "讨论间",
+    "讨论室",
+    "自习室",
+    "study room",
+    "discussion room",
+    "library",
 }
 
 _NON_FILE_MEMORY_TERMS = {
@@ -166,3 +181,11 @@ def normalize_route_for_prompt(user_prompt: str, route: RouteType) -> RouteType:
     if route == "os_automation" and not has_explicit_file_operation_intent(user_prompt):
         return "chat"
     return route
+
+
+def has_library_intent(prompt: str | Sequence[Any] | None) -> bool:
+    """判断用户消息是否涉及图书馆讨论间查询。"""
+    text = _prompt_to_text(prompt).strip().lower()
+    if not text:
+        return False
+    return any(term in text for term in _LIBRARY_TERMS)

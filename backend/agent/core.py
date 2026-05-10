@@ -53,8 +53,8 @@ class FinalResponse(BaseModel):
         description="回复给用户的自然语言内容。如果执行了操作，告诉用户结果；如果是提问，给出解答。"
     )
     route: str = Field(
-        description="决定前端界面展示侧重哪个面板的路由。严格限于以下四个值: 'chat', 'scheduler', 'encyclopedia', 'os_automation'",
-        pattern="^(chat|scheduler|encyclopedia|os_automation)$",
+        description="决定前端界面展示侧重哪个面板的路由。严格限于以下五个值: 'chat', 'scheduler', 'encyclopedia', 'library', 'os_automation'",
+        pattern="^(chat|scheduler|encyclopedia|library|os_automation)$",
     )
 
 
