@@ -17,7 +17,7 @@ The proposed system is an Autonomous AI Agent designed to assist SUSTech student
    - Acts as an intelligent QA system capable of answering complex campus-related queries (e.g., degree requirements, dormitory policies).
    - Utilizes Retrieval-Augmented Generation (RAG) by searching embedded chunks from official documents (like the SUSTech Student Handbook) stored in a local Vector Database.
 5. **Library Discussion Room Query**
-   - Queries the availability of discussion rooms in the SUSTech Library based on user-specified criteria including location (building/floor), desired time slot, and room capacity (e.g., 4-person, 8-person rooms).
+   - Queries the availability of discussion rooms in the SUSTech Library based on user-specified criteria including location, desired time slot and room capacity.
    - Returns a list of matching discussion rooms with their availability status, enabling students to quickly find and plan group study sessions.
 6. **Study Copilot**
    - Processes user-uploaded or local academic materials, such as lecture PPTs, PDFs, Markdown notes and so on.
