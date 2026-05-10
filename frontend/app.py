@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import QDate, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QTextCharFormat
 from PyQt6.QtWidgets import (
     QApplication,
+    QCalendarWidget,
     QDialog,
     QFileDialog,
     QFormLayout,
@@ -55,6 +56,7 @@ try:
         SCHEDULE_EVENTS,
         TRACE_EVENTS,
     )
+    from .schedule_utils import event_sort_key, events_by_date, format_event_time, next_event_date
     from .styles import APP_STYLE
 except ImportError:
     from api_client import BackendApiClient, BackendApiError  # type: ignore
@@ -75,6 +77,7 @@ except ImportError:
         SCHEDULE_EVENTS,
         TRACE_EVENTS,
     )
+    from schedule_utils import event_sort_key, events_by_date, format_event_time, next_event_date  # type: ignore
     from styles import APP_STYLE  # type: ignore
 
 
@@ -548,6 +551,8 @@ class MainWindow(QMainWindow):
         self.trace_events: list[dict[str, str]] = []
         self.schedule_events: list[dict[str, str]] = []
         self.conflicts: list[dict[str, str]] = []
+        self.selected_schedule_day: date | None = None
+        self._highlighted_schedule_dates: set[date] = set()
         self.response_stream_state: dict[str, Any] | None = None
         self.response_stream_timer = QTimer(self)
         self.response_stream_timer.setInterval(45)
@@ -615,6 +620,10 @@ class MainWindow(QMainWindow):
             mode = "agent_chat"
         self.selected_mode = mode
         self._refresh_mode_selector()
+        if hasattr(self, "center_tabs") and hasattr(self, "schedule_tab") and mode == "scheduler":
+            self.center_tabs.setCurrentWidget(self.schedule_tab)
+        elif hasattr(self, "center_tabs") and hasattr(self, "chat_tab"):
+            self.center_tabs.setCurrentWidget(self.chat_tab)
 
     def _refresh_mode_selector(self) -> None:
         if self.mode_button is not None:
@@ -970,6 +979,7 @@ class MainWindow(QMainWindow):
                         conflicts=normalized_conflicts or self.conflicts,
                     )
                 )
+                self._refresh_schedule_views()
 
         encyclopedia_payload = ui_payload.get("encyclopedia")
         if isinstance(encyclopedia_payload, dict):
@@ -1375,12 +1385,15 @@ class MainWindow(QMainWindow):
         self._load_chat_messages(self.chat_messages)
         self._load_trace_events(self.trace_events)
         self._load_resource_files()
+        self._refresh_schedule_views()
         self._refresh_profile_views()
 
     def _reset_dynamic_state(self) -> None:
         self._initialize_default_conversations()
         self.schedule_events = self._build_localized_schedule_events()
         self.conflicts = self._build_localized_conflicts()
+        self.selected_schedule_day = None
+        self._highlighted_schedule_dates = set()
 
         if self.remote_profile:
             self.current_user = {
@@ -1998,7 +2011,12 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(16)
 
-        layout.addWidget(self._build_chat_tab(), 1)
+        self.center_tabs = QTabWidget()
+        self.chat_tab = self._build_chat_tab()
+        self.schedule_tab = self._build_schedule_tab()
+        self.center_tabs.addTab(self.chat_tab, self.ui("tab_agent_chat"))
+        self.center_tabs.addTab(self.schedule_tab, self.ui("tab_schedule"))
+        layout.addWidget(self.center_tabs, 1)
         return frame
 
     def _build_chat_tab(self) -> QWidget:
@@ -2079,6 +2097,133 @@ class MainWindow(QMainWindow):
         composer_layout.addLayout(button_row)
 
         layout.addWidget(composer_card)
+        return tab
+
+    def _build_schedule_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(14)
+
+        header = QFrame()
+        header.setObjectName("PanelCard")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(16, 16, 16, 16)
+        header_layout.setSpacing(8)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        title = QLabel(self.ui("schedule_title"))
+        title.setObjectName("SectionTitle")
+        refresh_button = QPushButton(self.ui("refresh_schedule"))
+        refresh_button.setObjectName("PrimaryButton")
+        refresh_button.clicked.connect(self.refresh_schedule_data)
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        title_row.addWidget(refresh_button)
+
+        body = QLabel(self.ui("calendar_hint"))
+        body.setObjectName("MutedText")
+        body.setWordWrap(True)
+        self.schedule_summary_label = QLabel()
+        self.schedule_summary_label.setObjectName("BadgeLabel")
+
+        header_layout.addLayout(title_row)
+        header_layout.addWidget(body)
+        header_layout.addWidget(self.schedule_summary_label, 0, Qt.AlignmentFlag.AlignLeft)
+
+        content = QVBoxLayout()
+        content.setSpacing(14)
+
+        calendar_panel = QFrame()
+        calendar_panel.setObjectName("PanelCard")
+        calendar_panel.setMaximumHeight(360)
+        calendar_layout = QVBoxLayout(calendar_panel)
+        calendar_layout.setContentsMargins(16, 16, 16, 16)
+        calendar_layout.setSpacing(10)
+
+        calendar_title = QLabel(self.ui("calendar_title"))
+        calendar_title.setObjectName("CardTitle")
+        self.schedule_calendar = QCalendarWidget()
+        self.schedule_calendar.setObjectName("ScheduleCalendar")
+        self.schedule_calendar.setGridVisible(True)
+        self.schedule_calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
+        self.schedule_calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
+        self.schedule_calendar.setMinimumHeight(260)
+        self.schedule_calendar.selectionChanged.connect(self._on_schedule_selection_changed)
+        calendar_layout.addWidget(calendar_title)
+        calendar_layout.addWidget(self.schedule_calendar, 1)
+
+        detail_panel = QFrame()
+        detail_panel.setObjectName("PanelCard")
+        detail_panel.setMinimumHeight(260)
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(16, 16, 16, 16)
+        detail_layout.setSpacing(0)
+
+        detail_scroll = QScrollArea()
+        detail_scroll.setWidgetResizable(True)
+        detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        detail_content = QWidget()
+        detail_content_layout = QVBoxLayout(detail_content)
+        detail_content_layout.setContentsMargins(0, 0, 0, 0)
+        detail_content_layout.setSpacing(14)
+
+        self.selected_day_label = QLabel()
+        self.selected_day_label.setObjectName("SectionTitle")
+        self.daily_schedule_list = QListWidget()
+        self.daily_schedule_list.setObjectName("DailyScheduleList")
+        self._configure_schedule_list(self.daily_schedule_list)
+
+        upcoming_title = QLabel(self.ui("upcoming_events"))
+        upcoming_title.setObjectName("CardTitle")
+        self.upcoming_schedule_list = QListWidget()
+        self.upcoming_schedule_list.setObjectName("DailyScheduleList")
+        self._configure_schedule_list(self.upcoming_schedule_list)
+
+        conflicts_title = QLabel(self.ui("conflict_notifications"))
+        conflicts_title.setObjectName("CardTitle")
+        self.schedule_conflict_list = QListWidget()
+        self.schedule_conflict_list.setObjectName("ScheduleConflictList")
+        self._configure_schedule_list(self.schedule_conflict_list)
+
+        daily_section = QFrame()
+        daily_section.setObjectName("ScheduleSection")
+        daily_layout = QVBoxLayout(daily_section)
+        daily_layout.setContentsMargins(0, 0, 0, 0)
+        daily_layout.setSpacing(8)
+        daily_layout.addWidget(self.selected_day_label)
+        daily_layout.addWidget(self.daily_schedule_list)
+
+        upcoming_section = QFrame()
+        upcoming_section.setObjectName("ScheduleSection")
+        upcoming_layout = QVBoxLayout(upcoming_section)
+        upcoming_layout.setContentsMargins(0, 0, 0, 0)
+        upcoming_layout.setSpacing(8)
+        upcoming_layout.addWidget(upcoming_title)
+        upcoming_layout.addWidget(self.upcoming_schedule_list)
+
+        conflicts_section = QFrame()
+        conflicts_section.setObjectName("ScheduleSection")
+        conflicts_layout = QVBoxLayout(conflicts_section)
+        conflicts_layout.setContentsMargins(0, 0, 0, 0)
+        conflicts_layout.setSpacing(8)
+        conflicts_layout.addWidget(conflicts_title)
+        conflicts_layout.addWidget(self.schedule_conflict_list)
+
+        detail_content_layout.addWidget(daily_section)
+        detail_content_layout.addWidget(upcoming_section)
+        detail_content_layout.addWidget(conflicts_section)
+        detail_content_layout.addStretch(1)
+        detail_scroll.setWidget(detail_content)
+        detail_layout.addWidget(detail_scroll, 1)
+
+        content.addWidget(calendar_panel)
+        content.addWidget(detail_panel, 1)
+
+        layout.addWidget(header)
+        layout.addLayout(content, 1)
+        self._refresh_schedule_views()
         return tab
 
     def _build_trace_panel(self) -> QFrame:
@@ -2203,6 +2348,192 @@ class MainWindow(QMainWindow):
                 ),
             )
         self._sync_active_conversation()
+
+    def _refresh_schedule_views(self) -> None:
+        if not hasattr(self, "schedule_calendar"):
+            return
+
+        grouped = events_by_date(self.schedule_events)
+        self._apply_schedule_date_marks(grouped)
+
+        if hasattr(self, "schedule_summary_label"):
+            self.schedule_summary_label.setText(
+                self.ui("schedule_summary", days=len(grouped), events=len(self.schedule_events))
+            )
+
+        if self.selected_schedule_day is None:
+            self.selected_schedule_day = next_event_date(self.schedule_events) or date.today()
+
+        selected_qdate = self._qdate_from_day(self.selected_schedule_day)
+        if self.schedule_calendar.selectedDate() != selected_qdate:
+            self.schedule_calendar.setSelectedDate(selected_qdate)
+
+        self._render_selected_day_schedule(self.selected_schedule_day, grouped)
+        self._render_upcoming_schedule(grouped)
+        self._render_schedule_conflicts()
+
+    def _apply_schedule_date_marks(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
+        empty_format = QTextCharFormat()
+        for marked_day in self._highlighted_schedule_dates:
+            self.schedule_calendar.setDateTextFormat(self._qdate_from_day(marked_day), empty_format)
+
+        event_format = QTextCharFormat()
+        event_format.setBackground(QColor(90, 124, 255, 95))
+        event_format.setForeground(QColor("#ffffff"))
+        event_format.setFontWeight(QFont.Weight.Bold)
+
+        conflict_format = QTextCharFormat()
+        conflict_format.setBackground(QColor(255, 140, 120, 95))
+        conflict_format.setForeground(QColor("#ffffff"))
+        conflict_format.setFontWeight(QFont.Weight.Bold)
+
+        conflict_days = self._conflict_dates(grouped)
+        for day_value in grouped:
+            fmt = conflict_format if day_value in conflict_days else event_format
+            self.schedule_calendar.setDateTextFormat(self._qdate_from_day(day_value), fmt)
+        self._highlighted_schedule_dates = set(grouped)
+
+    def _conflict_dates(self, grouped: dict[date, list[dict[str, Any]]]) -> set[date]:
+        conflict_days: set[date] = set()
+        for conflict in self.conflicts:
+            detail = f"{conflict.get('title', '')} {conflict.get('detail', '')}"
+            for day_value in grouped:
+                if day_value.isoformat() in detail:
+                    conflict_days.add(day_value)
+        return conflict_days
+
+    def _on_schedule_selection_changed(self) -> None:
+        if not hasattr(self, "schedule_calendar"):
+            return
+        self.selected_schedule_day = self._day_from_qdate(self.schedule_calendar.selectedDate())
+        self._render_selected_day_schedule(self.selected_schedule_day, events_by_date(self.schedule_events))
+
+    def _render_selected_day_schedule(
+        self,
+        selected_day: date,
+        grouped: dict[date, list[dict[str, Any]]],
+    ) -> None:
+        if not hasattr(self, "daily_schedule_list"):
+            return
+
+        self.selected_day_label.setText(
+            self.ui("selected_day", date=self._qdate_from_day(selected_day).toString("yyyy-MM-dd ddd"))
+        )
+        self.daily_schedule_list.clear()
+        day_events = grouped.get(selected_day, [])
+        if not day_events:
+            self._add_placeholder_item(self.daily_schedule_list, self.ui("no_events_for_day"))
+            self._fit_schedule_list_to_contents(self.daily_schedule_list, min_height=74, max_height=150)
+            return
+
+        for event in day_events:
+            self._add_schedule_item(self.daily_schedule_list, self._format_schedule_item(event, selected_day))
+        self._fit_schedule_list_to_contents(self.daily_schedule_list, min_height=120, max_height=240)
+
+    def _render_upcoming_schedule(self, grouped: dict[date, list[dict[str, Any]]]) -> None:
+        if not hasattr(self, "upcoming_schedule_list"):
+            return
+
+        self.upcoming_schedule_list.clear()
+        today = date.today()
+        upcoming: list[tuple[date, dict[str, Any]]] = []
+        seen: set[tuple[str, str, str, str]] = set()
+        for day_value in sorted(day for day in grouped if day >= today):
+            for event in grouped[day_value]:
+                key = (
+                    str(event.get("title", "")),
+                    str(event.get("time", "")),
+                    str(event.get("source", "")),
+                    str(event.get("detail", "")),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                upcoming.append((day_value, event))
+
+        if not upcoming:
+            self._add_placeholder_item(self.upcoming_schedule_list, self.ui("no_upcoming_events"))
+            self._fit_schedule_list_to_contents(self.upcoming_schedule_list, min_height=74, max_height=150)
+            return
+
+        for day_value, event in sorted(upcoming, key=lambda item: event_sort_key(item[1]))[:5]:
+            self._add_schedule_item(self.upcoming_schedule_list, self._format_schedule_item(event, day_value))
+        self._fit_schedule_list_to_contents(self.upcoming_schedule_list, min_height=96, max_height=190)
+
+    def _render_schedule_conflicts(self) -> None:
+        if not hasattr(self, "schedule_conflict_list"):
+            return
+
+        self.schedule_conflict_list.clear()
+        if not self.conflicts:
+            self._add_placeholder_item(self.schedule_conflict_list, self.ui("no_conflicts"))
+            self._fit_schedule_list_to_contents(self.schedule_conflict_list, min_height=74, max_height=150)
+            return
+
+        for conflict in self.conflicts[:5]:
+            title = str(conflict.get("title", "")).strip() or self.ui("conflict_notifications")
+            detail = str(conflict.get("detail", "")).strip()
+            text = f"{title}\n{detail}" if detail else title
+            self._add_schedule_item(self.schedule_conflict_list, text)
+        self._fit_schedule_list_to_contents(self.schedule_conflict_list, min_height=96, max_height=180)
+
+    def _format_schedule_item(self, event: dict[str, Any], selected_day: date | None = None) -> str:
+        title = str(event.get("title", "")).strip() or self.ui("upcoming_events")
+        source = str(event.get("source", "")).strip()
+        time_text = format_event_time(event, selected_day)
+        detail = str(event.get("detail", "")).strip()
+        meta = " | ".join(part for part in [time_text, source] if part)
+        lines = [title]
+        if meta:
+            lines.append(meta)
+        if detail:
+            lines.append(detail)
+        return "\n".join(lines)
+
+    def _add_placeholder_item(self, list_widget: QListWidget, text: str) -> None:
+        item = self._add_schedule_item(list_widget, text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+
+    def _add_schedule_item(self, list_widget: QListWidget, text: str) -> QListWidgetItem:
+        item = QListWidgetItem(text, list_widget)
+        item.setSizeHint(QSize(0, self._schedule_item_height(text)))
+        return item
+
+    def _configure_schedule_list(self, list_widget: QListWidget) -> None:
+        list_widget.setWordWrap(True)
+        list_widget.setUniformItemSizes(False)
+        list_widget.setTextElideMode(Qt.TextElideMode.ElideNone)
+        list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        list_widget.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+
+    def _fit_schedule_list_to_contents(
+        self,
+        list_widget: QListWidget,
+        *,
+        min_height: int,
+        max_height: int,
+    ) -> None:
+        content_height = 18
+        for index in range(list_widget.count()):
+            content_height += list_widget.item(index).sizeHint().height() + 6
+        height = max(min_height, min(max_height, content_height))
+        list_widget.setMinimumHeight(height)
+        list_widget.setMaximumHeight(height)
+
+    @staticmethod
+    def _schedule_item_height(text: str) -> int:
+        explicit_lines = text.count("\n") + 1
+        wrapped_lines = sum(max(1, (len(line) + 42) // 43) for line in text.splitlines() or [""])
+        line_count = max(explicit_lines, wrapped_lines)
+        return max(46, min(150, 24 + line_count * 22))
+
+    @staticmethod
+    def _qdate_from_day(day_value: date) -> QDate:
+        return QDate(day_value.year, day_value.month, day_value.day)
+
+    @staticmethod
+    def _day_from_qdate(qdate: QDate) -> date:
+        return date(qdate.year(), qdate.month(), qdate.day())
 
     def _refresh_profile_views(self) -> None:
         self.header_user_label.setText(
@@ -2430,6 +2761,7 @@ class MainWindow(QMainWindow):
                 self.schedule_events = self._normalize_schedule_events(events)
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
+            self._refresh_schedule_views()
 
         self._sync_remote_sessions()
         self._refresh_profile_views()
@@ -2822,6 +3154,8 @@ class MainWindow(QMainWindow):
             and self.current_username
         ):
             self.refresh_mock_content()
+            if hasattr(self, "center_tabs") and hasattr(self, "schedule_tab"):
+                self.center_tabs.setCurrentWidget(self.schedule_tab)
             return
 
         def _on_done(payload):
@@ -2831,6 +3165,9 @@ class MainWindow(QMainWindow):
                 self.schedule_events = self._normalize_schedule_events(events)
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
+            self._refresh_schedule_views()
+            if hasattr(self, "center_tabs") and hasattr(self, "schedule_tab"):
+                self.center_tabs.setCurrentWidget(self.schedule_tab)
             self._queue_response_stream(
                 assistant_text="",
                 trace_items=[
