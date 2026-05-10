@@ -29,6 +29,8 @@ env/
 # Tests
 temp/
 test/
+test.db
+coverage.xml
 
 # OS
 .DS_Store
