@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import re
 import sys
 from typing import Any
 from uuid import uuid4
@@ -555,6 +556,7 @@ class MainWindow(QMainWindow):
         self.chat_messages: list[dict[str, Any]] = []
         self.trace_events: list[dict[str, str]] = []
         self.schedule_events: list[dict[str, str]] = []
+        self.frontend_schedule_events: list[dict[str, str]] = []
         self.conflicts: list[dict[str, str]] = []
         self.selected_schedule_day: date | None = None
         self._highlighted_schedule_dates: set[date] = set()
@@ -976,7 +978,10 @@ class MainWindow(QMainWindow):
             normalized_conflicts: list[dict[str, str]] = []
             if isinstance(events, list) and events:
                 normalized_events = self._normalize_schedule_events(events)
-                self.schedule_events = normalized_events
+                self.schedule_events = self._merge_schedule_event_lists(
+                    normalized_events,
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list) and conflicts:
                 normalized_conflicts = self._normalize_conflicts(conflicts)
                 self.conflicts = normalized_conflicts
@@ -1278,6 +1283,31 @@ class MainWindow(QMainWindow):
             )
         return normalized
 
+    def _merge_schedule_event_lists(
+        self,
+        *event_lists: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        merged: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for events in event_lists:
+            for item in events:
+                if not isinstance(item, dict):
+                    continue
+                event = self._normalize_schedule_events([item])[0]
+                key = self._schedule_event_key(event)
+                if not key[0] or not key[1] or key in seen:
+                    continue
+                seen.add(key)
+                merged.append(event)
+        return sorted(merged, key=event_sort_key)
+
+    @staticmethod
+    def _schedule_event_key(event: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str(event.get("title", "")).strip().lower(),
+            str(event.get("time", "")).strip(),
+        )
+
     def _normalize_conflicts(
         self, conflicts: list[dict[str, Any]]
     ) -> list[dict[str, str]]:
@@ -1290,6 +1320,219 @@ class MainWindow(QMainWindow):
                 }
             )
         return normalized
+
+    def _add_frontend_schedule_event_from_reply(
+        self, text: str
+    ) -> dict[str, str] | None:
+        event = self._extract_schedule_event_from_reply(text)
+        if event is None:
+            return None
+
+        already_present = self._schedule_event_key(event) in {
+            self._schedule_event_key(existing) for existing in self.schedule_events
+        }
+        self.frontend_schedule_events = self._merge_schedule_event_lists(
+            self.frontend_schedule_events,
+            [event],
+        )
+        self.schedule_events = self._merge_schedule_event_lists(
+            self.schedule_events,
+            [event],
+        )
+
+        event_days = sorted(events_by_date([event]))
+        if event_days:
+            self.selected_schedule_day = event_days[0]
+        self._refresh_schedule_views()
+        return None if already_present else event
+
+    def _extract_schedule_event_from_reply(
+        self, text: str
+    ) -> dict[str, str] | None:
+        plain_text = self._plain_schedule_reply_text(text)
+        if not plain_text or not self._looks_like_schedule_add_reply(plain_text):
+            return None
+
+        title = self._extract_reply_schedule_title(plain_text)
+        schedule_time = self._extract_reply_schedule_time(plain_text)
+        if not title or not schedule_time:
+            return None
+
+        return {
+            "title": title,
+            "time": schedule_time,
+            "source": self.local({"en": "Local TODO", "zh": "本地计划"}),
+            "detail": self._extract_reply_schedule_detail(plain_text),
+        }
+
+    @staticmethod
+    def _plain_schedule_reply_text(text: str) -> str:
+        plain = re.sub(r"[*_`#>]", "", text or "")
+        plain = plain.replace("（", "(").replace("）", ")")
+        plain = plain.replace("：", ":")
+        plain = plain.replace("－", "-").replace("—", "-").replace("–", "-")
+        return "\n".join(line.strip() for line in plain.splitlines() if line.strip())
+
+    @staticmethod
+    def _looks_like_schedule_add_reply(text: str) -> bool:
+        lower_text = text.lower()
+        chinese_add = any(
+            marker in text
+            for marker in ("加入日程", "加入到日程", "添加到日程", "添加进日程")
+        )
+        chinese_saved = "日程" in text and any(
+            marker in text for marker in ("已保存", "保存成功", "已安排")
+        )
+        english_add = "schedule" in lower_text and any(
+            marker in lower_text for marker in ("added", "saved", "scheduled")
+        )
+        return chinese_add or chinese_saved or english_add
+
+    def _extract_reply_schedule_title(self, text: str) -> str:
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(
+                r"(?:事件名称|名称|标题|title|name)\s*:\s*(.+)",
+                line,
+                re.IGNORECASE,
+            )
+            if label_match:
+                title = self._clean_reply_field(label_match.group(1))
+                if title:
+                    return title
+
+        patterns = [
+            r"将\s*(.+?)\s*(?:加入|添加|保存).*?日程",
+            r"(?:added|saved|scheduled)\s+(.+?)\s+(?:to|in)\s+(?:the\s+)?(?:schedule|calendar)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                title = self._clean_reply_field(match.group(1))
+                if title:
+                    return title
+        return ""
+
+    def _extract_reply_schedule_time(self, text: str) -> str:
+        candidates: list[str] = []
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(
+                r"(?:时间|日期|开始时间|time|when)\s*:\s*(.+)",
+                line,
+                re.IGNORECASE,
+            )
+            if label_match:
+                candidates.append(label_match.group(1))
+        candidates.append(text)
+
+        for candidate in candidates:
+            schedule_time = self._parse_reply_schedule_time(candidate)
+            if schedule_time:
+                return schedule_time
+        return ""
+
+    def _extract_reply_schedule_detail(self, text: str) -> str:
+        detail_parts: list[str] = []
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(
+                r"(?:地点|位置|location|详情|备注|说明|detail|note)\s*:\s*(.+)",
+                line,
+                re.IGNORECASE,
+            )
+            if label_match:
+                value = self._clean_reply_field(label_match.group(1))
+                if value:
+                    detail_parts.append(value)
+        if detail_parts:
+            return " | ".join(detail_parts)
+        return self.local(
+            {"en": "Added from the chat response.", "zh": "从聊天回复自动识别。"}
+        )
+
+    @staticmethod
+    def _schedule_reply_lines(text: str) -> list[str]:
+        lines: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            line = re.sub(r"^[\-•\s]+", "", line)
+            if line:
+                lines.append(line)
+        return lines
+
+    @staticmethod
+    def _clean_reply_field(value: str) -> str:
+        cleaned = re.sub(r"\s+", " ", value or "").strip()
+        cleaned = cleaned.strip(" -:;!！。.'\"")
+        return cleaned
+
+    def _parse_reply_schedule_time(self, text: str) -> str:
+        normalized = self._plain_schedule_reply_text(text)
+        date_match = re.search(
+            r"(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日",
+            normalized,
+        )
+        if date_match:
+            year = int(date_match.group(1) or date.today().year)
+            month = int(date_match.group(2))
+            day = int(date_match.group(3))
+        else:
+            date_match = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", normalized)
+            if not date_match:
+                return ""
+            year = int(date_match.group(1))
+            month = int(date_match.group(2))
+            day = int(date_match.group(3))
+
+        try:
+            base_day = date(year, month, day)
+        except ValueError:
+            return ""
+
+        time_text = normalized[date_match.end():]
+        range_match = re.search(
+            r"(\d{1,2})(?:\s*[:点]\s*(\d{1,2}))?(?:\s*分)?\s*(?:-|~|到|至)\s*"
+            r"(\d{1,2})(?:\s*[:点]\s*(\d{1,2}))?(?:\s*分)?",
+            time_text,
+        )
+        if range_match:
+            start = self._build_reply_datetime(
+                base_day, range_match.group(1), range_match.group(2), time_text
+            )
+            end = self._build_reply_datetime(
+                base_day, range_match.group(3), range_match.group(4), time_text
+            )
+            if start is None or end is None:
+                return ""
+            if end <= start:
+                end += timedelta(days=1)
+            return f"{start.isoformat()}~{end.isoformat()}"
+
+        time_match = re.search(
+            r"(\d{1,2})(?:\s*[:点]\s*(\d{1,2}))?(?:\s*分)?",
+            time_text,
+        )
+        if not time_match:
+            return base_day.isoformat()
+        start = self._build_reply_datetime(
+            base_day, time_match.group(1), time_match.group(2), time_text
+        )
+        return start.isoformat() if start else ""
+
+    @staticmethod
+    def _build_reply_datetime(
+        base_day: date, hour_text: str, minute_text: str | None, context: str
+    ) -> datetime | None:
+        try:
+            hour = int(hour_text)
+            minute = int(minute_text or 0)
+        except ValueError:
+            return None
+        if ("下午" in context or "晚上" in context) and 1 <= hour < 12:
+            hour += 12
+        elif ("上午" in context or "早上" in context) and hour == 12:
+            hour = 0
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        return datetime(base_day.year, base_day.month, base_day.day, hour, minute)
 
     def _normalize_hitl_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -1399,6 +1642,7 @@ class MainWindow(QMainWindow):
 
     def _reset_dynamic_state(self) -> None:
         self._initialize_default_conversations()
+        self.frontend_schedule_events = []
         self.schedule_events = self._build_localized_schedule_events()
         self.conflicts = self._build_localized_conflicts()
         self.selected_schedule_day = None
@@ -2843,7 +3087,10 @@ class MainWindow(QMainWindow):
             events = local_schedule.get("events", [])
             conflicts = local_schedule.get("conflicts", [])
             if isinstance(events, list):
-                self.schedule_events = self._normalize_schedule_events(events)
+                self.schedule_events = self._merge_schedule_event_lists(
+                    self._normalize_schedule_events(events),
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
             self._refresh_schedule_views()
@@ -2881,6 +3128,19 @@ class MainWindow(QMainWindow):
             else None
         )
         extra_messages = self._build_response_cards(response)
+        inferred_schedule_event = self._add_frontend_schedule_event_from_reply(
+            assistant_text
+        )
+        if inferred_schedule_event and not any(
+            item.get("kind") == "schedule" for item in extra_messages
+        ):
+            extra_messages.append(
+                self._create_schedule_message(
+                    intro=self.ui("schedule_card_intro"),
+                    events=[inferred_schedule_event],
+                    conflicts=self.conflicts,
+                )
+            )
         self._queue_response_stream(
             assistant_text=assistant_text,
             trace_items=trace_items,
@@ -3247,7 +3507,10 @@ class MainWindow(QMainWindow):
             events = payload.get("events", [])
             conflicts = payload.get("conflicts", [])
             if isinstance(events, list):
-                self.schedule_events = self._normalize_schedule_events(events)
+                self.schedule_events = self._merge_schedule_event_lists(
+                    self._normalize_schedule_events(events),
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
             self._refresh_schedule_views()
