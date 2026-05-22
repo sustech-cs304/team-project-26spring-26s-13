@@ -1,9 +1,6 @@
 """
 backend/agent/tools/library_room.py
 图书馆讨论间查询工具：根据地点、时间、容量要求查询 SUSTech 图书馆讨论间空闲情况。
-
-当前为空实现（stub），返回占位数据。
-后续对接图书馆预约系统 API 后替换为真实实现。
 """
 
 from __future__ import annotations
@@ -13,9 +10,15 @@ import json
 from pydantic_ai import RunContext
 
 from backend.agent.core import AgentDeps, agent
+from backend.agent.tools.base import safe_tool
+from backend.services.library_room_service import (
+    LibraryRoomQueryError,
+    query_available_rooms,
+)
 
 
 @agent.tool
+@safe_tool
 async def query_library_rooms(
     ctx: RunContext[AgentDeps],
     location: str,
@@ -49,14 +52,48 @@ async def query_library_rooms(
           ]
         }
     """
-    # ── Stub 实现：返回空结果 ──
-    # TODO: 对接图书馆预约系统 API，替换以下占位逻辑
+    cas_account = (ctx.deps.cas_account or "").strip()
+    cas_password = ctx.deps.cas_password or ""
+    if not cas_account or not cas_password:
+        return "ERROR:CAS_LOGIN_FAILED"
+
+    try:
+        normalized_query, rooms = await query_available_rooms(
+            cas_account,
+            cas_password,
+            location=location,
+            time_slot=time_slot,
+            capacity=capacity,
+        )
+    except PermissionError:
+        return "ERROR:CAS_LOGIN_FAILED"
+    except LibraryRoomQueryError as exc:
+        message = str(exc)
+        return message if message.startswith("ERROR:") else f"ERROR:{message}"
+    except Exception as exc:
+        return f"ERROR:LIBRARY_ROOM_QUERY_FAILED:{type(exc).__name__}"
+
+    query_time = normalized_query.target_date.isoformat()
+    if normalized_query.start_time and normalized_query.end_time:
+        query_time = (
+            f"{query_time} {normalized_query.start_time}-{normalized_query.end_time}"
+        )
+
     result = {
         "query_location": location,
-        "query_time": time_slot,
+        "query_time": query_time,
         "query_capacity": capacity if capacity > 0 else None,
-        "has_available": False,
-        "rooms": [],
+        "has_available": bool(rooms),
+        "rooms": [
+            {
+                "room_id": room.room_id,
+                "room_name": room.room_name,
+                "location": room.location,
+                "capacity": room.capacity,
+                "time_slots": room.time_slots,
+            }
+            for room in rooms
+        ],
     }
     return json.dumps(result, ensure_ascii=False)
 

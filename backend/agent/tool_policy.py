@@ -90,10 +90,15 @@ _LIBRARY_TERMS = {
     "图书馆",
     "讨论间",
     "讨论室",
+    "研修间",
     "自习室",
+    "空间预约",
+    "预约系统",
+    "空房间",
     "study room",
     "discussion room",
     "library",
+    "room availability",
 }
 
 _NON_FILE_MEMORY_TERMS = {

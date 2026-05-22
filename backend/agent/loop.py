@@ -256,6 +256,12 @@ async def run_agent(
         final_data = _normalize_blackboard_deadline_response(
             user_prompt, final_data, blackboard_result
         )
+        library_result = _extract_tool_return_content(
+            raw_messages, "query_library_rooms"
+        )
+        final_data = _normalize_library_room_response(
+            user_prompt, final_data, library_result
+        )
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
         chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
@@ -648,6 +654,25 @@ def _build_library_payload(
         has_available=bool(payload.get("has_available", False)),
         rooms=rooms,
     )
+
+
+def _normalize_library_room_response(
+    user_prompt: str,
+    final_data: FinalResponse,
+    library_result: str | None,
+) -> FinalResponse:
+    if not library_result or not library_result.startswith("ERROR:"):
+        return final_data
+
+    message = {
+        "ERROR:CAS_LOGIN_FAILED": "我暂时无法查询图书馆讨论间，因为还没有可用的 CAS 账号密码。请先在设置中保存正确的 CAS 凭据后再试。",
+        "ERROR:LIBRARY_DATE_IN_PAST": "不能查询过去日期的图书馆讨论间可预约时间。请换成今天、明天或后天。",
+        "ERROR:LIBRARY_DATE_OUT_OF_RANGE": "图书馆讨论间通常只能查询/预约最近 2 天内的时间。请换成今天、明天或后天再试。",
+    }.get(library_result)
+    if message is None:
+        message = "我没能从图书馆预约系统获取讨论间空闲信息。请稍后重试，或直接打开图书馆预约系统查看。"
+
+    return FinalResponse(content=message, route="library")
 
 
 def _is_deadline_query(text: str) -> bool:
