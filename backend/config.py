@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./data/uploads"  # raw uploaded files
     MAX_UPLOAD_SIZE_MB: int = 50
 
+    # ── OS Automation ───────────────────────────────────
+    # Agent 本地文件操作的根目录。每个用户在该目录下有独立子目录（按 user_id），
+    # 工具被严格限制在自己的子目录内，禁止任何路径穿越。
+    WORKSPACE_DIR: str = "./data/workspace"
+    OS_READ_MAX_CHARS: int = 10000  # file_read 返回截断长度
+
     # ── RAG ─────────────────────────────────────────────
     CHUNK_SIZE: int = 512  # characters per vector chunk
     CHUNK_OVERLAP: int = 64
