@@ -694,9 +694,7 @@ def _build_message_history(
     for item in history_messages:
         if item.role == "user":
             message_history.append(
-                ModelRequest(
-                    parts=[UserPromptPart(item.content)], timestamp=item.timestamp
-                )
+                ModelRequest(parts=[UserPromptPart(item.content)])
             )
         elif item.role == "assistant":
             message_history.append(

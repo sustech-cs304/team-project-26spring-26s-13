@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
@@ -81,8 +82,8 @@ except ImportError:
 class ApiWorker(QThread):
     """Run a single blocking API call on a background thread and emit the result."""
 
-    finished = pyqtSignal(object)  # emits the return value (any type)
-    errored = pyqtSignal(str)  # emits the error message string
+    finished = pyqtSignal(object)
+    errored = pyqtSignal(str)
 
     def __init__(self, fn, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -94,6 +95,94 @@ class ApiWorker(QThread):
             self.finished.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.errored.emit(str(exc))
+
+
+class AgentStreamWorker(QThread):
+    finished = pyqtSignal(object)
+    errored = pyqtSignal(str)
+    trace_streamed = pyqtSignal(dict)
+
+    def __init__(
+        self,
+        client: "BackendApiClient",
+        *,
+        user_id: str,
+        session_id: str,
+        message: str,
+        attachments: list[dict[str, Any]] | None = None,
+        hitl_reply: dict[str, Any] | None = None,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._client = client
+        self._user_id = user_id
+        self._session_id = session_id
+        self._message = message
+        self._attachments = attachments or []
+        self._hitl_reply = hitl_reply
+
+    def run(self) -> None:
+        try:
+            def on_event(event: dict[str, Any]) -> None:
+                if event.get("event") != "trace":
+                    return
+                data = event.get("data")
+                if isinstance(data, dict):
+                    self.trace_streamed.emit(data)
+
+            result = self._client.run_agent_stream(
+                user_id=self._user_id,
+                session_id=self._session_id,
+                message=self._message,
+                attachments=self._attachments,
+                hitl_reply=self._hitl_reply,
+                on_event=on_event,
+            )
+            self.finished.emit(result)
+        except Exception as exc:  # noqa: BLE001
+            self.errored.emit(str(exc))
+
+
+class BlackboardSyncDialog(QDialog):
+    cancelled = pyqtSignal()
+
+    def __init__(self, title: str, cancel_label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        self._status_label = QLabel("")
+        self._status_label.setWordWrap(True)
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 0)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        self._cancel_button = QPushButton(cancel_label)
+        self._cancel_button.clicked.connect(self.cancelled.emit)
+        button_row.addWidget(self._cancel_button)
+
+        layout.addWidget(self._status_label)
+        layout.addWidget(self._progress)
+        layout.addLayout(button_row)
+
+    def set_status(self, text: str) -> None:
+        self._status_label.setText(text)
+
+    def set_progress(self, processed: int, total: int | None) -> None:
+        if total is None or total <= 0:
+            self._progress.setRange(0, 0)
+            return
+        self._progress.setRange(0, total)
+        self._progress.setValue(max(0, min(processed, total)))
+
+    def set_cancellable(self, enabled: bool) -> None:
+        self._cancel_button.setEnabled(enabled)
 
 
 def localized(value, language: str):
@@ -1980,10 +2069,18 @@ class MainWindow(QMainWindow):
         add_button = QPushButton(self.ui("add_resource"))
         add_button.clicked.connect(self._add_resource_files)
 
+        sync_bb_button = QPushButton(self.ui("sync_blackboard"))
+        sync_bb_button.clicked.connect(self._sync_blackboard_materials)
+
+        resources_buttons = QHBoxLayout()
+        resources_buttons.setSpacing(10)
+        resources_buttons.addWidget(add_button)
+        resources_buttons.addWidget(sync_bb_button)
+
         resources_layout.addWidget(resources_title)
         resources_layout.addWidget(resources_hint)
         resources_layout.addWidget(self.resource_list)
-        resources_layout.addWidget(add_button)
+        resources_layout.addLayout(resources_buttons)
 
         layout.addWidget(workspace_card)
         layout.addWidget(history_card, 1)
@@ -2435,13 +2532,16 @@ class MainWindow(QMainWindow):
         self._refresh_profile_views()
 
     def _apply_agent_response(
-        self, response: dict[str, Any], auto_open_hitl: bool = True
+        self,
+        response: dict[str, Any],
+        auto_open_hitl: bool = True,
+        trace_already_streamed: bool = False,
     ) -> None:
         assistant_message = response.get("assistant_message", {})
         assistant_text = str(assistant_message.get("content", "")).strip()
         trace_items: list[dict[str, str]] = []
         trace = response.get("trace", [])
-        if isinstance(trace, list) and trace:
+        if not trace_already_streamed and isinstance(trace, list) and trace:
             trace_items.extend(self._normalize_backend_trace_events(trace))
 
         error_payload = response.get("error")
@@ -2517,17 +2617,33 @@ class MainWindow(QMainWindow):
         _attachments = attachments or []
         _auto_open_hitl = auto_open_hitl
 
-        def _call():
-            return self.api_client.run_agent(
-                user_id=user_id,
-                session_id=session_id,
-                message=message,
-                attachments=_attachments,
-                hitl_reply=hitl_reply,
-            )
+        self.trace_events = []
+        self._load_trace_events(self.trace_events)
+
+        worker = AgentStreamWorker(
+            self.api_client,
+            user_id=user_id,
+            session_id=session_id,
+            message=message,
+            attachments=_attachments,
+            hitl_reply=hitl_reply,
+            parent=self,
+        )
+        self._active_workers.append(worker)
+
+        def _on_trace(data: dict) -> None:
+            phase = str(data.get("phase", "Observation"))
+            title = str(data.get("title", ""))
+            detail = str(data.get("detail", ""))
+            status = str(data.get("status", "running"))
+            self._append_trace(phase, title, detail, status)
 
         def _on_done(response):
-            self._apply_agent_response(response, auto_open_hitl=_auto_open_hitl)
+            self._apply_agent_response(
+                response,
+                auto_open_hitl=_auto_open_hitl,
+                trace_already_streamed=True,
+            )
 
         def _on_error(err):
             self._append_trace(
@@ -2537,7 +2653,24 @@ class MainWindow(QMainWindow):
                 "pending",
             )
 
-        self._start_worker(_call, _on_done, _on_error)
+        worker.trace_streamed.connect(_on_trace)
+        worker.finished.connect(_on_done)
+        worker.errored.connect(_on_error)
+        worker.finished.connect(
+            lambda _: (
+                self._active_workers.remove(worker)
+                if worker in self._active_workers
+                else None
+            )
+        )
+        worker.errored.connect(
+            lambda _: (
+                self._active_workers.remove(worker)
+                if worker in self._active_workers
+                else None
+            )
+        )
+        worker.start()
         return True
 
     def handle_password_login(self) -> None:
@@ -2860,6 +2993,214 @@ class MainWindow(QMainWindow):
             )
 
         self._start_worker(self.api_client.refresh_schedule, _on_done, _on_error)
+
+    def _sync_blackboard_materials(self) -> None:
+        if not (self.api_client.enabled and self.api_client.authenticated):
+            QMessageBox.information(
+                self,
+                self.ui("sync_blackboard_unavailable_title"),
+                self.ui("sync_blackboard_unavailable_body"),
+            )
+            return
+
+        existing_names = {
+            self._resource_display_name(resource).lower() for resource in self.resource_files
+        }
+
+        def _start_job():
+            return self.api_client.start_sync_blackboard_job()
+
+        def _on_job_started(payload):
+            if not isinstance(payload, dict):
+                QMessageBox.warning(
+                    self,
+                    self.ui("sync_blackboard_failed_title"),
+                    self.ui("sync_blackboard_failed_body", details="invalid_response"),
+                )
+                return
+            job_id = str(payload.get("job_id", "")).strip()
+            if not job_id:
+                QMessageBox.warning(
+                    self,
+                    self.ui("sync_blackboard_failed_title"),
+                    self.ui("sync_blackboard_failed_body", details="missing_job_id"),
+                )
+                return
+
+            self._bb_sync_job_id = job_id
+            self._bb_sync_polling = False
+
+            dialog = BlackboardSyncDialog(
+                self.ui("sync_blackboard_progress_title"),
+                self.ui("sync_blackboard_progress_cancel"),
+                self,
+            )
+            self._bb_sync_dialog = dialog
+
+            def _cancel():
+                dialog.set_cancellable(False)
+
+                def _call_cancel():
+                    return self.api_client.cancel_sync_blackboard_job(job_id)
+
+                self._start_worker(_call_cancel, lambda _x: None, lambda _e: None)
+
+            dialog.cancelled.connect(_cancel)
+            dialog.set_status(
+                self.ui(
+                    "sync_blackboard_progress_body",
+                    stage="fetching",
+                    processed=0,
+                    total="?",
+                    message="",
+                )
+            )
+            dialog.show()
+
+            timer = QTimer(self)
+            timer.setInterval(800)
+            timer.timeout.connect(
+                lambda: self._poll_blackboard_sync_job(job_id, existing_names)
+            )
+            self._bb_sync_timer = timer
+            timer.start()
+            self._poll_blackboard_sync_job(job_id, existing_names)
+
+        def _on_error(err):
+            QMessageBox.warning(
+                self,
+                self.ui("sync_blackboard_failed_title"),
+                self.ui("sync_blackboard_failed_body", details=err),
+            )
+
+        self._start_worker(_start_job, _on_job_started, _on_error)
+
+    def _poll_blackboard_sync_job(self, job_id: str, existing_names: set[str]) -> None:
+        if getattr(self, "_bb_sync_polling", False):
+            return
+        self._bb_sync_polling = True
+
+        def _call():
+            return self.api_client.get_sync_blackboard_job(job_id)
+
+        def _on_done(payload):
+            self._bb_sync_polling = False
+            if not isinstance(payload, dict):
+                return
+            status = str(payload.get("status", "")).strip()
+            stage = str(payload.get("stage", "")).strip() or status or "running"
+            message = str(payload.get("message", "") or "")
+            processed = int(payload.get("processed") or 0)
+            total_raw = payload.get("total")
+            total: int | None
+            try:
+                total = int(total_raw) if total_raw is not None else None
+            except Exception:
+                total = None
+
+            dialog = getattr(self, "_bb_sync_dialog", None)
+            if isinstance(dialog, BlackboardSyncDialog):
+                dialog.set_status(
+                    self.ui(
+                        "sync_blackboard_progress_body",
+                        stage=stage,
+                        processed=processed,
+                        total=total if total is not None else "?",
+                        message=message,
+                    )
+                )
+                dialog.set_progress(processed, total)
+                if status in {"done", "failed", "cancelled"}:
+                    dialog.set_cancellable(False)
+
+            if status not in {"done", "failed", "cancelled"}:
+                return
+
+            timer = getattr(self, "_bb_sync_timer", None)
+            if isinstance(timer, QTimer):
+                timer.stop()
+
+            def _refresh():
+                materials = self.api_client.list_materials()
+                return materials
+
+            def _on_refresh(materials):
+                if not isinstance(materials, list):
+                    materials = []
+                new_items = [
+                    item
+                    for item in materials
+                    if isinstance(item, dict)
+                    and str(
+                        item.get("file_name")
+                        or item.get("name")
+                        or item.get("file_id")
+                        or ""
+                    ).lower()
+                    not in existing_names
+                ]
+                self.material_records = materials
+                self.resource_files = [
+                    str(
+                        item.get("file_name")
+                        or item.get("name")
+                        or item.get("file_id")
+                        or "resource"
+                    )
+                    for item in materials
+                    if isinstance(item, dict)
+                ]
+                self._load_resource_files()
+
+                dialog = getattr(self, "_bb_sync_dialog", None)
+                if isinstance(dialog, BlackboardSyncDialog):
+                    dialog.close()
+
+                added = int(payload.get("added") or 0)
+                total_raw = payload.get("total")
+                try:
+                    total_int = int(total_raw) if total_raw is not None else None
+                except Exception:
+                    total_int = None
+
+                if status == "done":
+                    QMessageBox.information(
+                        self,
+                        self.ui("sync_blackboard_done_title"),
+                        self.ui(
+                            "sync_blackboard_done_body",
+                            count=added,
+                        ),
+                    )
+                elif status == "cancelled":
+                    QMessageBox.information(
+                        self,
+                        self.ui("sync_blackboard_failed_title"),
+                        self.ui("sync_blackboard_failed_body", details="cancelled"),
+                    )
+                else:
+                    if total_int == 0 or str(message).strip() == "no_files_found":
+                        QMessageBox.warning(
+                            self,
+                            self.ui("sync_blackboard_no_files_title"),
+                            self.ui("sync_blackboard_no_files_body"),
+                        )
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            self.ui("sync_blackboard_failed_title"),
+                            self.ui(
+                                "sync_blackboard_failed_body",
+                                details=message or "failed",
+                            ),
+                        )
+
+            self._start_worker(_refresh, _on_refresh, lambda _err: None)
+
+        def _on_error(_err):
+            self._bb_sync_polling = False
+
+        self._start_worker(_call, _on_done, _on_error)
 
     def _add_resource_files(self) -> None:
         selected_files, _selected_filter = QFileDialog.getOpenFileNames(

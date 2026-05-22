@@ -1,5 +1,8 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import date
+import json
+import os
 from pathlib import PurePosixPath
 import re
 from urllib.parse import unquote, urljoin
@@ -17,6 +20,111 @@ from .http_utils import _request_with_retry
 from .log_utils import _bb_sink_dump, _bb_sink_var, _ensure_file_logging, logger
 from .service_config import BLACKBOARD_BASE
 
+_COURSE_LISTCONTENT_REFERER_CACHE: dict[str, str] = {}
+
+
+class BlackboardMaterialFetchError(RuntimeError):
+    def __init__(
+        self,
+        step: str,
+        url: str,
+        *,
+        course_id: str = "",
+        content_id: str = "",
+        referer: str = "",
+        status_code: int | None = None,
+        headers: dict[str, str] | None = None,
+        body_snippet: str = "",
+        cause: str = "",
+    ) -> None:
+        super().__init__(f"{step}: url={url} status={status_code or ''} {cause}".strip())
+        self.step = step
+        self.url = url
+        self.course_id = course_id
+        self.content_id = content_id
+        self.referer = referer
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.body_snippet = body_snippet
+        self.cause = cause
+
+    def to_debug_dict(self) -> dict[str, object]:
+        return {
+            "step": self.step,
+            "url": self.url,
+            "course_id": self.course_id,
+            "content_id": self.content_id,
+            "referer": self.referer,
+            "status_code": self.status_code,
+            "headers": self.headers,
+            "body_snippet": self.body_snippet,
+            "cause": self.cause,
+        }
+
+
+def _redact_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    if not headers:
+        return {}
+    out: dict[str, str] = {}
+    for k, v in headers.items():
+        lk = k.lower()
+        if lk in {"cookie", "set-cookie", "authorization"}:
+            out[k] = "<redacted>"
+        else:
+            out[k] = v
+    return out
+
+
+def _body_snippet(text: str | bytes | None, limit: int = 1200) -> str:
+    if text is None:
+        return ""
+    if isinstance(text, bytes):
+        try:
+            s = text.decode("utf-8", errors="ignore")
+        except Exception:
+            s = ""
+    else:
+        s = text
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    s = re.sub(r"(?i)\b(cookie|set-cookie)\b\s*:\s*.+", r"\1: <redacted>", s)
+    s = s.strip()
+    return s[:limit]
+
+
+def _redirect_urls(response: httpx.Response) -> list[str]:
+    urls: list[str] = []
+    for r in getattr(response, "history", []) or []:
+        try:
+            urls.append(str(r.url))
+        except Exception:
+            continue
+        loc = (r.headers.get("Location") or "").strip()
+        if loc:
+            try:
+                urls.append(str(httpx.URL(str(r.url)).join(loc)))
+            except Exception:
+                pass
+    try:
+        urls.append(str(response.url))
+    except Exception:
+        pass
+    out: list[str] = []
+    seen: set[str] = set()
+    for u in urls:
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
+    return out
+
+
+def _looks_like_file_download(response: httpx.Response) -> bool:
+    content_type = (response.headers.get("Content-Type") or "").lower()
+    if response.status_code >= 400:
+        return False
+    if "text/html" in content_type or "text/x-json" in content_type:
+        return False
+    return bool(response.content)
 
 @dataclass
 class BlackboardMaterial:
@@ -35,6 +143,10 @@ _CONTENT_FILE_VIEW_URL_RE = re.compile(
     r"(?:https?://bb\.sustech\.edu\.cn)?/webapps/blackboard/execute/content/file\?[^'\"\s<>]+",
     re.I,
 )
+_CMS_COURSE_FILE_URL_RE = re.compile(
+    r"(?:https?://bb\.sustech\.edu\.cn)?/webapps/cmsmain/webui/courses/[^'\"\s<>]+",
+    re.I,
+)
 _BBCSWEBDAV_URL_RE = re.compile(
     r"(?:https?://bb\.sustech\.edu\.cn)?/bbcswebdav/[^'\"\s<>]+",
     re.I,
@@ -51,10 +163,145 @@ def _is_content_file_view_url(url: str) -> bool:
         return False
 
     cmd = (parsed.params.get("cmd") or "").lower()
-    if cmd and cmd != "view":
+    if cmd and cmd not in {"view", "download"}:
         return False
 
     return bool(parsed.params.get("content_id") and parsed.params.get("course_id"))
+
+
+def _is_cms_course_file_url(url: str) -> bool:
+    try:
+        parsed = httpx.URL(url)
+    except Exception:
+        return False
+
+    if "/webapps/cmsmain/webui/courses/" not in parsed.path:
+        return False
+
+    action = (parsed.params.get("action") or "").lower()
+    if action and action not in {"details", "download"}:
+        return False
+
+    return bool(parsed.params.get("course_id"))
+
+
+def _is_cms_course_path(url: str) -> bool:
+    try:
+        return "/webapps/cmsmain/webui/courses/" in httpx.URL(url).path
+    except Exception:
+        return False
+
+
+def _ensure_course_id_param(url: str, course_id: str) -> str:
+    if not course_id:
+        return url
+    try:
+        parsed = httpx.URL(url)
+    except Exception:
+        return url
+    if parsed.params.get("course_id"):
+        return url
+    try:
+        return str(parsed.copy_add_param("course_id", course_id))
+    except Exception:
+        return url
+
+
+def _extract_cms_course_file_urls(text: str, base_url: str) -> list[str]:
+    urls: set[str] = set()
+    for match in _CMS_COURSE_FILE_URL_RE.finditer(text or ""):
+        raw = match.group(0)
+        absolute_url = raw if raw.lower().startswith("http") else urljoin(base_url, raw)
+        absolute_url = absolute_url.split("#", 1)[0]
+        if not _is_cms_course_path(absolute_url):
+            continue
+        urls.add(absolute_url)
+    return sorted(urls)
+
+
+def _strip_query(url: str) -> str:
+    try:
+        parsed = httpx.URL(url)
+    except Exception:
+        return url
+    try:
+        return str(parsed.copy_with(query=b""))
+    except Exception:
+        return url.split("?", 1)[0]
+
+
+def _iter_string_values(obj: object) -> list[str]:
+    out: list[str] = []
+    stack: list[object] = [obj]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, str):
+            out.append(cur)
+            continue
+        if isinstance(cur, dict):
+            stack.extend(cur.values())
+            continue
+        if isinstance(cur, list):
+            stack.extend(cur)
+            continue
+    return out
+
+
+def _extract_download_candidate_urls(text: str, base_url: str) -> list[str]:
+    urls: set[str] = set()
+
+    for match in _BBCSWEBDAV_URL_RE.finditer(text or ""):
+        raw = match.group(0)
+        absolute_url = raw if raw.lower().startswith("http") else urljoin(base_url, raw)
+        urls.add(absolute_url.split("#", 1)[0])
+
+    for match in _CONTENT_FILE_VIEW_URL_RE.finditer(text or ""):
+        raw = match.group(0)
+        absolute_url = raw if raw.lower().startswith("http") else urljoin(base_url, raw)
+        absolute_url = absolute_url.split("#", 1)[0]
+        if _is_content_file_view_url(absolute_url):
+            urls.add(absolute_url)
+
+    for match in _CMS_COURSE_FILE_URL_RE.finditer(text or ""):
+        raw = match.group(0)
+        absolute_url = raw if raw.lower().startswith("http") else urljoin(base_url, raw)
+        absolute_url = absolute_url.split("#", 1)[0]
+        if _is_cms_course_path(absolute_url):
+            urls.add(absolute_url)
+
+    return sorted(urls)
+
+
+def _bbcswebdav_courses_url_from_cms_url(url: str) -> str:
+    try:
+        parsed = httpx.URL(url)
+    except Exception:
+        return ""
+
+    raw_path = parsed.raw_path.split(b"?", 1)[0].decode("utf-8", errors="ignore")
+    idx = raw_path.lower().find("/courses/")
+    if idx < 0:
+        return ""
+
+    rel = raw_path[idx + len("/courses/") :].lstrip("/")
+    if not rel:
+        return ""
+
+    return f"{BLACKBOARD_BASE}/bbcswebdav/courses/{rel}"
+
+
+def _bbcswebdav_xid_urls(xythos_id: str) -> list[str]:
+    xid = (xythos_id or "").strip()
+    if not xid:
+        return []
+    candidates: list[str] = []
+    if xid.lower().startswith("xid-"):
+        candidates.append(f"{BLACKBOARD_BASE}/bbcswebdav/{xid}")
+    else:
+        candidates.append(f"{BLACKBOARD_BASE}/bbcswebdav/xid-{xid}")
+    if xid.endswith("_1"):
+        candidates.append(f"{BLACKBOARD_BASE}/bbcswebdav/xid-{xid[:-2]}")
+    return list(dict.fromkeys(candidates))
 
 
 def _extract_content_file_urls(text: str, base_url: str) -> list[str]:
@@ -137,16 +384,399 @@ def _parse_blackboard_material_page(
     return title, content_id, course_name, download_url
 
 
+async def _fetch_cms_course_file_material(
+    client: httpx.AsyncClient,
+    page_url: str,
+    referer: str,
+    extra_headers: dict[str, str],
+    *,
+    strict: bool = False,
+) -> BlackboardMaterial | None:
+    try:
+        parsed = httpx.URL(page_url)
+        course_id = str(parsed.params.get("course_id") or "").strip()
+        content_id = str(parsed.params.get("ctxMenuXythosId") or "").strip()
+        file_name = PurePosixPath(unquote(parsed.path)).name
+    except Exception:
+        if strict:
+            raise BlackboardMaterialFetchError("parse_url", page_url)
+        return None
+
+    if not course_id and referer:
+        try:
+            course_id = str(httpx.URL(referer).params.get("course_id") or "").strip()
+        except Exception:
+            course_id = course_id
+
+    if not course_id:
+        if strict:
+            raise BlackboardMaterialFetchError(
+                "missing_course_id",
+                page_url,
+                course_id=course_id,
+                content_id=content_id,
+                referer=referer,
+            )
+        return None
+
+    file_name = file_name or "blackboard_file"
+    title = PurePosixPath(file_name).stem or file_name
+    content_id = content_id or file_name
+
+    download_url = _bbcswebdav_courses_url_from_cms_url(page_url)
+    menu_referer = referer or page_url
+    if "/webapps/blackboard/content/listContent.jsp" in (menu_referer or ""):
+        try:
+            cached_course_id = str(
+                httpx.URL(menu_referer).params.get("course_id") or ""
+            ).strip()
+        except Exception:
+            cached_course_id = ""
+        if cached_course_id:
+            _COURSE_LISTCONTENT_REFERER_CACHE[cached_course_id] = menu_referer
+    if "/webapps/blackboard/content/listContent.jsp" not in (menu_referer or ""):
+        cached = _COURSE_LISTCONTENT_REFERER_CACHE.get(course_id)
+        if cached:
+            menu_referer = cached
+        else:
+            candidate = (
+                f"{BLACKBOARD_BASE}/webapps/blackboard/content/listContent.jsp"
+                f"?course_id={course_id}&mode=reset"
+            )
+            try:
+                r = await _request_with_retry(
+                    client,
+                    "GET",
+                    candidate,
+                    headers={"Referer": referer} if referer else None,
+                    label="bb.material_listcontent",
+                )
+                if r.status_code < 400:
+                    final = str(r.url)
+                    if "/webapps/blackboard/content/listContent.jsp" in final:
+                        menu_referer = final
+                        _COURSE_LISTCONTENT_REFERER_CACHE[course_id] = menu_referer
+            except httpx.HTTPError:
+                menu_referer = candidate
+
+    download: httpx.Response | None = None
+
+    raw_file_url = _strip_query(page_url)
+    if raw_file_url and raw_file_url != page_url:
+        try:
+            candidate = await _request_with_retry(
+                client,
+                "GET",
+                raw_file_url,
+                headers={"Referer": menu_referer},
+                label="bb.material_cms_raw",
+            )
+        except httpx.HTTPError:
+            candidate = None
+        if candidate is not None and _looks_like_file_download(candidate):
+            download = candidate
+            download_url = str(candidate.url)
+
+    if content_id:
+        for xid_url in _bbcswebdav_xid_urls(content_id):
+            try:
+                candidate = await _request_with_retry(
+                    client,
+                    "GET",
+                    xid_url,
+                    headers={"Referer": menu_referer},
+                    label="bb.material_xid_asset",
+                )
+            except httpx.HTTPError:
+                continue
+            if _looks_like_file_download(candidate):
+                download = candidate
+                download_url = str(candidate.url)
+                break
+
+    if download is None:
+        try:
+            details_url = page_url
+            try:
+                details_parsed = httpx.URL(page_url)
+                details_parsed = details_parsed.copy_set_param("action", "details")
+                details_parsed = details_parsed.copy_remove_param("subaction")
+                details_parsed = details_parsed.copy_remove_param("uniq")
+                details_url = str(details_parsed)
+            except Exception:
+                details_url = page_url
+            details = await _request_with_retry(
+                client,
+                "GET",
+                details_url,
+                headers={"Referer": menu_referer},
+                label="bb.material_cms_details",
+            )
+        except httpx.HTTPError:
+            details = None
+        if details is not None and details.status_code < 400:
+            extracted = _extract_bbcswebdav_url(details.text, str(details.url))
+            if extracted:
+                try:
+                    candidate = await _request_with_retry(
+                        client,
+                        "GET",
+                        extracted,
+                        headers={"Referer": str(details.url)},
+                        label="bb.material_asset",
+                    )
+                except httpx.HTTPError:
+                    candidate = None
+                if candidate is not None and _looks_like_file_download(candidate):
+                    download = candidate
+                    download_url = str(candidate.url)
+
+    cms_download_candidates: list[str] = []
+    try:
+        cms_parsed = httpx.URL(page_url)
+        if "/webapps/cmsmain/webui/courses/" in cms_parsed.path:
+            try:
+                u = cms_parsed.copy_set_param("action", "download")
+                u = u.copy_remove_param("subaction")
+                u = u.copy_remove_param("uniq")
+                cms_download_candidates.append(str(u))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    for candidate_url in cms_download_candidates:
+        try:
+            candidate = await _request_with_retry(
+                client,
+                "GET",
+                candidate_url,
+                headers={"Referer": menu_referer},
+                label="bb.material_cms_download",
+            )
+        except httpx.HTTPError:
+            continue
+        if _looks_like_file_download(candidate):
+            download = candidate
+            download_url = str(candidate.url)
+            break
+        for u in _redirect_urls(candidate):
+            if "/bbcswebdav/" not in u:
+                continue
+            try:
+                r2 = await _request_with_retry(
+                    client,
+                    "GET",
+                    u,
+                    headers={"Referer": menu_referer},
+                    label="bb.material_cms_redirect_asset",
+                )
+            except httpx.HTTPError:
+                continue
+            if _looks_like_file_download(r2):
+                download = r2
+                download_url = str(r2.url)
+                break
+        if download is not None:
+            break
+
+    if download_url:
+        try:
+            candidate = await _request_with_retry(
+                client,
+                "GET",
+                download_url,
+                headers={"Referer": menu_referer},
+                label="bb.material_asset",
+            )
+            content_type = (candidate.headers.get("Content-Type") or "").lower()
+            if (
+                candidate.status_code < 400
+                and "text/html" not in content_type
+                and "text/x-json" not in content_type
+                and bool(candidate.content)
+            ):
+                download = candidate
+                download_url = str(candidate.url)
+        except httpx.HTTPError:
+            download = None
+
+    if download is None:
+        menu_response: httpx.Response | None = None
+        menu_url = page_url
+        try:
+            menu_parsed = httpx.URL(page_url)
+            if (menu_parsed.params.get("subaction") or "").lower() != "generatefilemenuitem":
+                menu_parsed = menu_parsed.copy_set_param("action", "details")
+                menu_parsed = menu_parsed.copy_set_param(
+                    "subaction", "generateFileMenuItem"
+                )
+                menu_url = str(menu_parsed)
+        except Exception:
+            menu_url = page_url
+        try:
+            menu = await _request_with_retry(
+                client,
+                "POST",
+                menu_url,
+                content="nav_item=&overwriteNavItems=",
+                headers={
+                    **extra_headers,
+                    "Accept": "text/javascript, text/html, application/xml, text/xml, */*",
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "Origin": BLACKBOARD_BASE,
+                    "Referer": menu_referer,
+                    "X-Prototype-Version": "1.7",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                label="bb.material_menu",
+            )
+            menu_response = menu
+        except httpx.HTTPError as exc:
+            if strict:
+                raise BlackboardMaterialFetchError(
+                    "menu_request_failed",
+                    page_url,
+                    course_id=course_id,
+                    content_id=content_id,
+                    referer=menu_referer,
+                    cause=type(exc).__name__,
+                ) from exc
+            menu = None
+
+        if menu is None or menu.status_code >= 400:
+            if strict:
+                raise BlackboardMaterialFetchError(
+                    "menu_http_status",
+                    page_url,
+                    course_id=course_id,
+                    content_id=content_id,
+                    referer=menu_referer,
+                    status_code=(menu_response.status_code if menu_response else None),
+                    headers=_redact_headers(
+                        dict(menu_response.headers) if menu_response else None
+                    ),
+                    body_snippet=_body_snippet(menu_response.text if menu_response else None),
+                )
+            return None
+
+        menu_text = menu.text if isinstance(menu.text, str) else ""
+        extracted_urls: list[str] = []
+        extracted_urls.extend(_extract_download_candidate_urls(menu_text, str(menu.url)))
+        try:
+            payload = json.loads(menu_text)
+        except Exception:
+            payload = None
+        if payload is not None:
+            for s in _iter_string_values(payload):
+                extracted_urls.extend(_extract_download_candidate_urls(s, str(menu.url)))
+        extracted_urls = list(dict.fromkeys(extracted_urls))
+        extracted = extracted_urls[0] if extracted_urls else ""
+
+        if not extracted:
+            r_ctx = None
+            try:
+                r_ctx = await _request_with_retry(
+                    client,
+                    "GET",
+                    menu_referer,
+                    headers={"Referer": referer} if referer else None,
+                    label="bb.material_context",
+                )
+            except Exception:
+                r_ctx = None
+
+            ctx_html = r_ctx.text if r_ctx is not None else ""
+            if ctx_html:
+                needle_candidates = [file_name, content_id]
+                for needle in needle_candidates:
+                    if not needle:
+                        continue
+                    idx = ctx_html.lower().find(str(needle).lower())
+                    if idx < 0:
+                        continue
+                    window = ctx_html[max(0, idx - 2000) : idx + 2000]
+                    window_urls = _extract_download_candidate_urls(window, menu_referer)
+                    if window_urls:
+                        extracted_urls = window_urls
+                        extracted = extracted_urls[0]
+                        break
+                if not extracted_urls:
+                    ctx_urls = _extract_download_candidate_urls(ctx_html, menu_referer)
+                    if ctx_urls:
+                        extracted_urls = ctx_urls
+                        extracted = extracted_urls[0]
+
+        candidates = extracted_urls or ([extracted] if extracted else [])
+        for candidate_url in candidates:
+            if not candidate_url:
+                continue
+            try:
+                candidate = await _request_with_retry(
+                    client,
+                    "GET",
+                    candidate_url,
+                    headers={"Referer": menu_referer},
+                    label="bb.material_asset",
+                )
+            except httpx.HTTPError:
+                continue
+            if _looks_like_file_download(candidate):
+                download = candidate
+                download_url = str(candidate.url)
+                break
+
+        if download is None:
+            if strict:
+                raise BlackboardMaterialFetchError(
+                    "menu_no_download_url",
+                    page_url,
+                    course_id=course_id,
+                    content_id=content_id,
+                    referer=menu_referer,
+                    status_code=menu.status_code,
+                    headers=_redact_headers(dict(menu.headers)),
+                    body_snippet=_body_snippet(menu_text),
+                )
+            return None
+
+    file_type = (
+        (download.headers.get("Content-Type") or "")
+        .split(";", 1)[0]
+        .strip()
+        .lower()
+    )
+    actual_name = _filename_from_response(download, title)
+
+    return BlackboardMaterial(
+        title=title or actual_name,
+        course_id=course_id,
+        course_name=None,
+        content_id=content_id,
+        file_name=actual_name,
+        file_type=file_type,
+        source_url=page_url,
+        download_url=download_url,
+        file_bytes=download.content,
+    )
+
+
 async def _crawl_course_material_urls(
     client: httpx.AsyncClient,
     course_id: str,
     referer: str,
-) -> set[str]:
+    course_name_cache: dict[str, str] | None = None,
+) -> dict[str, str]:
     start_url = f"{BLACKBOARD_BASE}/webapps/blackboard/execute/launcher?type=Course&id={course_id}&url="
     to_visit: list[tuple[str, str]] = [(start_url, referer)]
     queued: set[str] = {start_url}
     visited: set[str] = set()
-    material_urls: set[str] = set()
+    material_urls: dict[str, str] = {}
+
+    def add_material(u: str, ref: str) -> None:
+        if not u:
+            return
+        material_urls.setdefault(u, ref or "")
 
     def enqueue(next_url: str, ref: str) -> None:
         if not next_url or not next_url.startswith(BLACKBOARD_BASE):
@@ -194,11 +824,21 @@ async def _crawl_course_material_urls(
         final_url = str(response.url)
         html = response.text
 
-        for material_url in _extract_content_file_urls(html, final_url):
-            material_urls.add(material_url)
-
         soup = BeautifulSoup(html, "html.parser")
+        if course_name_cache is not None:
+            try:
+                extracted_course_name = _extract_course_name(soup)
+            except Exception:
+                extracted_course_name = ""
+            if extracted_course_name:
+                course_name_cache.setdefault(course_id, extracted_course_name)
+
+        for material_url in _extract_content_file_urls(html, final_url):
+            add_material(material_url, final_url)
+        for cms_url in _extract_cms_course_file_urls(html, final_url):
+            add_material(cms_url, final_url)
         raw_candidates: set[str] = set()
+
 
         for tag in soup.find_all(
             ["a", "area", "frame", "iframe", "link", "script", "form"]
@@ -239,7 +879,11 @@ async def _crawl_course_material_urls(
             absolute_url = absolute_url.split("#", 1)[0]
 
             if _is_content_file_view_url(absolute_url):
-                material_urls.add(absolute_url)
+                add_material(absolute_url, final_url)
+                continue
+
+            if _is_cms_course_path(absolute_url):
+                add_material(_ensure_course_id_param(absolute_url, course_id), final_url)
                 continue
 
             if (
@@ -272,7 +916,12 @@ async def _crawl_course_material_urls(
 
 
 async def fetch_blackboard_course_materials(
-    cas_account: str, cas_password: str
+    cas_account: str,
+    cas_password: str,
+    *,
+    course_keyword: str | None = None,
+    keyword: str | None = None,
+    limit: int | None = None,
 ) -> list[BlackboardMaterial]:
     _ensure_file_logging()
     logger.debug("bb.materials: enter account=%s", cas_account)
@@ -303,21 +952,66 @@ async def fetch_blackboard_course_materials(
             )
             course_ids |= portal_course_ids
 
-            material_url_set: set[str] = set(
-                _extract_content_file_urls(response.text, base_url)
-            )
+            course_name_cache: dict[str, str] = {}
+            material_url_map: dict[str, str] = {}
+
+            def add_seed(u: str, ref: str) -> None:
+                if not u:
+                    return
+                material_url_map.setdefault(u, ref or "")
+
+            for u in _extract_content_file_urls(response.text, base_url):
+                add_seed(u, base_url)
+            for u in _extract_cms_course_file_urls(response.text, base_url):
+                add_seed(u, base_url)
             for course_id in sorted(course_ids):
-                material_url_set |= await _crawl_course_material_urls(
-                    client, course_id, tab_url
+                found = await _crawl_course_material_urls(
+                    client, course_id, tab_url, course_name_cache
                 )
+                for u, ref in found.items():
+                    material_url_map.setdefault(u, ref)
 
             async def fetch_one(page_url: str) -> BlackboardMaterial | None:
+                if not page_url:
+                    return None
+                ref = material_url_map.get(page_url) or tab_url
+                try:
+                    course_id_hint = str(
+                        httpx.URL(page_url).params.get("course_id") or ""
+                    ).strip()
+                except Exception:
+                    course_id_hint = ""
+                if _is_cms_course_path(page_url):
+                    normalized = (
+                        _ensure_course_id_param(page_url, course_id_hint)
+                        if course_id_hint
+                        else page_url
+                    )
+                    try:
+                        material = await _fetch_cms_course_file_material(
+                            client,
+                            normalized,
+                            ref,
+                            headers,
+                        )
+                        if (
+                            material is not None
+                            and not material.course_name
+                            and course_id_hint
+                        ):
+                            material.course_name = course_name_cache.get(course_id_hint)  # type: ignore[misc]
+                        return material
+                    except RuntimeError as exc:
+                        if "client has been closed" in str(exc).lower():
+                            return None
+                        raise
+
                 try:
                     page = await _request_with_retry(
                         client,
                         "GET",
                         page_url,
-                        headers={"Referer": tab_url, **headers},
+                        headers={"Referer": ref, **headers},
                         label="bb.material_page",
                     )
                 except httpx.HTTPError as exc:
@@ -327,6 +1021,10 @@ async def fetch_blackboard_course_materials(
                         type(exc).__name__,
                     )
                     return None
+                except RuntimeError as exc:
+                    if "client has been closed" in str(exc).lower():
+                        return None
+                    raise
 
                 if page.status_code >= 400:
                     logger.warning(
@@ -336,9 +1034,40 @@ async def fetch_blackboard_course_materials(
                     )
                     return None
 
+                if _looks_like_file_download(page):
+                    try:
+                        page_params = httpx.URL(page_url).params
+                        course_id = str(page_params.get("course_id") or "").strip()
+                        content_id = str(page_params.get("content_id") or "").strip()
+                    except Exception:
+                        course_id = ""
+                        content_id = ""
+                    if not course_id or not content_id:
+                        return None
+                    file_type = (
+                        (page.headers.get("Content-Type") or "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
+                    )
+                    file_name = _filename_from_response(page, content_id)
+                    return BlackboardMaterial(
+                        title=file_name,
+                        course_id=course_id,
+                        course_name=course_name_cache.get(course_id),
+                        content_id=content_id,
+                        file_name=file_name,
+                        file_type=file_type,
+                        source_url=page_url,
+                        download_url=str(page.url),
+                        file_bytes=page.content,
+                    )
+
                 title, content_id, course_name, download_url = (
                     _parse_blackboard_material_page(page.text, page_url)
                 )
+                if not course_name and course_id_hint:
+                    course_name = course_name_cache.get(course_id_hint)
                 if not download_url:
                     logger.warning("bb.materials: no download url in page=%s", page_url)
                     return None
@@ -358,6 +1087,10 @@ async def fetch_blackboard_course_materials(
                         type(exc).__name__,
                     )
                     return None
+                except RuntimeError as exc:
+                    if "client has been closed" in str(exc).lower():
+                        return None
+                    raise
 
                 if download.status_code >= 400:
                     logger.warning(
@@ -392,7 +1125,7 @@ async def fetch_blackboard_course_materials(
                 return BlackboardMaterial(
                     title=title or file_name,
                     course_id=course_id,
-                    course_name=course_name,
+                    course_name=course_name or course_name_cache.get(course_id),
                     content_id=content_id,
                     file_name=file_name,
                     file_type=file_type,
@@ -401,10 +1134,85 @@ async def fetch_blackboard_course_materials(
                     file_bytes=download.content,
                 )
 
-            material_pages = sorted(material_url_set)
-            raw_materials = await asyncio.gather(
-                *(fetch_one(url) for url in material_pages)
+            material_pages = list(material_url_map.keys())
+            desired = None
+            if limit is not None:
+                try:
+                    desired = max(0, int(limit))
+                except Exception:
+                    desired = None
+
+            course_kw = (course_keyword or "").strip().lower()
+            file_kw = (keyword or "").strip().lower()
+
+            def _score(u: str) -> tuple[int, int, str]:
+                lu = u.lower()
+                score = 0
+                if file_kw and file_kw in lu:
+                    score -= 2
+                if course_kw and course_kw in lu:
+                    score -= 1
+                is_cms = 1 if _is_cms_course_path(u) else 0
+                score -= is_cms
+                return (score, len(lu), lu)
+
+            material_pages.sort(key=_score)
+
+            if desired == 0:
+                return []
+
+            cms_candidates = sum(1 for u in material_pages if _is_cms_course_path(u))
+            content_candidates = sum(
+                1 for u in material_pages if _is_content_file_view_url(u)
             )
+            logger.info(
+                "bb.materials: candidates total=%d cms=%d content_file=%d",
+                len(material_pages),
+                cms_candidates,
+                content_candidates,
+            )
+
+            scan_limit = desired or 50
+            try:
+                configured_scan_limit = int(
+                    os.getenv("BB_MATERIAL_SCAN_LIMIT", "0").strip() or "0"
+                )
+            except Exception:
+                configured_scan_limit = 0
+
+            if configured_scan_limit > 0:
+                scan_limit = configured_scan_limit
+            elif desired is None:
+                scan_limit = 600
+            elif file_kw or course_kw:
+                scan_limit = max(120, scan_limit * 10)
+                scan_limit = min(scan_limit, 600)
+            else:
+                scan_limit = max(80, scan_limit * 4)
+                scan_limit = min(scan_limit, 240)
+
+            material_pages = material_pages[:scan_limit]
+
+            concurrency = 10
+            try:
+                concurrency = int(os.getenv("BB_MATERIAL_CONCURRENCY", "10").strip())
+            except Exception:
+                concurrency = 10
+            concurrency = max(1, min(concurrency, 25))
+            sem = asyncio.Semaphore(concurrency)
+
+            async def _bound_fetch(u: str) -> BlackboardMaterial | None:
+                async with sem:
+                    return await fetch_one(u)
+
+            tasks = [asyncio.create_task(_bound_fetch(url)) for url in material_pages]
+            try:
+                raw_materials = await asyncio.gather(*tasks)
+            finally:
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
             deduped: dict[tuple[str, str], BlackboardMaterial] = {}
             for item in raw_materials:
                 if item is None:
@@ -419,6 +1227,84 @@ async def fetch_blackboard_course_materials(
                     item.content_id,
                 ),
             )
+
+            only_current_term = (
+                os.getenv("BB_ONLY_CURRENT_TERM", "1").strip().lower()
+                not in {"0", "false", "no", "off"}
+            )
+            term_keywords_env = os.getenv("BB_TERM_KEYWORDS", "").strip()
+            term_keywords: list[str] = []
+            if term_keywords_env:
+                term_keywords = [
+                    k.strip().lower()
+                    for k in term_keywords_env.split(",")
+                    if k.strip()
+                ]
+            elif only_current_term:
+                today = date.today()
+                year = today.year
+                is_spring = today.month <= 7
+                if is_spring:
+                    term_keywords = [
+                        f"spring {year}",
+                        f"{year} spring",
+                        f"{year}春",
+                        f"{year} spring ",
+                        f"{year}sp",
+                    ]
+                else:
+                    term_keywords = [
+                        f"fall {year}",
+                        f"{year} fall",
+                        f"{year}秋",
+                        f"{year} fall ",
+                        f"{year}fa",
+                    ]
+
+            if term_keywords:
+                strict_term_filter = (
+                    os.getenv("BB_TERM_FILTER_STRICT", "1").strip().lower()
+                    not in {"0", "false", "no", "off"}
+                )
+                filtered = [
+                    item
+                    for item in materials
+                    if any(
+                        k
+                        in (
+                            " ".join(
+                                [
+                                    str(item.course_name or ""),
+                                    str(item.source_url or ""),
+                                    str(item.download_url or ""),
+                                ]
+                            )
+                        ).lower()
+                        for k in term_keywords
+                    )
+                ]
+                if filtered:
+                    logger.info(
+                        "bb.materials: term_filter keywords=%s before=%d after=%d",
+                        ",".join(term_keywords),
+                        len(materials),
+                        len(filtered),
+                    )
+                    materials = filtered
+                elif strict_term_filter:
+                    logger.warning(
+                        "bb.materials: term_filter empty keywords=%s before=%d strict=1",
+                        ",".join(term_keywords),
+                        len(materials),
+                    )
+                    materials = []
+                else:
+                    logger.warning(
+                        "bb.materials: term_filter yielded 0 keywords=%s before=%d (returning unfiltered)",
+                        ",".join(term_keywords),
+                        len(materials),
+                    )
+
             logger.info(
                 "bb.materials: course_ids=%d pages=%d materials=%d",
                 len(course_ids),

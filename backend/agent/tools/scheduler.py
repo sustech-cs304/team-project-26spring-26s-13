@@ -16,7 +16,7 @@ from pydantic_ai import RunContext
 from backend.agent.core import AgentDeps, agent
 from backend.agent.tools.base import safe_tool
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
-from backend.services import schedule_service
+from backend.services import material_service, schedule_service
 from backend.services.schedule_service.academic_calendar_provider import (
     get_calendar_overrides,
 )
@@ -216,6 +216,44 @@ async def fetch_blackboard_deadlines(ctx: RunContext[AgentDeps]) -> str:
         for d in deadlines
     ]
     return json.dumps(payload, ensure_ascii=False)
+
+
+@agent.tool
+@safe_tool
+async def sync_blackboard_materials(
+    ctx: RunContext[AgentDeps],
+    course_keyword: str = "",
+    keyword: str = "",
+    limit: int = 50,
+) -> str:
+    """
+    从 Blackboard 同步当前用户可访问的课件，并复用现有解析与向量化流程入库。
+
+    Returns:
+        JSON 字符串，格式为 materials 列表（MaterialInfo）：
+        [{"file_id": str, "file_name": str, "file_type": str, "subject_type": str, "vectorized": bool, "uploaded_at": str}]
+
+    Raises（以字符串形式返回给 LLM）：
+        "ERROR:CAS_LOGIN_FAILED" - CAS 登录失败/未配置
+        "ERROR:BLACKBOARD_UNREACHABLE" - Blackboard 无法访问
+    """
+    try:
+        synced = await material_service.sync_blackboard_materials(
+            ctx.deps.db,
+            ctx.deps.user,
+            course_keyword=(course_keyword or "").strip() or None,
+            keyword=(keyword or "").strip() or None,
+            limit=limit,
+        )
+    except (PermissionError, ValueError):
+        return "ERROR:CAS_LOGIN_FAILED"
+    except ConnectionError:
+        return "ERROR:BLACKBOARD_UNREACHABLE"
+    except Exception:
+        return "ERROR:BLACKBOARD_UNREACHABLE"
+
+    payload = [m.model_dump() for m in synced]
+    return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 @agent.tool
