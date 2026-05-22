@@ -193,7 +193,9 @@ async def test_sync_blackboard_materials_permission_error(
         new_callable=AsyncMock,
         side_effect=PermissionError("CAS credentials not configured"),
     ):
-        resp = await async_client.post("/api/materials/sync-blackboard", headers=auth_headers)
+        resp = await async_client.post(
+            "/api/materials/sync-blackboard", headers=auth_headers
+        )
     assert resp.status_code == 424
 
 
@@ -205,7 +207,9 @@ async def test_sync_blackboard_materials_value_error(
         new_callable=AsyncMock,
         side_effect=ValueError("bad request"),
     ):
-        resp = await async_client.post("/api/materials/sync-blackboard", headers=auth_headers)
+        resp = await async_client.post(
+            "/api/materials/sync-blackboard", headers=auth_headers
+        )
     assert resp.status_code == 400
 
 
@@ -278,7 +282,9 @@ async def test_service_sync_blackboard_materials_filters_course_and_keyword():
         ),
     ]
 
-    fake_info = MaterialInfo.model_validate(_fake_material_info("lecture3-requirements.pdf"))
+    fake_info = MaterialInfo.model_validate(
+        _fake_material_info("lecture3-requirements.pdf")
+    )
     with patch(
         "backend.services.material_service.decrypt",
         return_value="pw",

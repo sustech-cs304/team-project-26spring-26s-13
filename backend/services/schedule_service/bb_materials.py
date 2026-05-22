@@ -37,7 +37,9 @@ class BlackboardMaterialFetchError(RuntimeError):
         body_snippet: str = "",
         cause: str = "",
     ) -> None:
-        super().__init__(f"{step}: url={url} status={status_code or ''} {cause}".strip())
+        super().__init__(
+            f"{step}: url={url} status={status_code or ''} {cause}".strip()
+        )
         self.step = step
         self.url = url
         self.course_id = course_id
@@ -125,6 +127,7 @@ def _looks_like_file_download(response: httpx.Response) -> bool:
     if "text/html" in content_type or "text/x-json" in content_type:
         return False
     return bool(response.content)
+
 
 @dataclass
 class BlackboardMaterial:
@@ -606,7 +609,9 @@ async def _fetch_cms_course_file_material(
         menu_url = page_url
         try:
             menu_parsed = httpx.URL(page_url)
-            if (menu_parsed.params.get("subaction") or "").lower() != "generatefilemenuitem":
+            if (
+                menu_parsed.params.get("subaction") or ""
+            ).lower() != "generatefilemenuitem":
                 menu_parsed = menu_parsed.copy_set_param("action", "details")
                 menu_parsed = menu_parsed.copy_set_param(
                     "subaction", "generateFileMenuItem"
@@ -656,20 +661,26 @@ async def _fetch_cms_course_file_material(
                     headers=_redact_headers(
                         dict(menu_response.headers) if menu_response else None
                     ),
-                    body_snippet=_body_snippet(menu_response.text if menu_response else None),
+                    body_snippet=_body_snippet(
+                        menu_response.text if menu_response else None
+                    ),
                 )
             return None
 
         menu_text = menu.text if isinstance(menu.text, str) else ""
         extracted_urls: list[str] = []
-        extracted_urls.extend(_extract_download_candidate_urls(menu_text, str(menu.url)))
+        extracted_urls.extend(
+            _extract_download_candidate_urls(menu_text, str(menu.url))
+        )
         try:
             payload = json.loads(menu_text)
         except Exception:
             payload = None
         if payload is not None:
             for s in _iter_string_values(payload):
-                extracted_urls.extend(_extract_download_candidate_urls(s, str(menu.url)))
+                extracted_urls.extend(
+                    _extract_download_candidate_urls(s, str(menu.url))
+                )
         extracted_urls = list(dict.fromkeys(extracted_urls))
         extracted = extracted_urls[0] if extracted_urls else ""
 
@@ -741,10 +752,7 @@ async def _fetch_cms_course_file_material(
             return None
 
     file_type = (
-        (download.headers.get("Content-Type") or "")
-        .split(";", 1)[0]
-        .strip()
-        .lower()
+        (download.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
     )
     actual_name = _filename_from_response(download, title)
 
@@ -839,7 +847,6 @@ async def _crawl_course_material_urls(
             add_material(cms_url, final_url)
         raw_candidates: set[str] = set()
 
-
         for tag in soup.find_all(
             ["a", "area", "frame", "iframe", "link", "script", "form"]
         ):
@@ -883,7 +890,9 @@ async def _crawl_course_material_urls(
                 continue
 
             if _is_cms_course_path(absolute_url):
-                add_material(_ensure_course_id_param(absolute_url, course_id), final_url)
+                add_material(
+                    _ensure_course_id_param(absolute_url, course_id), final_url
+                )
                 continue
 
             if (
@@ -1228,17 +1237,14 @@ async def fetch_blackboard_course_materials(
                 ),
             )
 
-            only_current_term = (
-                os.getenv("BB_ONLY_CURRENT_TERM", "1").strip().lower()
-                not in {"0", "false", "no", "off"}
-            )
+            only_current_term = os.getenv(
+                "BB_ONLY_CURRENT_TERM", "1"
+            ).strip().lower() not in {"0", "false", "no", "off"}
             term_keywords_env = os.getenv("BB_TERM_KEYWORDS", "").strip()
             term_keywords: list[str] = []
             if term_keywords_env:
                 term_keywords = [
-                    k.strip().lower()
-                    for k in term_keywords_env.split(",")
-                    if k.strip()
+                    k.strip().lower() for k in term_keywords_env.split(",") if k.strip()
                 ]
             elif only_current_term:
                 today = date.today()
@@ -1262,10 +1268,9 @@ async def fetch_blackboard_course_materials(
                     ]
 
             if term_keywords:
-                strict_term_filter = (
-                    os.getenv("BB_TERM_FILTER_STRICT", "1").strip().lower()
-                    not in {"0", "false", "no", "off"}
-                )
+                strict_term_filter = os.getenv(
+                    "BB_TERM_FILTER_STRICT", "1"
+                ).strip().lower() not in {"0", "false", "no", "off"}
                 filtered = [
                     item
                     for item in materials

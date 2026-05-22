@@ -27,8 +27,8 @@ from backend.agent.loop import wait_for_user_interrupt
 from backend.config import settings
 from backend.services import audit_service
 
-
 # ── Workspace 与路径安全 ───────────────────────────────────────────────────────
+
 
 def _get_workspace(ctx: RunContext[AgentDeps]) -> Path:
     """返回当前用户的 workspace 绝对路径，不存在则创建。"""
@@ -68,6 +68,7 @@ def _rel(workspace: Path, path: Path) -> str:
 
 # ── 工具：列目录 ──────────────────────────────────────────────────────────────
 
+
 @agent.tool
 async def file_list(ctx: RunContext[AgentDeps], directory: str = ".") -> str:
     """
@@ -83,13 +84,20 @@ async def file_list(ctx: RunContext[AgentDeps], directory: str = ".") -> str:
     """
     workspace = _get_workspace(ctx)
     try:
-        target = _safe_path(workspace, directory or ".") if directory not in ("", ".") else workspace
+        target = (
+            _safe_path(workspace, directory or ".")
+            if directory not in ("", ".")
+            else workspace
+        )
     except PermissionError:
         return "ERROR:OUT_OF_WORKSPACE"
     if not target.exists() or not target.is_dir():
         return "ERROR:DIR_NOT_FOUND"
 
-    lines: list[str] = [f"[Workspace] {workspace}", f"[CWD] {_rel(workspace, target) or '.'}"]
+    lines: list[str] = [
+        f"[Workspace] {workspace}",
+        f"[CWD] {_rel(workspace, target) or '.'}",
+    ]
     entries = sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
     if not entries:
         lines.append("(empty)")
@@ -103,6 +111,7 @@ async def file_list(ctx: RunContext[AgentDeps], directory: str = ".") -> str:
 
 
 # ── 工具：读文件 ──────────────────────────────────────────────────────────────
+
 
 @agent.tool
 async def file_read(ctx: RunContext[AgentDeps], path: str) -> str:
@@ -149,6 +158,7 @@ async def file_read(ctx: RunContext[AgentDeps], path: str) -> str:
 
 # ── 工具：创建文件 ────────────────────────────────────────────────────────────
 
+
 @agent.tool
 async def file_create(
     ctx: RunContext[AgentDeps],
@@ -192,6 +202,7 @@ async def file_create(
 
 
 # ── 工具：覆盖文件 — HITL medium ──────────────────────────────────────────────
+
 
 @agent.tool
 async def file_update(
@@ -245,6 +256,7 @@ async def file_update(
 
 
 # ── 工具：删除文件/目录 — HITL high ───────────────────────────────────────────
+
 
 @agent.tool
 async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
@@ -301,6 +313,7 @@ async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
 
 
 # ── 工具：批量重命名 — Dry-run + HITL high ────────────────────────────────────
+
 
 @agent.tool
 async def batch_rename(

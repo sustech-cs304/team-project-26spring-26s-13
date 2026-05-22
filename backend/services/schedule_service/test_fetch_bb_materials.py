@@ -139,7 +139,9 @@ if __name__ == "__main__":
 
 
 class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
-    async def test_fetch_cms_course_file_strict_raises_on_menu_no_bbcswebdav(self) -> None:
+    async def test_fetch_cms_course_file_strict_raises_on_menu_no_bbcswebdav(
+        self,
+    ) -> None:
         cms_url = (
             "https://bb.sustech.edu.cn/webapps/cmsmain/webui/courses/"
             "CS304-30018694-2026SP/lecture1-introduction.pdf"
@@ -158,7 +160,11 @@ class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
             content: str | bytes | None = None,
             label: str = "",
         ) -> httpx.Response:
-            if method == "GET" and "action=download" in url and "/webapps/cmsmain/webui/courses/" in url:
+            if (
+                method == "GET"
+                and "action=download" in url
+                and "/webapps/cmsmain/webui/courses/" in url
+            ):
                 return httpx.Response(
                     404,
                     request=httpx.Request(method, url),
@@ -177,7 +183,7 @@ class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
                     200,
                     request=httpx.Request(method, url),
                     headers={"Content-Type": "text/x-json"},
-                    content=b"{\"ok\": true}",
+                    content=b'{"ok": true}',
                 )
             raise AssertionError(f"Unexpected request: {method} {url} label={label}")
 
@@ -187,7 +193,9 @@ class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
             ), patch.object(
                 bb_materials, "_request_with_retry", stub_request_with_retry
             ):
-                with self.assertRaises(bb_materials.BlackboardMaterialFetchError) as ctx:
+                with self.assertRaises(
+                    bb_materials.BlackboardMaterialFetchError
+                ) as ctx:
                     await bb_materials._fetch_cms_course_file_material(
                         client,
                         cms_url,
@@ -217,7 +225,11 @@ class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
             content: str | bytes | None = None,
             label: str = "",
         ) -> httpx.Response:
-            if method == "GET" and "action=download" in url and "/webapps/cmsmain/webui/courses/" in url:
+            if (
+                method == "GET"
+                and "action=download" in url
+                and "/webapps/cmsmain/webui/courses/" in url
+            ):
                 return httpx.Response(
                     404,
                     request=httpx.Request(method, url),
@@ -246,7 +258,9 @@ class TestFetchCmsCourseFileStrict(unittest.IsolatedAsyncioTestCase):
             ), patch.object(
                 bb_materials, "_request_with_retry", stub_request_with_retry
             ):
-                with self.assertRaises(bb_materials.BlackboardMaterialFetchError) as ctx:
+                with self.assertRaises(
+                    bb_materials.BlackboardMaterialFetchError
+                ) as ctx:
                     await bb_materials._fetch_cms_course_file_material(
                         client,
                         cms_url,

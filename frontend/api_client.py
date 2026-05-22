@@ -151,7 +151,9 @@ class BackendApiClient:
         return [item for item in payload if isinstance(item, dict)]
 
     def start_sync_blackboard_job(self) -> dict[str, Any]:
-        payload = self._request("POST", "/api/materials/sync-blackboard/jobs", json_body={})
+        payload = self._request(
+            "POST", "/api/materials/sync-blackboard/jobs", json_body={}
+        )
         if not isinstance(payload, dict):
             raise BackendApiError("Job start response must be a JSON object.")
         return payload

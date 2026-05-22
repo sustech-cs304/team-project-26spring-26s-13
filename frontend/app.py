@@ -132,6 +132,7 @@ class AgentStreamWorker(QThread):
 
     def run(self) -> None:
         try:
+
             def on_event(event: dict[str, Any]) -> None:
                 if event.get("event") != "trace":
                     return
@@ -155,7 +156,9 @@ class AgentStreamWorker(QThread):
 class BlackboardSyncDialog(QDialog):
     cancelled = pyqtSignal()
 
-    def __init__(self, title: str, cancel_label: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, title: str, cancel_label: str, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -4126,7 +4129,8 @@ class MainWindow(QMainWindow):
             return
 
         existing_names = {
-            self._resource_display_name(resource).lower() for resource in self.resource_files
+            self._resource_display_name(resource).lower()
+            for resource in self.resource_files
         }
 
         def _start_job():

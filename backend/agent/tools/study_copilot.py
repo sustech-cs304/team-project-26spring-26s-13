@@ -161,7 +161,9 @@ def _pack_chunks(chunks: list[dict], *, max_chars: int) -> list[str]:
     return blocks
 
 
-async def _chat_complete(api_key: str, *, system: str, user: str, max_tokens: int) -> str:
+async def _chat_complete(
+    api_key: str, *, system: str, user: str, max_tokens: int
+) -> str:
     if not (api_key or "").strip():
         raise ValueError("missing api key")
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -266,7 +268,9 @@ async def generate_summary(
                 f"{block}"
             )
             per_block_summaries.append(
-                await _chat_complete(api_key, system=system, user=prompt, max_tokens=900)
+                await _chat_complete(
+                    api_key, system=system, user=prompt, max_tokens=900
+                )
             )
 
         merge_prompt = (
@@ -465,8 +469,7 @@ async def explain_material(
         hits = [
             c
             for c in all_chunks
-            if kw in str(c.get("text") or "")
-            and str(c.get("text") or "").strip()
+            if kw in str(c.get("text") or "") and str(c.get("text") or "").strip()
         ]
         results = hits[:10]
 

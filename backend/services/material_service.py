@@ -522,7 +522,9 @@ async def _create_material_from_bytes(
         if detected in ALLOWED_MIME_TYPES:
             normalized_type = detected
         else:
-            raise ValueError(f"Unsupported file type: {content_type or normalized_type}")
+            raise ValueError(
+                f"Unsupported file type: {content_type or normalized_type}"
+            )
 
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > settings.MAX_UPLOAD_SIZE_MB:

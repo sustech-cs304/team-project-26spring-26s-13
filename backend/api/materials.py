@@ -70,7 +70,8 @@ async def sync_blackboard_materials(
         default=None, description="课程关键词过滤（匹配 course_name/course_id）"
     ),
     keyword: str | None = Query(
-        default=None, description="文件关键词过滤（匹配 title/file_name，例如 lecture3）"
+        default=None,
+        description="文件关键词过滤（匹配 title/file_name，例如 lecture3）",
     ),
     limit: int | None = Query(
         default=None, ge=0, le=200, description="最多同步多少个匹配文件"
@@ -107,7 +108,8 @@ async def start_sync_blackboard_job(
         default=None, description="课程关键词过滤（匹配 course_name/course_id）"
     ),
     keyword: str | None = Query(
-        default=None, description="文件关键词过滤（匹配 title/file_name，例如 lecture3）"
+        default=None,
+        description="文件关键词过滤（匹配 title/file_name，例如 lecture3）",
     ),
     limit: int | None = Query(
         default=None, ge=0, le=200, description="最多同步多少个匹配文件"
@@ -145,7 +147,9 @@ async def cancel_sync_blackboard_job(
     current_user: User = Depends(get_current_user),
 ) -> BlackboardSyncJobInfo:
     try:
-        payload = await material_service.cancel_blackboard_sync_job(current_user, job_id)
+        payload = await material_service.cancel_blackboard_sync_job(
+            current_user, job_id
+        )
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
