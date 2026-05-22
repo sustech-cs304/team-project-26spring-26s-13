@@ -18,6 +18,7 @@ from pydantic_ai.tools import ToolDefinition
 from backend.schemas.agent import RouteType
 
 FILE_TOOL_NAMES = {
+    "file_list",
     "file_read",
     "file_create",
     "file_update",
@@ -44,6 +45,8 @@ _FILE_ACTION_TERMS = {
     "move",
     "copy",
     "load",
+    "list",
+    "ls",
     "读取",
     "打开",
     "创建",
@@ -58,6 +61,9 @@ _FILE_ACTION_TERMS = {
     "移动",
     "复制",
     "载入",
+    "列出",
+    "列一下",
+    "看看",
 }
 
 _FILE_TARGET_TERMS = {

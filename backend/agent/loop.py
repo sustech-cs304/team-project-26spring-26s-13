@@ -175,6 +175,11 @@ async def run_agent(
         llm_api_key=llm_api_key,
         cas_account=cas_account,
         cas_password=cas_password,
+        hitl_approved=bool(
+            hitl_context is not None
+            and request.hitl_reply is not None
+            and request.hitl_reply.approved
+        ),
         trace_log=[],
     )
 
