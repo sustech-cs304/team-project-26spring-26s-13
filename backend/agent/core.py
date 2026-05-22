@@ -41,6 +41,10 @@ class AgentDeps:
     cas_account: str | None  # 解密后的 CAS 账号（爬虫工具使用）
     cas_password: str | None  # 解密后的 CAS 密码（爬虫工具使用）
 
+    # True 表示本轮是 HITL 用户批准后的续跑，工具据此跳过中断直接执行。
+    # 由 loop.py 在 run_agent() 入口根据 hitl_context + hitl_reply 设置。
+    hitl_approved: bool = False
+
     # [新增] 用于收集 Agent 的状态流转和工具调用轨迹，最终返回给前端 Thought Trace 面板
     trace_log: list[dict[str, Any]] = field(default_factory=list)
 
@@ -53,8 +57,8 @@ class FinalResponse(BaseModel):
         description="回复给用户的自然语言内容。如果执行了操作，告诉用户结果；如果是提问，给出解答。"
     )
     route: str = Field(
-        description="决定前端界面展示侧重哪个面板的路由。严格限于以下四个值: 'chat', 'scheduler', 'encyclopedia', 'os_automation'",
-        pattern="^(chat|scheduler|encyclopedia|os_automation)$",
+        description="决定前端界面展示侧重哪个面板的路由。严格限于以下五个值: 'chat', 'scheduler', 'encyclopedia', 'library', 'os_automation'",
+        pattern="^(chat|scheduler|encyclopedia|library|os_automation)$",
     )
 
 

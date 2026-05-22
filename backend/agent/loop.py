@@ -35,8 +35,12 @@ from backend.schemas.agent import (
     AgentRequest,
     AgentResponse,
     AssistantMessage,
+    EncyclopediaResult,
     ErrorDetail,
+    LibraryRoom,
+    LibraryRoomResult,
     RiskLevel,
+    ScheduleConflict,
     ScheduleData,
     ScheduleEvent,
     TraceItem,
@@ -171,6 +175,11 @@ async def run_agent(
         llm_api_key=llm_api_key,
         cas_account=cas_account,
         cas_password=cas_password,
+        hitl_approved=bool(
+            hitl_context is not None
+            and request.hitl_reply is not None
+            and request.hitl_reply.approved
+        ),
         trace_log=[],
     )
 
@@ -252,12 +261,27 @@ async def run_agent(
         final_data = _normalize_blackboard_deadline_response(
             user_prompt, final_data, blackboard_result
         )
-        blackboard_schedule = _build_blackboard_schedule_data(
-            user_prompt, blackboard_result
+        library_result = _extract_tool_return_content(
+            raw_messages, "query_library_rooms"
+        )
+        final_data = _normalize_library_room_response(
+            user_prompt, final_data, library_result
         )
         route_by_tools = determine_route(tool_names)
         chosen_route = route_by_tools if tool_names else final_data.route
         chosen_route = normalize_route_for_prompt(user_prompt, chosen_route)
+        final_data = _ensure_source_citations(final_data, raw_messages)
+        schedule_payload = _build_schedule_data_from_tool_returns(
+            user_prompt,
+            raw_messages,
+            blackboard_result,
+        )
+        encyclopedia_payload = _build_encyclopedia_payload(
+            user_prompt,
+            final_data.content,
+            raw_messages,
+        )
+        library_payload = _build_library_payload(raw_messages)
         print(f"chosen_route={chosen_route}")
 
         alignment_issue = detect_alignment_issue(
@@ -331,7 +355,11 @@ async def run_agent(
             ),
             trace=traces,
             route=chosen_route,
-            ui_payload=UIPayload(schedule=blackboard_schedule),
+            ui_payload=UIPayload(
+                schedule=schedule_payload,
+                encyclopedia=encyclopedia_payload,
+                library=library_payload,
+            ),
             hitl_request=None,
             error=None,
         )
@@ -520,13 +548,136 @@ def _extract_tool_names(raw_messages: list) -> list[str]:
 
 
 def _extract_tool_return_content(raw_messages: list, tool_name: str) -> str | None:
+    contents = _extract_tool_return_contents(raw_messages, tool_name)
+    return contents[0] if contents else None
+
+
+def _extract_tool_return_contents(raw_messages: list, tool_name: str) -> list[str]:
+    contents: list[str] = []
     for msg in raw_messages:
         if not isinstance(msg, ModelRequest):
             continue
         for part in msg.parts:
             if isinstance(part, ToolReturnPart) and part.tool_name == tool_name:
-                return part.content if isinstance(part.content, str) else None
-    return None
+                if isinstance(part.content, str):
+                    contents.append(part.content)
+    return contents
+
+
+def _load_json_object(raw: str | None) -> object | None:
+    if not raw or raw.startswith("ERROR:"):
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _extract_rag_citations(raw_messages: list) -> list[str]:
+    citations: list[str] = []
+    seen: set[str] = set()
+    for raw in _extract_tool_return_contents(raw_messages, "query_rag"):
+        payload = _load_json_object(raw)
+        if not isinstance(payload, dict):
+            continue
+        chunks = payload.get("chunks")
+        if not isinstance(chunks, list):
+            continue
+        for chunk in chunks:
+            if not isinstance(chunk, dict):
+                continue
+            file_name = str(chunk.get("file_name") or "").strip()
+            if not file_name or file_name in seen:
+                continue
+            seen.add(file_name)
+            citations.append(file_name)
+    return citations
+
+
+def _ensure_source_citations(
+    final_data: FinalResponse,
+    raw_messages: list,
+) -> FinalResponse:
+    citations = _extract_rag_citations(raw_messages)
+    if not citations:
+        return final_data
+
+    content = final_data.content or ""
+    if any(citation in content for citation in citations):
+        return final_data
+
+    has_chinese = any("\u4e00" <= ch <= "\u9fff" for ch in content)
+    heading = "来源" if has_chinese else "Sources"
+    citation_lines = [f"{idx}. {citation}" for idx, citation in enumerate(citations, 1)]
+    return FinalResponse(
+        content=f"{content.rstrip()}\n\n{heading}：\n" + "\n".join(citation_lines),
+        route=final_data.route,
+    )
+
+
+def _build_encyclopedia_payload(
+    user_prompt: str,
+    answer_markdown: str,
+    raw_messages: list,
+) -> EncyclopediaResult | None:
+    citations = _extract_rag_citations(raw_messages)
+    if not citations and not _extract_tool_return_contents(raw_messages, "query_rag"):
+        return None
+    return EncyclopediaResult(
+        query=user_prompt,
+        answer_markdown=answer_markdown,
+        citations=citations,
+    )
+
+
+def _build_library_payload(
+    raw_messages: list,
+) -> LibraryRoomResult | None:
+    """从 query_library_rooms 工具返回中构建 LibraryRoomResult。"""
+    raw = _extract_tool_return_content(raw_messages, "query_library_rooms")
+    payload = _load_json_object(raw)
+    if not isinstance(payload, dict):
+        return None
+
+    rooms: list[LibraryRoom] = []
+    for item in payload.get("rooms", []):
+        if not isinstance(item, dict):
+            continue
+        rooms.append(
+            LibraryRoom(
+                room_id=str(item.get("room_id", "")),
+                room_name=str(item.get("room_name", "")),
+                location=str(item.get("location", "")),
+                capacity=int(item.get("capacity", 0)),
+                time_slots=item.get("time_slots", []),
+            )
+        )
+    return LibraryRoomResult(
+        query_location=str(payload.get("query_location", "")),
+        query_time=str(payload.get("query_time", "")),
+        query_capacity=payload.get("query_capacity"),
+        has_available=bool(payload.get("has_available", False)),
+        rooms=rooms,
+    )
+
+
+def _normalize_library_room_response(
+    user_prompt: str,
+    final_data: FinalResponse,
+    library_result: str | None,
+) -> FinalResponse:
+    if not library_result or not library_result.startswith("ERROR:"):
+        return final_data
+
+    message = {
+        "ERROR:CAS_LOGIN_FAILED": "我暂时无法查询图书馆讨论间，因为还没有可用的 CAS 账号密码。请先在设置中保存正确的 CAS 凭据后再试。",
+        "ERROR:LIBRARY_DATE_IN_PAST": "不能查询过去日期的图书馆讨论间可预约时间。请换成今天、明天或后天。",
+        "ERROR:LIBRARY_DATE_OUT_OF_RANGE": "图书馆讨论间通常只能查询/预约最近 2 天内的时间。请换成今天、明天或后天再试。",
+    }.get(library_result)
+    if message is None:
+        message = "我没能从图书馆预约系统获取讨论间空闲信息。请稍后重试，或直接打开图书馆预约系统查看。"
+
+    return FinalResponse(content=message, route="library")
 
 
 def _is_deadline_query(text: str) -> bool:
@@ -684,6 +835,149 @@ def _build_blackboard_schedule_data(
             )
         )
     return ScheduleData(events=events, conflicts=[])
+
+
+def _coerce_schedule_event(item: dict, idx: int, prefix: str) -> ScheduleEvent | None:
+    title = str(item.get("title") or item.get("course") or "").strip()
+    time_label = str(item.get("time") or item.get("deadline") or "").strip()
+    if not title or not time_label:
+        return None
+    return ScheduleEvent(
+        event_id=str(item.get("event_id") or f"{prefix}_{idx}"),
+        title=title,
+        time=time_label,
+        source=str(item.get("source") or "Schedule"),
+        detail=str(item.get("detail") or ""),
+    )
+
+
+def _coerce_schedule_conflict(item: dict) -> ScheduleConflict | None:
+    title = str(item.get("title") or "").strip()
+    detail = str(item.get("detail") or "").strip()
+    if not title and not detail:
+        return None
+    return ScheduleConflict(title=title or "Schedule conflict", detail=detail)
+
+
+def _schedule_data_from_payload(payload: object, prefix: str) -> ScheduleData | None:
+    if not isinstance(payload, dict):
+        return None
+    raw_events = payload.get("events")
+    raw_conflicts = payload.get("conflicts")
+    events: list[ScheduleEvent] = []
+    conflicts: list[ScheduleConflict] = []
+
+    if isinstance(raw_events, list):
+        for idx, item in enumerate(raw_events, start=1):
+            if isinstance(item, dict):
+                event = _coerce_schedule_event(item, idx, prefix)
+                if event is not None:
+                    events.append(event)
+
+    if isinstance(raw_conflicts, list):
+        for item in raw_conflicts:
+            if isinstance(item, dict):
+                conflict = _coerce_schedule_conflict(item)
+                if conflict is not None:
+                    conflicts.append(conflict)
+
+    if not events and not conflicts:
+        return None
+    return ScheduleData(events=events, conflicts=conflicts)
+
+
+def _personal_tasks_schedule_data(raw: str | None) -> ScheduleData | None:
+    payload = _load_json_object(raw)
+    if not isinstance(payload, list):
+        return None
+    events: list[ScheduleEvent] = []
+    for idx, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        start_time = str(item.get("start_time") or "").strip()
+        if not title or not start_time:
+            continue
+        end_time = str(item.get("end_time") or "").strip()
+        time_label = f"{start_time}~{end_time}" if end_time else start_time
+        detail_parts = []
+        if item.get("location"):
+            detail_parts.append(f"地点：{item['location']}")
+        if item.get("description"):
+            detail_parts.append(f"说明：{item['description']}")
+        events.append(
+            ScheduleEvent(
+                event_id=str(item.get("task_id") or f"personal_task_{idx}"),
+                title=title,
+                time=time_label,
+                source="Local TODO",
+                detail="；".join(detail_parts),
+            )
+        )
+    return ScheduleData(events=events, conflicts=[]) if events else None
+
+
+def _courses_on_date_schedule_data(raw: str | None) -> ScheduleData | None:
+    payload = _load_json_object(raw)
+    if not isinstance(payload, dict):
+        return None
+    date_label = str(payload.get("date") or "").strip()
+    courses = payload.get("courses")
+    if not date_label or not isinstance(courses, list):
+        return None
+
+    events: list[ScheduleEvent] = []
+    for idx, item in enumerate(courses, start=1):
+        if not isinstance(item, dict):
+            continue
+        course = str(item.get("course") or item.get("course_id") or "").strip()
+        start_time = str(item.get("start_time") or "").strip()
+        end_time = str(item.get("end_time") or "").strip()
+        if not course or not start_time:
+            continue
+        detail_parts = []
+        if item.get("location"):
+            detail_parts.append(f"地点：{item['location']}")
+        if item.get("instructor"):
+            detail_parts.append(f"教师：{item['instructor']}")
+        events.append(
+            ScheduleEvent(
+                event_id=f"course_on_date_{idx}",
+                title=course,
+                time=f"{date_label} {start_time}-{end_time}",
+                source="教务系统",
+                detail="；".join(detail_parts),
+            )
+        )
+    return ScheduleData(events=events, conflicts=[]) if events else None
+
+
+def _build_schedule_data_from_tool_returns(
+    user_prompt: str,
+    raw_messages: list,
+    blackboard_result: str | None,
+) -> ScheduleData | None:
+    for tool_name, prefix in (
+        ("build_proactive_schedule_context", "proactive_schedule"),
+        ("detect_schedule_conflicts", "schedule_conflict"),
+    ):
+        for raw in reversed(_extract_tool_return_contents(raw_messages, tool_name)):
+            payload = _load_json_object(raw)
+            schedule_data = _schedule_data_from_payload(payload, prefix)
+            if schedule_data is not None:
+                return schedule_data
+
+    personal_raw = _extract_tool_return_content(raw_messages, "list_personal_tasks")
+    personal_data = _personal_tasks_schedule_data(personal_raw)
+    if personal_data is not None:
+        return personal_data
+
+    courses_raw = _extract_tool_return_content(raw_messages, "fetch_courses_on_date")
+    courses_data = _courses_on_date_schedule_data(courses_raw)
+    if courses_data is not None:
+        return courses_data
+
+    return _build_blackboard_schedule_data(user_prompt, blackboard_result)
 
 
 def _build_message_history(

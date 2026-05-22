@@ -24,6 +24,147 @@ from backend.services.schedule_service.enums import CourseOccurrenceKind, Deadli
 from backend.services.schedule_service.service_config import TIS_WEEK1_MONDAY
 
 
+def _parse_json_payload(raw: str) -> object:
+    if not (raw or "").strip() or raw.startswith("ERROR:"):
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _parse_event_start(value: str) -> datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if "~" in raw:
+        raw = raw.split("~", 1)[0].strip()
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except ValueError:
+        return None
+
+
+def _parse_event_end(value: str) -> datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if "~" not in raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(
+            raw.split("~", 1)[1].strip().replace("Z", "+00:00")
+        )
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except ValueError:
+        return None
+
+
+def _event_sort_key(item: dict[str, object]) -> datetime:
+    parsed = _parse_event_start(str(item.get("time") or item.get("start_time") or ""))
+    return parsed or datetime.max
+
+
+def _normalize_schedule_event(item: dict[str, object], idx: int) -> dict[str, str]:
+    return {
+        "event_id": str(item.get("event_id") or f"schedule_event_{idx}"),
+        "title": str(item.get("title") or item.get("course") or "Untitled event"),
+        "time": str(item.get("time") or item.get("deadline") or ""),
+        "source": str(item.get("source") or "Schedule"),
+        "detail": str(item.get("detail") or ""),
+    }
+
+
+def _personal_task_to_event(item: dict[str, object], idx: int) -> dict[str, str]:
+    start = str(item.get("start_time") or "")
+    end = str(item.get("end_time") or "")
+    time_label = f"{start}~{end}" if end else start
+    detail_parts: list[str] = []
+    if item.get("location"):
+        detail_parts.append(f"location={item['location']}")
+    if item.get("description"):
+        detail_parts.append(f"description={item['description']}")
+    return {
+        "event_id": str(item.get("task_id") or f"personal_task_{idx}"),
+        "title": str(item.get("title") or "Personal task"),
+        "time": time_label,
+        "source": "Local TODO",
+        "detail": " ".join(detail_parts),
+    }
+
+
+def _build_proactive_notes(
+    events: list[dict[str, str]],
+    conflicts: list[dict[str, str]],
+    *,
+    now: datetime,
+) -> list[str]:
+    notes: list[str] = []
+    if conflicts:
+        notes.append(f"检测到 {len(conflicts)} 个潜在时间冲突，优先处理冲突项。")
+
+    upcoming = []
+    for event in events:
+        start = _parse_event_start(event.get("time", ""))
+        if start is None:
+            continue
+        if start.tzinfo is not None and now.tzinfo is None:
+            start = start.replace(tzinfo=None)
+        if now <= start <= now + timedelta(days=3):
+            upcoming.append((start, event))
+
+    upcoming.sort(key=lambda x: x[0])
+    for start, event in upcoming[:5]:
+        source = event.get("source") or "Schedule"
+        notes.append(
+            f"{event.get('title', '事项')} 将在 {start.strftime('%Y-%m-%d %H:%M')} 前后到来，来源：{source}。"
+        )
+
+    if not notes and events:
+        notes.append("近期没有明显冲突；可按截止时间从近到远安排学习块。")
+    return notes[:6]
+
+
+def _detect_simple_overlaps(events: list[dict[str, str]]) -> list[dict[str, str]]:
+    intervals: list[tuple[datetime, datetime, dict[str, str]]] = []
+    points: list[tuple[datetime, dict[str, str]]] = []
+    for event in events:
+        start = _parse_event_start(event.get("time", ""))
+        if start is None:
+            continue
+        end = _parse_event_end(event.get("time", ""))
+        if end is not None and end > start:
+            intervals.append((start, end, event))
+        else:
+            points.append((start, event))
+
+    conflicts: list[dict[str, str]] = []
+    intervals.sort(key=lambda x: x[0])
+    for i, (start_a, end_a, event_a) in enumerate(intervals):
+        for start_b, end_b, event_b in intervals[i + 1 :]:
+            if start_b >= end_a:
+                break
+            if end_b > start_a:
+                conflicts.append(
+                    {
+                        "title": event_a["title"],
+                        "detail": f"overlaps_with={event_b['title']} time={event_a['time']} vs {event_b['time']}",
+                    }
+                )
+
+    for point, event in points:
+        for start, end, interval_event in intervals:
+            if start <= point <= end:
+                conflicts.append(
+                    {
+                        "title": event["title"],
+                        "detail": f"deadline_inside_event={interval_event['title']} deadline_at={event['time']} event_time={interval_event['time']}",
+                    }
+                )
+    return conflicts[:20]
+
+
 async def _get_week1_monday() -> datetime:
     try:
         from backend.services.schedule_service.academic_calendar_provider import (
@@ -525,3 +666,170 @@ async def detect_schedule_conflicts(
 
     result = schedule_service.detect_conflicts(deadlines, course_slots)
     return json.dumps(result.model_dump(), ensure_ascii=False)
+
+
+@agent.tool
+@safe_tool
+async def build_proactive_schedule_context(
+    ctx: RunContext[AgentDeps],
+    schedule_data_json: str = "",
+    deadlines_json: str = "",
+    course_schedule_json: str = "",
+    personal_tasks_json: str = "",
+    planning_window_days: int = 14,
+) -> str:
+    """
+    将前面调度工具的结果压缩成 Agent 可直接用于主动规划的上下文。
+
+    典型调用顺序：
+      1. fetch_blackboard_deadlines / fetch_course_schedule / list_personal_tasks
+      2. detect_schedule_conflicts（可选）
+      3. build_proactive_schedule_context
+
+    Args:
+        schedule_data_json: detect_schedule_conflicts 的 JSON 返回；也兼容
+                            {"events": [...], "conflicts": [...]} 结构。
+        deadlines_json: fetch_blackboard_deadlines 的 JSON 返回；当还没有
+                        detect_schedule_conflicts 输出时可直接传入。
+        course_schedule_json: fetch_course_schedule 的 JSON 返回；当还没有
+                              detect_schedule_conflicts 输出时可直接传入。
+        personal_tasks_json: list_personal_tasks 的 JSON 返回。
+        planning_window_days: 只保留未来 N 天内的事件，默认 14 天。
+
+    Returns:
+        JSON 字符串，包含 events、conflicts、proactive_notes、sources。
+        LLM 应基于 proactive_notes 和 conflicts 生成最终学习计划。
+    """
+    _ = ctx
+    try:
+        window_days = max(1, min(int(planning_window_days), 60))
+    except Exception:
+        window_days = 14
+
+    schedule_payload = _parse_json_payload(schedule_data_json)
+    deadlines_payload = _parse_json_payload(deadlines_json)
+    course_payload = _parse_json_payload(course_schedule_json)
+    personal_payload = _parse_json_payload(personal_tasks_json)
+
+    events: list[dict[str, str]] = []
+    conflicts: list[dict[str, str]] = []
+
+    if isinstance(schedule_payload, dict):
+        raw_events = schedule_payload.get("events") or []
+        if isinstance(raw_events, list):
+            for idx, item in enumerate(raw_events, start=1):
+                if isinstance(item, dict):
+                    events.append(_normalize_schedule_event(item, idx))
+
+        raw_conflicts = schedule_payload.get("conflicts") or []
+        if isinstance(raw_conflicts, list):
+            for item in raw_conflicts:
+                if isinstance(item, dict):
+                    conflicts.append(
+                        {
+                            "title": str(item.get("title") or "Schedule conflict"),
+                            "detail": str(item.get("detail") or ""),
+                        }
+                    )
+
+    if isinstance(deadlines_payload, list):
+        for idx, item in enumerate(deadlines_payload, start=1):
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "Blackboard deadline")
+            deadline = str(item.get("deadline") or "")
+            if not deadline:
+                continue
+            course = str(
+                item.get("course_name")
+                or item.get("course")
+                or item.get("course_id")
+                or ""
+            )
+            detail_parts = []
+            if course:
+                detail_parts.append(f"course={course}")
+            if item.get("type"):
+                detail_parts.append(f"type={item['type']}")
+            if item.get("priority") is not None:
+                detail_parts.append(f"priority={item['priority']}")
+            events.append(
+                {
+                    "event_id": str(item.get("event_id") or f"bb_deadline_{idx}"),
+                    "title": title,
+                    "time": deadline,
+                    "source": "Blackboard",
+                    "detail": " ".join(detail_parts),
+                }
+            )
+
+    if isinstance(course_payload, list):
+        for idx, item in enumerate(course_payload, start=1):
+            if not isinstance(item, dict):
+                continue
+            course = str(item.get("course") or item.get("course_id") or "")
+            date_s = str(item.get("date") or "")
+            start_time = str(item.get("start_time") or "")
+            end_time = str(item.get("end_time") or "")
+            if not course or not date_s or not start_time:
+                continue
+            time_label = f"{date_s}T{start_time}:00"
+            if end_time:
+                time_label = f"{time_label}~{date_s}T{end_time}:00"
+            detail_parts = []
+            if item.get("location"):
+                detail_parts.append(f"location={item['location']}")
+            if item.get("instructor"):
+                detail_parts.append(f"instructor={item['instructor']}")
+            events.append(
+                {
+                    "event_id": str(item.get("event_id") or f"course_{idx}"),
+                    "title": course,
+                    "time": time_label,
+                    "source": "教务系统",
+                    "detail": " ".join(detail_parts),
+                }
+            )
+
+    if isinstance(personal_payload, list):
+        for idx, item in enumerate(personal_payload, start=1):
+            if isinstance(item, dict):
+                events.append(_personal_task_to_event(item, idx))
+
+    now = datetime.now()
+    window_end = now + timedelta(days=window_days)
+    filtered_events: list[dict[str, str]] = []
+    for event in events:
+        start = _parse_event_start(event.get("time", ""))
+        if start is None:
+            filtered_events.append(event)
+            continue
+        comparable = start.replace(tzinfo=None) if start.tzinfo else start
+        if now <= comparable <= window_end:
+            filtered_events.append(event)
+
+    filtered_events.sort(key=_event_sort_key)
+    derived_conflicts = _detect_simple_overlaps(filtered_events)
+    all_conflicts = conflicts + [c for c in derived_conflicts if c not in conflicts]
+    sources = sorted(
+        {
+            event.get("source", "").strip()
+            for event in filtered_events
+            if event.get("source", "").strip()
+        }
+    )
+
+    return json.dumps(
+        {
+            "planning_window_days": window_days,
+            "events": filtered_events[:50],
+            "conflicts": all_conflicts[:25],
+            "proactive_notes": _build_proactive_notes(
+                filtered_events,
+                all_conflicts,
+                now=now,
+            ),
+            "sources": sources,
+        },
+        ensure_ascii=False,
+    )

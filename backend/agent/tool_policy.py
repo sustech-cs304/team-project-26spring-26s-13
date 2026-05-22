@@ -18,11 +18,17 @@ from pydantic_ai.tools import ToolDefinition
 from backend.schemas.agent import RouteType
 
 FILE_TOOL_NAMES = {
+    "file_list",
     "file_read",
     "file_create",
     "file_update",
     "file_delete",
     "batch_rename",
+}
+
+# 预约类工具名称：这些工具涉及资源锁定，需要 HITL 审批
+BOOKING_TOOL_NAMES = {
+    "book_library_room",
 }
 
 _FILE_ACTION_TERMS = {
@@ -39,6 +45,8 @@ _FILE_ACTION_TERMS = {
     "move",
     "copy",
     "load",
+    "list",
+    "ls",
     "读取",
     "打开",
     "创建",
@@ -53,6 +61,9 @@ _FILE_ACTION_TERMS = {
     "移动",
     "复制",
     "载入",
+    "列出",
+    "列一下",
+    "看看",
 }
 
 _FILE_TARGET_TERMS = {
@@ -79,6 +90,21 @@ _FILE_TARGET_TERMS = {
     "路径",
     "本地",
     "工作区",
+}
+
+_LIBRARY_TERMS = {
+    "图书馆",
+    "讨论间",
+    "讨论室",
+    "研修间",
+    "自习室",
+    "空间预约",
+    "预约系统",
+    "空房间",
+    "study room",
+    "discussion room",
+    "library",
+    "room availability",
 }
 
 _NON_FILE_MEMORY_TERMS = {
@@ -166,3 +192,11 @@ def normalize_route_for_prompt(user_prompt: str, route: RouteType) -> RouteType:
     if route == "os_automation" and not has_explicit_file_operation_intent(user_prompt):
         return "chat"
     return route
+
+
+def has_library_intent(prompt: str | Sequence[Any] | None) -> bool:
+    """判断用户消息是否涉及图书馆讨论间查询。"""
+    text = _prompt_to_text(prompt).strip().lower()
+    if not text:
+        return False
+    return any(term in text for term in _LIBRARY_TERMS)

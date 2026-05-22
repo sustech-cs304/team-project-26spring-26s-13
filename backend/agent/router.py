@@ -24,12 +24,17 @@ def determine_route(tool_names_called: list[str]) -> RouteType:
     tool_to_route: dict[str, RouteType] = {
         "fetch_blackboard_deadlines": "scheduler",
         "fetch_course_schedule": "scheduler",
+        "fetch_courses_on_date": "scheduler",
+        "fetch_schedule_adjustments": "scheduler",
         "detect_schedule_conflicts": "scheduler",
+        "build_proactive_schedule_context": "scheduler",
         "save_personal_task": "scheduler",
         "list_personal_tasks": "scheduler",
         "mark_task_done": "scheduler",
         "query_rag": "encyclopedia",
         "classify_subject": "encyclopedia",
+        "query_library_rooms": "library",
+        "book_library_room": "library",
         "generate_summary": "chat",
         "generate_quiz": "chat",
         "extract_key_concepts": "chat",
@@ -39,7 +44,13 @@ def determine_route(tool_names_called: list[str]) -> RouteType:
         "file_delete": "os_automation",
         "batch_rename": "os_automation",
     }
-    priority: list[RouteType] = ["os_automation", "scheduler", "encyclopedia", "chat"]
+    priority: list[RouteType] = [
+        "os_automation",
+        "scheduler",
+        "library",
+        "encyclopedia",
+        "chat",
+    ]
 
     called_routes = {tool_to_route.get(name, "chat") for name in tool_names_called}
     for route in priority:
