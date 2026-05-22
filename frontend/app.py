@@ -328,6 +328,113 @@ class EncyclopediaResultWidget(QWidget):
         outer.addStretch(1)
 
 
+class LibraryResultWidget(QWidget):
+    def __init__(
+        self,
+        sender_label: str,
+        title: str,
+        intro: str,
+        query_time: str,
+        query_location: str,
+        query_capacity: Any,
+        rooms: list[dict[str, Any]],
+        texts: dict[str, str],
+    ) -> None:
+        super().__init__()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 10)
+
+        card = QFrame()
+        card.setObjectName("AgentResultCard")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        sender_title = QLabel(sender_label)
+        sender_title.setObjectName("CardTitle")
+        type_chip = QLabel(texts["message_type_library"])
+        type_chip.setObjectName("MessageTypeChip")
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        intro_label = QLabel(intro)
+        intro_label.setObjectName("BodyText")
+        intro_label.setWordWrap(True)
+
+        capacity_text = (
+            texts["library_capacity_any"]
+            if not query_capacity
+            else texts["library_capacity_min"].format(capacity=query_capacity)
+        )
+        query_label = QLabel(
+            texts["chat_library_query_line"].format(
+                time=query_time or texts["library_time_any"],
+                location=query_location or texts["library_location_any"],
+                capacity=capacity_text,
+                count=len(rooms),
+            )
+        )
+        query_label.setObjectName("ResultQueryLabel")
+        query_label.setWordWrap(True)
+
+        header_row.addWidget(sender_title)
+        header_row.addWidget(type_chip)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+        layout.addWidget(title_label)
+        if intro.strip():
+            layout.addWidget(intro_label)
+        layout.addWidget(query_label)
+
+        if rooms:
+            rooms_title = QLabel(texts["chat_library_rooms_section"])
+            rooms_title.setObjectName("CardTitle")
+            layout.addWidget(rooms_title)
+            for room in rooms[:5]:
+                room_card = QFrame()
+                room_card.setObjectName("ResultSubCard")
+                room_layout = QVBoxLayout(room_card)
+                room_layout.setContentsMargins(12, 10, 12, 10)
+                room_layout.setSpacing(4)
+
+                room_name = str(
+                    room.get("room_name") or room.get("room_id") or "Library room"
+                )
+                location = str(room.get("location") or "")
+                capacity = room.get("capacity") or texts["library_capacity_unknown"]
+                slots = room.get("time_slots") or []
+                slot_text = " · ".join(str(slot) for slot in slots)
+
+                room_title = QLabel(room_name)
+                room_title.setObjectName("SectionTitle")
+                room_meta = QLabel(
+                    texts["chat_library_room_meta"].format(
+                        location=location or texts["library_location_unknown"],
+                        capacity=capacity,
+                    )
+                )
+                room_meta.setObjectName("MutedText")
+                room_slots = QLabel(
+                    texts["chat_library_room_slots"].format(slots=slot_text)
+                )
+                room_slots.setObjectName("BodyText")
+                room_slots.setWordWrap(True)
+                room_layout.addWidget(room_title)
+                room_layout.addWidget(room_meta)
+                room_layout.addWidget(room_slots)
+                layout.addWidget(room_card)
+        else:
+            empty_label = QLabel(texts["chat_library_no_rooms"])
+            empty_label.setObjectName("MutedText")
+            empty_label.setWordWrap(True)
+            layout.addWidget(empty_label)
+
+        outer.addWidget(card, 0)
+        outer.addStretch(1)
+
+
 class TraceItem(QFrame):
     def __init__(
         self,
@@ -1015,7 +1122,41 @@ class MainWindow(QMainWindow):
                 )
             )
 
+        library_payload = ui_payload.get("library")
+        if isinstance(library_payload, dict):
+            rooms = library_payload.get("rooms", [])
+            cards.append(
+                self._create_library_message(
+                    intro=self.ui("library_card_intro"),
+                    query_time=str(library_payload.get("query_time") or ""),
+                    query_location=str(library_payload.get("query_location") or ""),
+                    query_capacity=library_payload.get("query_capacity"),
+                    rooms=rooms if isinstance(rooms, list) else [],
+                )
+            )
+
         return cards
+
+    def _create_library_message(
+        self,
+        *,
+        intro: str,
+        query_time: str,
+        query_location: str,
+        query_capacity: Any,
+        rooms: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "kind": "library",
+            "sender": "agent",
+            "text": intro,
+            "payload": {
+                "query_time": query_time,
+                "query_location": query_location,
+                "query_capacity": query_capacity,
+                "rooms": list(rooms),
+            },
+        }
 
     def _create_conversation(
         self,
@@ -1346,9 +1487,7 @@ class MainWindow(QMainWindow):
         self._refresh_schedule_views()
         return None if already_present else event
 
-    def _extract_schedule_event_from_reply(
-        self, text: str
-    ) -> dict[str, str] | None:
+    def _extract_schedule_event_from_reply(self, text: str) -> dict[str, str] | None:
         plain_text = self._plain_schedule_reply_text(text)
         if not plain_text or not self._looks_like_schedule_add_reply(plain_text):
             return None
@@ -1391,14 +1530,31 @@ class MainWindow(QMainWindow):
             return False
         chinese_add = any(
             marker in text
-            for marker in ("加入日程", "加入到日程", "添加到日程", "添加进日程", "新增日程")
+            for marker in (
+                "加入日程",
+                "加入到日程",
+                "添加到日程",
+                "添加进日程",
+                "新增日程",
+            )
         )
         chinese_saved = any(word in text for word in ("日程", "日历", "安排")) and any(
             marker in text
-            for marker in ("已保存", "保存成功", "已安排", "已添加", "添加成功", "已新增", "已为你", "已经", "成功")
+            for marker in (
+                "已保存",
+                "保存成功",
+                "已安排",
+                "已添加",
+                "添加成功",
+                "已新增",
+                "已为你",
+                "已经",
+                "成功",
+            )
         )
         english_add = "schedule" in lower_text and any(
-            marker in lower_text for marker in ("added", "saved", "scheduled", "created")
+            marker in lower_text
+            for marker in ("added", "saved", "scheduled", "created")
         )
         english_calendar = "calendar" in lower_text and any(
             marker in lower_text
@@ -1530,7 +1686,9 @@ class MainWindow(QMainWindow):
             " ",
             cleaned,
         )
-        cleaned = re.sub(r"(?:加入|添加|新增|保存|安排在?|已保存|保存成功|日程|日历)", " ", cleaned)
+        cleaned = re.sub(
+            r"(?:加入|添加|新增|保存|安排在?|已保存|保存成功|日程|日历)", " ", cleaned
+        )
         cleaned = re.sub(
             r"\b(?:added|saved|scheduled|created|calendar|schedule|event|for|on|from|to|at|in|your|the|a|an)\b",
             " ",
@@ -1553,7 +1711,9 @@ class MainWindow(QMainWindow):
         )
         return parsed_time or base_day.isoformat()
 
-    def _parse_reply_time_from_contexts(self, contexts: list[str], base_day: date) -> str:
+    def _parse_reply_time_from_contexts(
+        self, contexts: list[str], base_day: date
+    ) -> str:
         for context in contexts:
             range_match = self._reply_time_range_pattern().search(context)
             if range_match:
@@ -1594,7 +1754,9 @@ class MainWindow(QMainWindow):
         return ""
 
     def _reply_schedule_base_day(self, text: str) -> tuple[date, int, int] | None:
-        chinese_match = re.search(r"(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日", text)
+        chinese_match = re.search(
+            r"(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日", text
+        )
         if chinese_match:
             parsed = self._safe_date(
                 int(chinese_match.group(1) or date.today().year),
@@ -1606,7 +1768,11 @@ class MainWindow(QMainWindow):
 
         iso_match = re.search(r"(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", text)
         if iso_match:
-            parsed = self._safe_date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+            parsed = self._safe_date(
+                int(iso_match.group(1)),
+                int(iso_match.group(2)),
+                int(iso_match.group(3)),
+            )
             if parsed:
                 return parsed, iso_match.start(), iso_match.end()
 
@@ -1621,7 +1787,11 @@ class MainWindow(QMainWindow):
         )
         if english_match:
             month = self._english_month_number(english_match.group(1))
-            parsed = self._safe_date(int(english_match.group(3) or date.today().year), month, int(english_match.group(2)))
+            parsed = self._safe_date(
+                int(english_match.group(3) or date.today().year),
+                month,
+                int(english_match.group(2)),
+            )
             if parsed:
                 return parsed, english_match.start(), english_match.end()
 
@@ -1638,7 +1808,11 @@ class MainWindow(QMainWindow):
                 int(english_reverse_match.group(1)),
             )
             if parsed:
-                return parsed, english_reverse_match.start(), english_reverse_match.end()
+                return (
+                    parsed,
+                    english_reverse_match.start(),
+                    english_reverse_match.end(),
+                )
 
         relative_markers = [
             ("day after tomorrow", 2),
@@ -1683,14 +1857,18 @@ class MainWindow(QMainWindow):
         }.get(month_key, 1)
 
     @staticmethod
-    def _time_context_candidates(text: str, date_start: int, date_end: int) -> list[str]:
+    def _time_context_candidates(
+        text: str, date_start: int, date_end: int
+    ) -> list[str]:
         before = text[:date_start]
         after = text[date_end:]
         return [after, before, f"{before} {after}"]
 
     def _remove_reply_schedule_time_text(self, text: str) -> str:
         cleaned = self._plain_schedule_reply_text(text)
-        cleaned = re.sub(r"(?:(\d{4})\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日", " ", cleaned)
+        cleaned = re.sub(
+            r"(?:(\d{4})\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日", " ", cleaned
+        )
         cleaned = re.sub(r"(?<!\d)\d{4}[-/]\d{1,2}[-/]\d{1,2}(?!\d)", " ", cleaned)
         cleaned = re.sub(
             r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
@@ -1723,7 +1901,9 @@ class MainWindow(QMainWindow):
         marker = rf"({marker_word})?"
         prefix = rf"(?:{marker_word}\s*)?"
         token = rf"{prefix}([01]?\d|2[0-3])(?:\s*(?:[:：]|点|时)\s*([0-5]?\d)?)?(?:\s*分)?\s*{marker}(?!\d)"
-        return re.compile(rf"(?<![\d/-]){token}\s*(?:-|~|到|至|to|until)\s*{token}", re.IGNORECASE)
+        return re.compile(
+            rf"(?<![\d/-]){token}\s*(?:-|~|到|至|to|until)\s*{token}", re.IGNORECASE
+        )
 
     @staticmethod
     def _reply_single_time_pattern() -> re.Pattern[str]:
@@ -1749,9 +1929,18 @@ class MainWindow(QMainWindow):
         except ValueError:
             return None
         time_context = f"{context} {marker or ''}".lower()
-        if any(token in time_context for token in ("下午", "晚上", "中午", "pm", "p.m.")) and 1 <= hour < 12:
+        if (
+            any(
+                token in time_context
+                for token in ("下午", "晚上", "中午", "pm", "p.m.")
+            )
+            and 1 <= hour < 12
+        ):
             hour += 12
-        elif any(token in time_context for token in ("上午", "早上", "am", "a.m.")) and hour == 12:
+        elif (
+            any(token in time_context for token in ("上午", "早上", "am", "a.m."))
+            and hour == 12
+        ):
             hour = 0
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             return None
@@ -2813,6 +3002,31 @@ class MainWindow(QMainWindow):
                         if isinstance(payload, dict)
                         else []
                     ),
+                    UI_TEXTS[self.language],
+                )
+            elif kind == "library":
+                payload = message.get("payload", {})
+                rooms = payload.get("rooms", []) if isinstance(payload, dict) else []
+                widget = LibraryResultWidget(
+                    self._sender_label(sender),
+                    self.ui("chat_library_card_title"),
+                    str(message.get("text", "")),
+                    (
+                        str(payload.get("query_time", ""))
+                        if isinstance(payload, dict)
+                        else ""
+                    ),
+                    (
+                        str(payload.get("query_location", ""))
+                        if isinstance(payload, dict)
+                        else ""
+                    ),
+                    (
+                        payload.get("query_capacity")
+                        if isinstance(payload, dict)
+                        else None
+                    ),
+                    rooms if isinstance(rooms, list) else [],
                     UI_TEXTS[self.language],
                 )
             else:

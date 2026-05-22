@@ -13,6 +13,7 @@ from frontend.api.client import api_client
 from frontend.components.chat_widget import ChatWidget
 from frontend.components.encyclopedia_widget import EncyclopediaWidget
 from frontend.components.hitl_dialog import HITLDialog
+from frontend.components.library_widget import LibraryWidget
 from frontend.components.materials_widget import MaterialsWidget
 from frontend.components.schedule_widget import ScheduleWidget
 from frontend.components.trace_widget import TraceWidget
@@ -56,6 +57,7 @@ class DashboardPage(QWidget):
         self.chat_widget = _safe_make(ChatWidget)
         self.schedule_widget = _safe_make(ScheduleWidget)
         self.encyclopedia_widget = _safe_make(EncyclopediaWidget)
+        self.library_widget = _safe_make(LibraryWidget)
         self.trace_widget = _safe_make(TraceWidget)
 
         if hasattr(self.chat_widget, "message_submitted"):
@@ -65,6 +67,7 @@ class DashboardPage(QWidget):
         self.center_tabs.addTab(self.chat_widget, "Chat")
         self.center_tabs.addTab(self.schedule_widget, "Schedule")
         self.center_tabs.addTab(self.encyclopedia_widget, "Encyclopedia")
+        self.center_tabs.addTab(self.library_widget, "Library")
 
         splitter = QSplitter(self)
         splitter.addWidget(self.materials_widget)
@@ -143,8 +146,10 @@ class DashboardPage(QWidget):
           - trace             → TraceWidget.update_trace()
           - route == "scheduler"    → 切换到 Schedule tab
           - route == "encyclopedia" → 切换到 Encyclopedia tab
+          - route == "library"      → 切换到 Library tab
           - ui_payload.schedule     → ScheduleWidget.update_schedule()
           - ui_payload.encyclopedia → EncyclopediaWidget.show_result()
+          - ui_payload.library      → LibraryWidget.update_rooms()
           - hitl_request != null    → 弹出 HITLDialog
         """
         if hasattr(self.chat_widget, "set_input_enabled"):
@@ -165,17 +170,22 @@ class DashboardPage(QWidget):
             self.center_tabs.setCurrentWidget(self.schedule_widget)
         elif route == "encyclopedia":
             self.center_tabs.setCurrentWidget(self.encyclopedia_widget)
+        elif route == "library":
+            self.center_tabs.setCurrentWidget(self.library_widget)
         elif route == "chat":
             self.center_tabs.setCurrentWidget(self.chat_widget)
 
         ui_payload = response.get("ui_payload") or {}
         schedule_data = ui_payload.get("schedule")
         encyclopedia_data = ui_payload.get("encyclopedia")
+        library_data = ui_payload.get("library")
 
         if schedule_data and hasattr(self.schedule_widget, "update_schedule"):
             self.schedule_widget.update_schedule(schedule_data)
         if encyclopedia_data and hasattr(self.encyclopedia_widget, "show_result"):
             self.encyclopedia_widget.show_result(encyclopedia_data)
+        if library_data and hasattr(self.library_widget, "update_rooms"):
+            self.library_widget.update_rooms(library_data)
 
         hitl_request = response.get("hitl_request")
         if isinstance(hitl_request, dict):
