@@ -462,6 +462,7 @@ QCalendarWidget#ScheduleCalendar QWidget {
 
 QCalendarWidget#ScheduleCalendar QToolButton {
     min-height: 30px;
+    max-height: 34px;
     border-radius: 10px;
     padding: 4px 10px;
     background: rgba(255, 255, 255, 0.06);
@@ -480,6 +481,18 @@ QCalendarWidget#ScheduleCalendar QAbstractItemView {
 
 QScrollArea {
     border: none;
+    background: transparent;
+}
+
+QScrollArea#SchedulePageScroll,
+QScrollArea#ScheduleDetailScroll,
+QWidget#SchedulePageContent,
+QWidget#ScheduleDetailContent {
+    background: transparent;
+}
+
+QScrollArea#SchedulePageScroll QWidget,
+QScrollArea#ScheduleDetailScroll QWidget {
     background: transparent;
 }
 

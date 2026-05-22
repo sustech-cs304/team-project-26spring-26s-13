@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+import re
 import sys
 from typing import Any
 from uuid import uuid4
@@ -428,6 +429,113 @@ class EncyclopediaResultWidget(QWidget):
         outer.addStretch(1)
 
 
+class LibraryResultWidget(QWidget):
+    def __init__(
+        self,
+        sender_label: str,
+        title: str,
+        intro: str,
+        query_time: str,
+        query_location: str,
+        query_capacity: Any,
+        rooms: list[dict[str, Any]],
+        texts: dict[str, str],
+    ) -> None:
+        super().__init__()
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 10)
+
+        card = QFrame()
+        card.setObjectName("AgentResultCard")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        sender_title = QLabel(sender_label)
+        sender_title.setObjectName("CardTitle")
+        type_chip = QLabel(texts["message_type_library"])
+        type_chip.setObjectName("MessageTypeChip")
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        intro_label = QLabel(intro)
+        intro_label.setObjectName("BodyText")
+        intro_label.setWordWrap(True)
+
+        capacity_text = (
+            texts["library_capacity_any"]
+            if not query_capacity
+            else texts["library_capacity_min"].format(capacity=query_capacity)
+        )
+        query_label = QLabel(
+            texts["chat_library_query_line"].format(
+                time=query_time or texts["library_time_any"],
+                location=query_location or texts["library_location_any"],
+                capacity=capacity_text,
+                count=len(rooms),
+            )
+        )
+        query_label.setObjectName("ResultQueryLabel")
+        query_label.setWordWrap(True)
+
+        header_row.addWidget(sender_title)
+        header_row.addWidget(type_chip)
+        header_row.addStretch(1)
+        layout.addLayout(header_row)
+        layout.addWidget(title_label)
+        if intro.strip():
+            layout.addWidget(intro_label)
+        layout.addWidget(query_label)
+
+        if rooms:
+            rooms_title = QLabel(texts["chat_library_rooms_section"])
+            rooms_title.setObjectName("CardTitle")
+            layout.addWidget(rooms_title)
+            for room in rooms[:5]:
+                room_card = QFrame()
+                room_card.setObjectName("ResultSubCard")
+                room_layout = QVBoxLayout(room_card)
+                room_layout.setContentsMargins(12, 10, 12, 10)
+                room_layout.setSpacing(4)
+
+                room_name = str(
+                    room.get("room_name") or room.get("room_id") or "Library room"
+                )
+                location = str(room.get("location") or "")
+                capacity = room.get("capacity") or texts["library_capacity_unknown"]
+                slots = room.get("time_slots") or []
+                slot_text = " · ".join(str(slot) for slot in slots)
+
+                room_title = QLabel(room_name)
+                room_title.setObjectName("SectionTitle")
+                room_meta = QLabel(
+                    texts["chat_library_room_meta"].format(
+                        location=location or texts["library_location_unknown"],
+                        capacity=capacity,
+                    )
+                )
+                room_meta.setObjectName("MutedText")
+                room_slots = QLabel(
+                    texts["chat_library_room_slots"].format(slots=slot_text)
+                )
+                room_slots.setObjectName("BodyText")
+                room_slots.setWordWrap(True)
+                room_layout.addWidget(room_title)
+                room_layout.addWidget(room_meta)
+                room_layout.addWidget(room_slots)
+                layout.addWidget(room_card)
+        else:
+            empty_label = QLabel(texts["chat_library_no_rooms"])
+            empty_label.setObjectName("MutedText")
+            empty_label.setWordWrap(True)
+            layout.addWidget(empty_label)
+
+        outer.addWidget(card, 0)
+        outer.addStretch(1)
+
+
 class TraceItem(QFrame):
     def __init__(
         self,
@@ -653,6 +761,7 @@ class MainWindow(QMainWindow):
         self.chat_messages: list[dict[str, Any]] = []
         self.trace_events: list[dict[str, str]] = []
         self.schedule_events: list[dict[str, str]] = []
+        self.frontend_schedule_events: list[dict[str, str]] = []
         self.conflicts: list[dict[str, str]] = []
         self.selected_schedule_day: date | None = None
         self._highlighted_schedule_dates: set[date] = set()
@@ -936,6 +1045,27 @@ class MainWindow(QMainWindow):
             },
         }
 
+    def _create_library_message(
+        self,
+        *,
+        intro: str,
+        query_time: str,
+        query_location: str,
+        query_capacity: Any,
+        rooms: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "kind": "library",
+            "sender": "agent",
+            "text": intro,
+            "payload": {
+                "query_time": query_time,
+                "query_location": query_location,
+                "query_capacity": query_capacity,
+                "rooms": list(rooms),
+            },
+        }
+
     def _build_localized_hitl_request(self) -> dict[str, Any]:
         return {}
 
@@ -953,7 +1083,10 @@ class MainWindow(QMainWindow):
             normalized_conflicts: list[dict[str, str]] = []
             if isinstance(events, list) and events:
                 normalized_events = self._normalize_schedule_events(events)
-                self.schedule_events = normalized_events
+                self.schedule_events = self._merge_schedule_event_lists(
+                    normalized_events,
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list) and conflicts:
                 normalized_conflicts = self._normalize_conflicts(conflicts)
                 self.conflicts = normalized_conflicts
@@ -977,6 +1110,19 @@ class MainWindow(QMainWindow):
                     query=str(encyclopedia_payload.get("query", "")).strip(),
                     answer_markdown=answer_markdown or self.local(ENCYCLOPEDIA_RESULTS["default"]["answer"]),
                     citations=[str(item) for item in citations] if isinstance(citations, list) else [],
+                )
+            )
+
+        library_payload = ui_payload.get("library")
+        if isinstance(library_payload, dict):
+            rooms = library_payload.get("rooms", [])
+            cards.append(
+                self._create_library_message(
+                    intro=self.ui("library_card_intro"),
+                    query_time=str(library_payload.get("query_time") or ""),
+                    query_location=str(library_payload.get("query_location") or ""),
+                    query_capacity=library_payload.get("query_capacity"),
+                    rooms=rooms if isinstance(rooms, list) else [],
                 )
             )
 
@@ -1191,6 +1337,31 @@ class MainWindow(QMainWindow):
             )
         return normalized
 
+    def _merge_schedule_event_lists(
+        self,
+        *event_lists: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        merged: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for events in event_lists:
+            for item in events:
+                if not isinstance(item, dict):
+                    continue
+                event = self._normalize_schedule_events([item])[0]
+                key = self._schedule_event_key(event)
+                if not key[0] or not key[1] or key in seen:
+                    continue
+                seen.add(key)
+                merged.append(event)
+        return sorted(merged, key=event_sort_key)
+
+    @staticmethod
+    def _schedule_event_key(event: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str(event.get("title", "")).strip().lower(),
+            str(event.get("time", "")).strip(),
+        )
+
     def _normalize_conflicts(self, conflicts: list[dict[str, Any]]) -> list[dict[str, str]]:
         normalized = []
         for item in conflicts:
@@ -1201,6 +1372,422 @@ class MainWindow(QMainWindow):
                 }
             )
         return normalized
+
+    def _add_frontend_schedule_event_from_reply(self, text: str) -> dict[str, str] | None:
+        event = self._extract_schedule_event_from_reply(text)
+        if event is None:
+            return None
+
+        already_present = self._schedule_event_key(event) in {
+            self._schedule_event_key(existing)
+            for existing in self.schedule_events
+        }
+        self.frontend_schedule_events = self._merge_schedule_event_lists(
+            self.frontend_schedule_events,
+            [event],
+        )
+        self.schedule_events = self._merge_schedule_event_lists(
+            self.schedule_events,
+            [event],
+        )
+
+        event_days = sorted(events_by_date([event]))
+        if event_days:
+            self.selected_schedule_day = event_days[0]
+        self._refresh_schedule_views()
+        return None if already_present else event
+
+    def _extract_schedule_event_from_reply(self, text: str) -> dict[str, str] | None:
+        plain_text = self._plain_schedule_reply_text(text)
+        if not plain_text or not self._looks_like_schedule_add_reply(plain_text):
+            return None
+
+        title = self._extract_reply_schedule_title(plain_text)
+        schedule_time = self._extract_reply_schedule_time(plain_text)
+        if not title or not schedule_time:
+            return None
+
+        return {
+            "title": title,
+            "time": schedule_time,
+            "source": self.local({"en": "Local TODO", "zh": "本地计划"}),
+            "detail": self._extract_reply_schedule_detail(plain_text),
+        }
+
+    @staticmethod
+    def _plain_schedule_reply_text(text: str) -> str:
+        plain = re.sub(r"[*_`#>]", "", text or "")
+        plain = plain.replace("（", "(").replace("）", ")")
+        plain = plain.replace("：", ":")
+        plain = plain.replace("－", "-").replace("—", "-").replace("–", "-")
+        return "\n".join(line.strip() for line in plain.splitlines() if line.strip())
+
+    @staticmethod
+    def _looks_like_schedule_add_reply(text: str) -> bool:
+        lower_text = text.lower()
+        negative_markers = (
+            "没有加入",
+            "未加入",
+            "没有添加",
+            "未添加",
+            "添加失败",
+            "保存失败",
+            "not added",
+            "failed to add",
+            "could not add",
+        )
+        if any(marker in lower_text or marker in text for marker in negative_markers):
+            return False
+        chinese_add = any(
+            marker in text
+            for marker in ("加入日程", "加入到日程", "添加到日程", "添加进日程", "新增日程")
+        )
+        chinese_saved = any(word in text for word in ("日程", "日历", "安排")) and any(
+            marker in text
+            for marker in ("已保存", "保存成功", "已安排", "已添加", "添加成功", "已新增", "已为你", "已经", "成功")
+        )
+        english_add = "schedule" in lower_text and any(
+            marker in lower_text
+            for marker in ("added", "saved", "scheduled", "created")
+        )
+        english_calendar = "calendar" in lower_text and any(
+            marker in lower_text
+            for marker in ("added", "saved", "scheduled", "created")
+        )
+        return chinese_add or chinese_saved or english_add or english_calendar
+
+    def _extract_reply_schedule_title(self, text: str) -> str:
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(r"(?:事件名称|名称|标题|title|name)\s*:\s*(.+)", line, re.IGNORECASE)
+            if label_match:
+                title = self._clean_reply_field(label_match.group(1))
+                if title:
+                    return title
+
+        quoted_match = re.search(r"[\"'“”‘’](.{2,80}?)[\"'“”‘’].*(?:日程|日历|schedule|calendar)", text, re.IGNORECASE)
+        if quoted_match:
+            title = self._clean_reply_field(quoted_match.group(1))
+            if title:
+                return title
+
+        patterns = [
+            r"将\s*(.+?)\s*(?:加入|添加|保存|安排).*?(?:日程|日历)",
+            r"把\s*(.+?)\s*(?:加入|添加|保存|安排).*?(?:日程|日历)",
+            r"(?:日程|日历)\s*(?:已)?(?:添加|新增|保存|安排)\s*:?\s*(.+)",
+            r"为你(?:安排|添加|新增)(?:了)?\s*(.+)",
+            r"(?:已安排|安排了|已添加|添加了)\s*(.+)",
+            r"(?:added|saved|scheduled)\s+(.+?)\s+(?:to|in)\s+(?:the\s+)?(?:schedule|calendar)",
+            r"(?:scheduled|created)\s+(.+?)\s+(?:for|on)\s+",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                title = self._cleanup_inferred_schedule_title(
+                    self._remove_reply_schedule_time_text(match.group(1))
+                )
+                if title:
+                    return title
+        return self._infer_reply_schedule_title_from_time_context(text)
+
+    def _infer_reply_schedule_title_from_time_context(self, text: str) -> str:
+        candidates = self._schedule_reply_lines(text) + [text]
+        for candidate in candidates:
+            if not self._parse_reply_schedule_time(candidate):
+                continue
+            title = self._cleanup_inferred_schedule_title(
+                self._remove_reply_schedule_time_text(candidate)
+            )
+            if title:
+                return title
+        return ""
+
+    def _extract_reply_schedule_time(self, text: str) -> str:
+        candidates: list[str] = []
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(r"(?:时间|日期|开始时间|time|when)\s*:\s*(.+)", line, re.IGNORECASE)
+            if label_match:
+                candidates.append(label_match.group(1))
+        candidates.append(text)
+
+        for candidate in candidates:
+            schedule_time = self._parse_reply_schedule_time(candidate)
+            if schedule_time:
+                return schedule_time
+        return ""
+
+    def _extract_reply_schedule_detail(self, text: str) -> str:
+        detail_parts: list[str] = []
+        for line in self._schedule_reply_lines(text):
+            label_match = re.search(r"(?:地点|位置|location|详情|备注|说明|detail|note)\s*:\s*(.+)", line, re.IGNORECASE)
+            if label_match:
+                value = self._clean_reply_field(label_match.group(1))
+                if value:
+                    detail_parts.append(value)
+        if detail_parts:
+            return " | ".join(detail_parts)
+        return self.local({"en": "Added from the chat response.", "zh": "从聊天回复自动识别。"})
+
+    @staticmethod
+    def _schedule_reply_lines(text: str) -> list[str]:
+        lines: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            line = re.sub(r"^[\-•\s]+", "", line)
+            if line:
+                lines.append(line)
+        return lines
+
+    @staticmethod
+    def _clean_reply_field(value: str) -> str:
+        cleaned = re.sub(r"\s+", " ", value or "").strip()
+        cleaned = cleaned.strip(" -:;!！。.'\"")
+        return cleaned
+
+    def _cleanup_inferred_schedule_title(self, value: str) -> str:
+        cleaned = self._clean_reply_field(value)
+        cleaned = re.sub(r"[✅📌]+", " ", cleaned)
+        cleaned = re.sub(
+            r"(?:事件详情|事件|详情|名称|标题|时间|日期|状态|备注|说明|地点|位置)\s*:?",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"(?:日程已添加|日历已添加|已成功|成功|我已经|已经|已将|已把|已为你|已添加|添加成功|已新增|帮你|为你|给你|请|将|把|并)",
+            " ",
+            cleaned,
+        )
+        cleaned = re.sub(
+            r"(?:加入到?日程|添加到?日程|添加进日程|新增日程|保存到日程|安排到日程|安排进日程|加入日历|添加到?日历)",
+            " ",
+            cleaned,
+        )
+        cleaned = re.sub(r"(?:加入|添加|新增|保存|安排在?|已保存|保存成功|日程|日历)", " ", cleaned)
+        cleaned = re.sub(
+            r"\b(?:added|saved|scheduled|created|calendar|schedule|event|for|on|from|to|at|in|your|the|a|an)\b",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:;!！。，,.'\"的在到")
+        return cleaned
+
+    def _parse_reply_schedule_time(self, text: str) -> str:
+        normalized = self._plain_schedule_reply_text(text)
+        date_info = self._reply_schedule_base_day(normalized)
+        if date_info is None:
+            return ""
+
+        base_day, date_start, date_end = date_info
+        parsed_time = self._parse_reply_time_from_contexts(
+            self._time_context_candidates(normalized, date_start, date_end),
+            base_day,
+        )
+        return parsed_time or base_day.isoformat()
+
+    def _parse_reply_time_from_contexts(self, contexts: list[str], base_day: date) -> str:
+        for context in contexts:
+            range_match = self._reply_time_range_pattern().search(context)
+            if range_match:
+                start = self._build_reply_datetime(
+                    base_day,
+                    range_match.group(1),
+                    range_match.group(2),
+                    context,
+                    range_match.group(3),
+                )
+                end = self._build_reply_datetime(
+                    base_day,
+                    range_match.group(4),
+                    range_match.group(5),
+                    context,
+                    range_match.group(6),
+                )
+                if start is None or end is None:
+                    continue
+                if end <= start:
+                    end += timedelta(days=1)
+                return f"{start.isoformat()}~{end.isoformat()}"
+
+        for context in contexts:
+            time_match = self._reply_single_time_pattern().search(context)
+            if not time_match:
+                continue
+            start = self._build_reply_datetime(
+                base_day,
+                time_match.group(1),
+                time_match.group(2),
+                context,
+                time_match.group(3),
+            )
+            if start is None:
+                continue
+            return start.isoformat()
+        return ""
+
+    def _reply_schedule_base_day(self, text: str) -> tuple[date, int, int] | None:
+        chinese_match = re.search(r"(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日", text)
+        if chinese_match:
+            parsed = self._safe_date(
+                int(chinese_match.group(1) or date.today().year),
+                int(chinese_match.group(2)),
+                int(chinese_match.group(3)),
+            )
+            if parsed:
+                return parsed, chinese_match.start(), chinese_match.end()
+
+        iso_match = re.search(r"(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)", text)
+        if iso_match:
+            parsed = self._safe_date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+            if parsed:
+                return parsed, iso_match.start(), iso_match.end()
+
+        month_pattern = (
+            r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+        )
+        english_match = re.search(
+            rf"\b{month_pattern}\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,\s*(\d{{4}}))?\b",
+            text,
+            re.IGNORECASE,
+        )
+        if english_match:
+            month = self._english_month_number(english_match.group(1))
+            parsed = self._safe_date(int(english_match.group(3) or date.today().year), month, int(english_match.group(2)))
+            if parsed:
+                return parsed, english_match.start(), english_match.end()
+
+        english_reverse_match = re.search(
+            rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{month_pattern}(?:\s+(\d{{4}}))?\b",
+            text,
+            re.IGNORECASE,
+        )
+        if english_reverse_match:
+            month = self._english_month_number(english_reverse_match.group(2))
+            parsed = self._safe_date(
+                int(english_reverse_match.group(3) or date.today().year),
+                month,
+                int(english_reverse_match.group(1)),
+            )
+            if parsed:
+                return parsed, english_reverse_match.start(), english_reverse_match.end()
+
+        relative_markers = [
+            ("day after tomorrow", 2),
+            ("tomorrow", 1),
+            ("today", 0),
+            ("大后天", 3),
+            ("后天", 2),
+            ("明天", 1),
+            ("明日", 1),
+            ("今天", 0),
+            ("今日", 0),
+        ]
+        for marker, offset in relative_markers:
+            match = re.search(re.escape(marker), text, re.IGNORECASE)
+            if match:
+                return date.today() + timedelta(days=offset), match.start(), match.end()
+        return None
+
+    @staticmethod
+    def _safe_date(year: int, month: int, day: int) -> date | None:
+        try:
+            return date(year, month, day)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _english_month_number(month_text: str) -> int:
+        month_key = month_text[:3].lower()
+        return {
+            "jan": 1,
+            "feb": 2,
+            "mar": 3,
+            "apr": 4,
+            "may": 5,
+            "jun": 6,
+            "jul": 7,
+            "aug": 8,
+            "sep": 9,
+            "oct": 10,
+            "nov": 11,
+            "dec": 12,
+        }.get(month_key, 1)
+
+    @staticmethod
+    def _time_context_candidates(text: str, date_start: int, date_end: int) -> list[str]:
+        before = text[:date_start]
+        after = text[date_end:]
+        return [after, before, f"{before} {after}"]
+
+    def _remove_reply_schedule_time_text(self, text: str) -> str:
+        cleaned = self._plain_schedule_reply_text(text)
+        cleaned = re.sub(r"(?:(\d{4})\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日", " ", cleaned)
+        cleaned = re.sub(r"(?<!\d)\d{4}[-/]\d{1,2}[-/]\d{1,2}(?!\d)", " ", cleaned)
+        cleaned = re.sub(
+            r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+            r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?\b",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{4})?\b",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"(?:周[一二三四五六日天]|星期[一二三四五六日天]|today|tomorrow|day after tomorrow|今天|今日|明天|明日|后天|大后天)",
+            " ",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = self._reply_time_range_pattern().sub(" ", cleaned)
+        cleaned = self._reply_single_time_pattern().sub(" ", cleaned)
+        return cleaned
+
+    @staticmethod
+    def _reply_time_range_pattern() -> re.Pattern[str]:
+        marker_word = r"(?:上午|早上|下午|晚上|中午|am|pm|a\.m\.|p\.m\.)"
+        marker = rf"({marker_word})?"
+        prefix = rf"(?:{marker_word}\s*)?"
+        token = rf"{prefix}([01]?\d|2[0-3])(?:\s*(?:[:：]|点|时)\s*([0-5]?\d)?)?(?:\s*分)?\s*{marker}(?!\d)"
+        return re.compile(rf"(?<![\d/-]){token}\s*(?:-|~|到|至|to|until)\s*{token}", re.IGNORECASE)
+
+    @staticmethod
+    def _reply_single_time_pattern() -> re.Pattern[str]:
+        marker_word = r"(?:上午|早上|下午|晚上|中午|am|pm|a\.m\.|p\.m\.)"
+        marker = rf"({marker_word})?"
+        prefix = rf"(?:{marker_word}\s*)?"
+        return re.compile(
+            rf"(?<![\d/-]){prefix}([01]?\d|2[0-3])(?:\s*(?:[:：]|点|时)\s*([0-5]?\d)?)?(?:\s*分)?\s*{marker}(?!\d)",
+            re.IGNORECASE,
+        )
+
+    @staticmethod
+    def _build_reply_datetime(
+        base_day: date,
+        hour_text: str,
+        minute_text: str | None,
+        context: str,
+        marker: str | None = None,
+    ) -> datetime | None:
+        try:
+            hour = int(hour_text)
+            minute = int(minute_text or 0)
+        except ValueError:
+            return None
+        time_context = f"{context} {marker or ''}".lower()
+        if any(token in time_context for token in ("下午", "晚上", "中午", "pm", "p.m.")) and 1 <= hour < 12:
+            hour += 12
+        elif any(token in time_context for token in ("上午", "早上", "am", "a.m.")) and hour == 12:
+            hour = 0
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        return datetime(base_day.year, base_day.month, base_day.day, hour, minute)
 
     def _normalize_hitl_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -1306,6 +1893,7 @@ class MainWindow(QMainWindow):
 
     def _reset_dynamic_state(self) -> None:
         self._initialize_default_conversations()
+        self.frontend_schedule_events = []
         self.schedule_events = self._build_localized_schedule_events()
         self.conflicts = self._build_localized_conflicts()
         self.selected_schedule_day = None
@@ -1969,7 +2557,18 @@ class MainWindow(QMainWindow):
 
     def _build_schedule_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
+        outer_layout = QVBoxLayout(tab)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        schedule_scroll = QScrollArea()
+        schedule_scroll.setObjectName("SchedulePageScroll")
+        schedule_scroll.setWidgetResizable(True)
+        schedule_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        schedule_content = QWidget()
+        schedule_content.setObjectName("SchedulePageContent")
+        layout = QVBoxLayout(schedule_content)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(14)
 
@@ -2005,7 +2604,7 @@ class MainWindow(QMainWindow):
 
         calendar_panel = QFrame()
         calendar_panel.setObjectName("PanelCard")
-        calendar_panel.setMaximumHeight(360)
+        calendar_panel.setMinimumHeight(500)
         calendar_layout = QVBoxLayout(calendar_panel)
         calendar_layout.setContentsMargins(16, 16, 16, 16)
         calendar_layout.setSpacing(10)
@@ -2017,7 +2616,7 @@ class MainWindow(QMainWindow):
         self.schedule_calendar.setGridVisible(True)
         self.schedule_calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
         self.schedule_calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
-        self.schedule_calendar.setMinimumHeight(260)
+        self.schedule_calendar.setMinimumHeight(420)
         self.schedule_calendar.selectionChanged.connect(self._on_schedule_selection_changed)
         calendar_layout.addWidget(calendar_title)
         calendar_layout.addWidget(self.schedule_calendar, 1)
@@ -2030,9 +2629,11 @@ class MainWindow(QMainWindow):
         detail_layout.setSpacing(0)
 
         detail_scroll = QScrollArea()
+        detail_scroll.setObjectName("ScheduleDetailScroll")
         detail_scroll.setWidgetResizable(True)
         detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
         detail_content = QWidget()
+        detail_content.setObjectName("ScheduleDetailContent")
         detail_content_layout = QVBoxLayout(detail_content)
         detail_content_layout.setContentsMargins(0, 0, 0, 0)
         detail_content_layout.setSpacing(14)
@@ -2091,6 +2692,8 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(header)
         layout.addLayout(content, 1)
+        schedule_scroll.setWidget(schedule_content)
+        outer_layout.addWidget(schedule_scroll, 1)
         self._refresh_schedule_views()
         return tab
 
@@ -2166,6 +2769,19 @@ class MainWindow(QMainWindow):
                     str(payload.get("query", "")) if isinstance(payload, dict) else "",
                     str(payload.get("answer_markdown", "")) if isinstance(payload, dict) else "",
                     [str(item) for item in payload.get("citations", [])] if isinstance(payload, dict) else [],
+                    UI_TEXTS[self.language],
+                )
+            elif kind == "library":
+                payload = message.get("payload", {})
+                rooms = payload.get("rooms", []) if isinstance(payload, dict) else []
+                widget = LibraryResultWidget(
+                    self._sender_label(sender),
+                    self.ui("chat_library_card_title"),
+                    str(message.get("text", "")),
+                    str(payload.get("query_time", "")) if isinstance(payload, dict) else "",
+                    str(payload.get("query_location", "")) if isinstance(payload, dict) else "",
+                    payload.get("query_capacity") if isinstance(payload, dict) else None,
+                    rooms if isinstance(rooms, list) else [],
                     UI_TEXTS[self.language],
                 )
             else:
@@ -2583,7 +3199,10 @@ class MainWindow(QMainWindow):
             events = local_schedule.get("events", [])
             conflicts = local_schedule.get("conflicts", [])
             if isinstance(events, list):
-                self.schedule_events = self._normalize_schedule_events(events)
+                self.schedule_events = self._merge_schedule_event_lists(
+                    self._normalize_schedule_events(events),
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
             self._refresh_schedule_views()
@@ -2615,6 +3234,15 @@ class MainWindow(QMainWindow):
         hitl_request = response.get("hitl_request")
         pending_hitl_request = self._normalize_hitl_request(hitl_request) if isinstance(hitl_request, dict) else None
         extra_messages = self._build_response_cards(response)
+        inferred_schedule_event = self._add_frontend_schedule_event_from_reply(assistant_text)
+        if inferred_schedule_event and not any(item.get("kind") == "schedule" for item in extra_messages):
+            extra_messages.append(
+                self._create_schedule_message(
+                    intro=self.ui("schedule_card_intro"),
+                    events=[inferred_schedule_event],
+                    conflicts=self.conflicts,
+                )
+            )
         self._queue_response_stream(
             assistant_text=assistant_text,
             trace_items=trace_items,
@@ -2912,7 +3540,10 @@ class MainWindow(QMainWindow):
             events = payload.get("events", [])
             conflicts = payload.get("conflicts", [])
             if isinstance(events, list):
-                self.schedule_events = self._normalize_schedule_events(events)
+                self.schedule_events = self._merge_schedule_event_lists(
+                    self._normalize_schedule_events(events),
+                    self.frontend_schedule_events,
+                )
             if isinstance(conflicts, list):
                 self.conflicts = self._normalize_conflicts(conflicts)
             self._refresh_schedule_views()

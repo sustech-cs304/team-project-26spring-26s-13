@@ -59,7 +59,18 @@ class ScheduleWidget(QWidget):
           ├── QCalendarWidget（日历，高亮有安排的日期）
           └── QListWidget（选中日期的每日安排）
         """
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        schedule_scroll = QScrollArea()
+        schedule_scroll.setObjectName("SchedulePageScroll")
+        schedule_scroll.setWidgetResizable(True)
+        schedule_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        schedule_content = QWidget()
+        schedule_content.setObjectName("SchedulePageContent")
+        layout = QVBoxLayout(schedule_content)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
@@ -81,7 +92,7 @@ class ScheduleWidget(QWidget):
 
         calendar_card = QFrame()
         calendar_card.setObjectName("PanelCard")
-        calendar_card.setMaximumHeight(360)
+        calendar_card.setMinimumHeight(500)
         calendar_layout = QVBoxLayout(calendar_card)
         calendar_layout.setContentsMargins(14, 14, 14, 14)
         self._calendar = QCalendarWidget()
@@ -89,7 +100,7 @@ class ScheduleWidget(QWidget):
         self._calendar.setGridVisible(True)
         self._calendar.setFirstDayOfWeek(Qt.DayOfWeek.Monday)
         self._calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
-        self._calendar.setMinimumHeight(260)
+        self._calendar.setMinimumHeight(420)
         self._calendar.selectionChanged.connect(self._on_date_selected)
         calendar_layout.addWidget(self._calendar)
 
@@ -101,9 +112,11 @@ class ScheduleWidget(QWidget):
         detail_layout.setSpacing(0)
 
         detail_scroll = QScrollArea()
+        detail_scroll.setObjectName("ScheduleDetailScroll")
         detail_scroll.setWidgetResizable(True)
         detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
         detail_content = QWidget()
+        detail_content.setObjectName("ScheduleDetailContent")
         detail_content_layout = QVBoxLayout(detail_content)
         detail_content_layout.setContentsMargins(0, 0, 0, 0)
         detail_content_layout.setSpacing(14)
@@ -146,6 +159,8 @@ class ScheduleWidget(QWidget):
 
         layout.addLayout(header)
         layout.addLayout(body, 1)
+        schedule_scroll.setWidget(schedule_content)
+        outer_layout.addWidget(schedule_scroll, 1)
         self.update_schedule(self._schedule_data)
 
     def update_schedule(self, schedule_data: dict) -> None:

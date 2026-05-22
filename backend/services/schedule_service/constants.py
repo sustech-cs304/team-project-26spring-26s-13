@@ -396,6 +396,32 @@ def _manual_cas_browser_login_sync(
                     stderr=subprocess.DEVNULL,
                 )
 
+            try:
+                WebDriverWait(driver, 10).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+            except Exception:
+                pass
+
+            try:
+                driver.execute_script(
+                    """
+                    const candidates = [
+                      document.getElementById('su-recaptcha-btn'),
+                      document.querySelector('#su-recaptcha .captcha-btn-text'),
+                      document.querySelector('#su-recaptcha .captcha-btn-icon'),
+                      document.getElementById('su-recaptcha'),
+                    ].filter(Boolean);
+                    if (candidates.length > 0) {
+                      candidates[0].click();
+                      return true;
+                    }
+                    return false;
+                    """
+                )
+            except Exception:
+                pass
+
             submit_clicked = False
             deadline = time.monotonic() + wait_seconds
             while time.monotonic() < deadline:
