@@ -122,7 +122,6 @@ class BackendApiClient:
         mime_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
         with open(file_path, "rb") as file_obj:
             file_bytes = file_obj.read()
-        # 上传要跑 OCR / LLM 分类 / 向量化，耗时可能达数分钟
         upload_timeout = max(self.timeout, 300.0)
         payload = self._request(
             "POST",
@@ -137,6 +136,40 @@ class BackendApiClient:
         )
         if not isinstance(payload, dict):
             raise BackendApiError("Upload response must be a JSON object.")
+        return payload
+
+    def sync_blackboard_materials(self) -> list[dict[str, Any]]:
+        sync_timeout = max(self.timeout, 300.0)
+        payload = self._request(
+            "POST",
+            "/api/materials/sync-blackboard",
+            json_body={},
+            timeout=sync_timeout,
+        )
+        if not isinstance(payload, list):
+            raise BackendApiError("Sync response must be a JSON array.")
+        return [item for item in payload if isinstance(item, dict)]
+
+    def start_sync_blackboard_job(self) -> dict[str, Any]:
+        payload = self._request(
+            "POST", "/api/materials/sync-blackboard/jobs", json_body={}
+        )
+        if not isinstance(payload, dict):
+            raise BackendApiError("Job start response must be a JSON object.")
+        return payload
+
+    def get_sync_blackboard_job(self, job_id: str) -> dict[str, Any]:
+        payload = self._request("GET", f"/api/materials/sync-blackboard/jobs/{job_id}")
+        if not isinstance(payload, dict):
+            raise BackendApiError("Job status response must be a JSON object.")
+        return payload
+
+    def cancel_sync_blackboard_job(self, job_id: str) -> dict[str, Any]:
+        payload = self._request(
+            "POST", f"/api/materials/sync-blackboard/jobs/{job_id}/cancel", json_body={}
+        )
+        if not isinstance(payload, dict):
+            raise BackendApiError("Job cancel response must be a JSON object.")
         return payload
 
     def run_agent(

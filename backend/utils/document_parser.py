@@ -73,6 +73,7 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
     import fitz  # type: ignore[import-not-found]
 
     ocr_engine = None
+    ocr_disabled = False
 
     doc = fitz.open(file_path)
     pages_text: list[str] = []
@@ -82,15 +83,25 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
             pages_text.append(t)
             continue
 
-        if ocr_engine is None:
-            from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
+        if ocr_disabled:
+            continue
 
-            ocr_engine = PaddleOcrEngine()
+        if ocr_engine is None:
+            try:
+                from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
+
+                ocr_engine = PaddleOcrEngine()
+            except Exception:
+                ocr_disabled = True
+                continue
 
         mat = fitz.Matrix(2, 2)
         pix = page.get_pixmap(matrix=mat, alpha=False)
 
-        import numpy as np  # type: ignore[import-not-found]
+        try:
+            import numpy as np  # type: ignore[import-not-found]
+        except Exception:
+            continue
 
         channels = 3
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
@@ -239,12 +250,17 @@ def _ocr_image_bytes(blob: bytes) -> str:
 
 
 def _ocr_pil_image(img) -> str:
-    from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
-
-    import numpy as np  # type: ignore[import-not-found]
+    try:
+        from backend.utils.OCR.paddle_ocr import PaddleOcrEngine
+        import numpy as np  # type: ignore[import-not-found]
+    except Exception:
+        return ""
 
     arr = np.asarray(img)[:, :, ::-1]
-    return (PaddleOcrEngine().ocr_image_array(arr) or "").strip()
+    try:
+        return (PaddleOcrEngine().ocr_image_array(arr) or "").strip()
+    except Exception:
+        return ""
 
 
 def _normalize_text(text: str) -> str:

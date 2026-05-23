@@ -42,3 +42,25 @@ class MaterialInfo(BaseModel):
     subject_type: SubjectType  # LLM 分类结果
     vectorized: bool  # 向量化是否完成
     uploaded_at: datetime
+
+
+BlackboardSyncJobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
+
+
+class BlackboardSyncJobStartResponse(BaseModel):
+    job_id: str
+
+
+class BlackboardSyncJobInfo(BaseModel):
+    job_id: str
+    status: BlackboardSyncJobStatus
+    stage: str
+    processed: int = 0
+    total: int | None = None
+    added: int = 0
+    skipped_existing: int = 0
+    skipped_unsupported: int = 0
+    failed: int = 0
+    message: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None

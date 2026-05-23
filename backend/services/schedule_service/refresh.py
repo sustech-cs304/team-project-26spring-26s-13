@@ -44,12 +44,14 @@ async def refresh(db, user) -> ScheduleData:
                 if not t.start_time:
                     continue
                 end_at = t.end_time or (t.start_time + timedelta(hours=1))
-                personal_tasks.append({
-                    "title": t.title,
-                    "start_at": t.start_time.isoformat(),
-                    "end_at": end_at.isoformat(),
-                    "location": t.location,
-                })
+                personal_tasks.append(
+                    {
+                        "title": t.title,
+                        "start_at": t.start_time.isoformat(),
+                        "end_at": end_at.isoformat(),
+                        "location": t.location,
+                    }
+                )
         except Exception:
             pass
 

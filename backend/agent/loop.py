@@ -987,11 +987,7 @@ def _build_message_history(
     message_history: list[ModelRequest | ModelResponse] = []
     for item in history_messages:
         if item.role == "user":
-            message_history.append(
-                ModelRequest(
-                    parts=[UserPromptPart(item.content)], timestamp=item.timestamp
-                )
-            )
+            message_history.append(ModelRequest(parts=[UserPromptPart(item.content)]))
         elif item.role == "assistant":
             message_history.append(
                 ModelResponse(

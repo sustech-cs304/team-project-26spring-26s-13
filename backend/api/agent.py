@@ -88,13 +88,17 @@ async def agent_run_stream(
     )
 
     async def stream_gen():
+        ping_every_seconds = 2.0
         while True:
             if task.done() and queue.empty():
                 break
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.2)
-            except TimeoutError:
+                event = await asyncio.wait_for(queue.get(), timeout=ping_every_seconds)
+            except asyncio.TimeoutError:
+                yield json.dumps({"event": "ping"}, ensure_ascii=False) + "\n"
                 continue
+            except asyncio.CancelledError:
+                break
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
         try:
