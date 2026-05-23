@@ -16,7 +16,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    export PATH="/c/Users/25380/anaconda3/envs/software-engineering:/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
+                    export PATH="/cygdrive/c/Users/25380/anaconda3/envs/software-engineering:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
                     echo "Using Python: $(which python)"
                     python --version
                     pip install -r requirements-dev.txt lizard
@@ -27,7 +27,7 @@ pipeline {
         stage('Lint') {
             steps {
                 sh '''
-                    export PATH="/c/Users/25380/anaconda3/envs/software-engineering:/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
+                    export PATH="/cygdrive/c/Users/25380/anaconda3/envs/software-engineering:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
                     mkdir -p reports
                     black --check . 2>&1 | tee reports/black.log || true
                     flake8 . 2>&1 | tee reports/flake8.log || true
@@ -38,11 +38,10 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    export PATH="/c/Users/25380/anaconda3/envs/software-engineering:/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
+                    export PATH="/cygdrive/c/Users/25380/anaconda3/envs/software-engineering:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
                     python -m pytest tests/ \
                         --cov=backend \
                         --cov-report=xml:reports/coverage.xml \
-                        --cov-report=term:reports/coverage-term.txt \
                         --cov-report=html:reports/coverage-html \
                         --junitxml=reports/junit.xml \
                         -v 2>&1 | tee reports/test-output.log
@@ -53,7 +52,7 @@ pipeline {
         stage('Metrics & Documentation') {
             steps {
                 sh '''
-                    export PATH="/c/Users/25380/anaconda3/envs/software-engineering:/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
+                    export PATH="/cygdrive/c/Users/25380/anaconda3/envs/software-engineering:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Scripts:/cygdrive/c/Users/25380/anaconda3/envs/software-engineering/Library/bin:$PATH"
                     python scripts/generate_metrics.py
                 '''
             }
