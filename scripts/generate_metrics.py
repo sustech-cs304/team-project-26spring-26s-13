@@ -31,8 +31,18 @@ def count_loc_and_files():
     py_files = 0
     by_dir = {}
 
-    skip_prefixes = (".git", ".pytest_cache", "__pycache__", "node_modules",
-                     ".venv", "venv", "env", "data", "reports", ".mypy_cache")
+    skip_prefixes = (
+        ".git",
+        ".pytest_cache",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        "env",
+        "data",
+        "reports",
+        ".mypy_cache",
+    )
     for root, _dirs, files in os.walk(str(PROJECT_ROOT)):
         # Skip hidden, virtual env, cache dirs
         rel = os.path.relpath(root, str(PROJECT_ROOT))
@@ -41,7 +51,9 @@ def count_loc_and_files():
             continue
 
         for f in files:
-            if not f.endswith((".py", ".js", ".ts", ".html", ".css", ".sql", ".yml", ".yaml")):
+            if not f.endswith(
+                (".py", ".js", ".ts", ".html", ".css", ".sql", ".yml", ".yaml")
+            ):
                 continue
             fpath = os.path.join(root, f)
             try:
@@ -78,7 +90,13 @@ def count_dependencies():
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    pkg = line.split(">=")[0].split("==")[0].split("<")[0].split(";")[0].strip()
+                    pkg = (
+                        line.split(">=")[0]
+                        .split("==")[0]
+                        .split("<")[0]
+                        .split(";")[0]
+                        .strip()
+                    )
                     if pkg:
                         deps.add(pkg.lower())
     return {
@@ -93,7 +111,11 @@ def compute_cyclomatic_complexity():
     try:
         output = subprocess.run(
             [sys.executable, "-m", "lizard", str(BACKEND_DIR)],
-            capture_output=True, text=True, timeout=60, encoding="utf-8", errors="ignore",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            encoding="utf-8",
+            errors="ignore",
             cwd=str(PROJECT_ROOT),
         )
         if output.stdout.strip():
@@ -125,7 +147,13 @@ def compute_cyclomatic_complexity():
             for fn in funcs:
                 cc = fn.get("cyclomatic_complexity", 1)
                 total_cc += cc
-                worst.append({"name": fn.get("name", ""), "file": fn.get("filename", ""), "cc": cc})
+                worst.append(
+                    {
+                        "name": fn.get("name", ""),
+                        "file": fn.get("filename", ""),
+                        "cc": cc,
+                    }
+                )
             worst.sort(key=lambda x: x["cc"], reverse=True)
             result["total_functions"] = len(funcs)
             result["total_complexity"] = total_cc
@@ -142,11 +170,18 @@ def count_test_cases():
     try:
         output = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q"],
-            capture_output=True, text=True, timeout=60, encoding="utf-8", errors="ignore",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            encoding="utf-8",
+            errors="ignore",
             cwd=str(PROJECT_ROOT),
         )
-        last_line = (output.stdout or "").strip().split("\n")[-1] if output.stdout else ""
+        last_line = (
+            (output.stdout or "").strip().split("\n")[-1] if output.stdout else ""
+        )
         import re
+
         m = re.search(r"(\d+)\s+tests?\s+collected", last_line)
         if m:
             result["total"] = int(m.group(1))
@@ -194,7 +229,9 @@ footer {{ margin-top: 3rem; font-size: 0.85rem; color: #95a5a6; text-align: cent
 <table>
 <tr><th>Directory</th><th>LOC</th></tr>
 """
-    for d, loc in sorted(metrics["loc"]["loc_by_directory"].items(), key=lambda x: -x[1]):
+    for d, loc in sorted(
+        metrics["loc"]["loc_by_directory"].items(), key=lambda x: -x[1]
+    ):
         html += f"<tr><td>{d}</td><td>{loc:,}</td></tr>\n"
 
     html += f"""
