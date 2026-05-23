@@ -6,6 +6,8 @@ pipeline {
         DOCKER_IMAGE = 'kabukimonosakura/student-productivity-agent'
         // 使用 Jenkins 构建编号作为镜像 Tag
         DOCKER_TAG   = "${env.BUILD_NUMBER}"
+        // 使用 conda 环境的 Python（避免用 base 环境从源码编译 numpy）
+        PATH = "C:\\Users\\25380\\anaconda3\\envs\\software-engineering;C:\\Users\\25380\\anaconda3\\envs\\software-engineering\\Scripts;C:\\Users\\25380\\anaconda3\\envs\\software-engineering\\Library\\bin;${env.PATH}"
     }
 
     stages {
@@ -16,10 +18,10 @@ pipeline {
             }
         }
 
-        // 第二阶段：安装依赖
+        // 第二阶段：安装开发依赖（conda 环境已有主依赖，只装 dev 和 lizard）
         stage('Install Dependencies') {
             steps {
-                sh 'pip install -r requirements.txt -r requirements-dev.txt lizard'
+                sh 'pip install -r requirements-dev.txt lizard'
             }
         }
 
