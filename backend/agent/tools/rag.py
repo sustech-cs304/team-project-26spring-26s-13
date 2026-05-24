@@ -128,55 +128,59 @@ async def query_rag(
     keyword: str = "",
 ) -> str:
     """
-    在向量数据库中检索与 query 相关的文档片段，用于增强 LLM 回答。
+    在知识库中检索与 query 相关的文档片段。
+
+    检索策略（自动路由）：
+      1. 文件名精确匹配 —— 从 query 和 keyword 中提取关键词查倒排索引，
+         命中后只在匹配文件中向量检索。适合"温铁军的材料""中国城镇化.pdf"。
+      2. 学科剪枝向量检索 —— 在相关学科 collection 中语义搜索。
+      3. 全局向量检索 —— 学科不明确时查全部 collection。
+      4. 关键词字面搜索 —— 向量检索无果时的最后兜底。
 
     Args:
-        query:        用户的原始问题（或经过改写的检索 query），用于向量语义搜索
-        subject_hint: 学科分类，建议不确定时传 "unknown" 查全部集合。可选值：
-                      "cs" | "electronics" | "materials" | "math" | "physics" |
-                      "chemistry" | "biology" | "geography" | "philosophy" | "history" |
-                      "literature" | "politics" | "finance" | "statistics" | "ocean" |
-                      "economics" | "law" | "management" | "medicine" | "policy" |
-                      "other" | "unknown"
-        keyword:      从问题中提取的核心关键词（1-8 字，例如"贝加尔湖"、"挂科"、
-                      "binary tree"），用于向量检索无果时的关键词兜底匹配。
-                      中文问题**必须**填写；英文问题可留空。
+        query:        用户的原始问题，用于向量语义搜索和关键词提取
+        subject_hint: 学科分类，不确定时传 "unknown"
+        keyword:      【重要】用户明确提到的人名（温铁军、费孝通）、书名、
+                      文件名关键词（中国城镇化、CS302、课件），请务必填写。
+                      这将触发精确文件匹配，速度极快。中文问题强烈建议填写。
 
     Returns:
-        JSON 字符串：{"chunks": [...], "collections_queried": [...]}
-        chunks 按 distance 升序；若向量检索无果，会回退到关键词兜底。
+        JSON：{"chunks": [...], "collections_queried": [...], "mode": "..."}
+        mode 取值：single_file（命中单一文件，可深度解读）|
+                  multi_file（多文件拼合）| fallback（降级结果）
     """
+    import re as _re
     from backend.services.material_service import search_by_file_name
 
     results: list[dict] = []
 
-    search_keyword = keyword.strip() or query.strip()
-    candidate_ids: list[str] = search_by_file_name(search_keyword, limit=30)
+    search_keyword = (keyword or "").strip()
+    if not search_keyword:
+        search_keyword = _extract_search_keyword(query)
 
-    if candidate_ids:
-        try:
-            results = chromadb_module.query_collections_by_file_ids(
-                query, candidate_ids
-            )
-        except Exception:
-            results = []
-        if results:
-            return json.dumps(
-                {
-                    "chunks": [
-                        {
-                            "text": r["text"],
-                            "file_name": r["file_name"],
-                            "subject_type": r["subject_type"],
-                            "distance": r["distance"],
-                        }
-                        for r in results
-                    ],
-                    "collections_queried": ["filename_index"],
-                    "search_method": "filename_lookup",
-                },
-                ensure_ascii=False,
-            )
+    if search_keyword:
+        candidate_ids: list[str] = search_by_file_name(search_keyword, limit=30)
+        if candidate_ids:
+            try:
+                results = chromadb_module.query_collections_by_file_ids(
+                    query,
+                    candidate_ids,
+                    n_results=10,
+                )
+            except Exception:
+                results = []
+            if results:
+                unique_files = len({r["file_id"] for r in results})
+                mode = "single_file" if unique_files <= 2 else "multi_file"
+                return json.dumps(
+                    {
+                        "chunks": _format_chunks(results),
+                        "collections_queried": ["filename_index"],
+                        "search_method": "filename_lookup",
+                        "mode": mode,
+                    },
+                    ensure_ascii=False,
+                )
 
     collections = rag_service.resolve_collections(subject_hint)
     try:
@@ -193,27 +197,53 @@ async def query_rag(
         except Exception:
             results = []
 
-    if not results and keyword.strip():
-        try:
-            results = chromadb_module.keyword_search(keyword.strip())
-        except Exception:
-            results = []
+    if not results:
+        fallback_kw = (keyword or "").strip() or _extract_search_keyword(query)
+        if fallback_kw:
+            try:
+                results = chromadb_module.keyword_search(fallback_kw)
+            except Exception:
+                results = []
 
+    mode = "fallback" if not results else "multi_file"
     return json.dumps(
         {
-            "chunks": [
-                {
-                    "text": r["text"],
-                    "file_name": r["file_name"],
-                    "subject_type": r["subject_type"],
-                    "distance": r["distance"],
-                }
-                for r in results
-            ],
+            "chunks": _format_chunks(results),
             "collections_queried": collections,
+            "mode": mode,
         },
         ensure_ascii=False,
     )
+
+
+def _extract_search_keyword(text: str) -> str:
+    import re as _re
+
+    t = (text or "").strip()
+    if not t:
+        return ""
+    cjk_names = _re.findall(r"[\u4e00-\u9fff]{2,3}(?:[·•.][\u4e00-\u9fff]{1,3})?", t)
+    if cjk_names:
+        return " ".join(cjk_names[:3])
+    codes = _re.findall(r"[A-Z]{2,5}\d{2,4}", t)
+    if codes:
+        return codes[0]
+    en_words = _re.findall(r"[A-Z][a-z]{2,}", t)
+    if en_words:
+        return " ".join(en_words[:3])
+    return t[:16]
+
+
+def _format_chunks(results: list[dict]) -> list[dict]:
+    return [
+        {
+            "text": r["text"],
+            "file_name": r["file_name"],
+            "subject_type": r["subject_type"],
+            "distance": r["distance"],
+        }
+        for r in results
+    ]
 
 
 @agent.tool
