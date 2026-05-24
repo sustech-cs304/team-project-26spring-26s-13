@@ -4178,6 +4178,11 @@ class MainWindow(QMainWindow):
                     stage="fetching",
                     processed=0,
                     total="?",
+                    added=0,
+                    skipped_existing=0,
+                    skipped_large=0,
+                    skipped_unsup=0,
+                    failed=0,
                     message="",
                 )
             )
@@ -4226,12 +4231,22 @@ class MainWindow(QMainWindow):
 
             dialog = getattr(self, "_bb_sync_dialog", None)
             if isinstance(dialog, BlackboardSyncDialog):
+                added = int(payload.get("added") or 0)
+                se = int(payload.get("skipped_existing") or 0)
+                sl = int(payload.get("skipped_large") or 0)
+                su = int(payload.get("skipped_unsupported") or 0)
+                fc = int(payload.get("failed") or 0)
                 dialog.set_status(
                     self.ui(
                         "sync_blackboard_progress_body",
                         stage=stage,
                         processed=processed,
                         total=total if total is not None else "?",
+                        added=added,
+                        skipped_existing=se,
+                        skipped_large=sl,
+                        skipped_unsup=su,
+                        failed=fc,
                         message=message,
                     )
                 )
@@ -4283,21 +4298,87 @@ class MainWindow(QMainWindow):
                     dialog.close()
 
                 added = int(payload.get("added") or 0)
+                skipped_large = int(payload.get("skipped_large") or 0)
                 total_raw = payload.get("total")
                 try:
                     total_int = int(total_raw) if total_raw is not None else None
                 except Exception:
                     total_int = None
 
+                msg = str(message or "").strip()
+
                 if status == "done":
-                    QMessageBox.information(
-                        self,
-                        self.ui("sync_blackboard_done_title"),
-                        self.ui(
-                            "sync_blackboard_done_body",
-                            count=added,
-                        ),
-                    )
+                    msg_parts = msg.split(" | ") if msg else []
+                    skipped_dl_names = ""
+                    skipped_unsup_names = ""
+                    failed_part_names = ""
+                    for part in msg_parts:
+                        part = part.strip()
+                        if part.startswith("skipped_dl:"):
+                            skipped_dl_names = part[len("skipped_dl:") :]
+                        elif part.startswith("skipped_unsupported:"):
+                            skipped_unsup_names = part[len("skipped_unsupported:") :]
+                        elif part.startswith("failed:"):
+                            failed_part_names = part[len("failed:") :]
+
+                    all_skipped_text = []
+                    if skipped_dl_names:
+                        all_skipped_text.append(
+                            self.ui("sync_bb_skipped_dl_label", names=skipped_dl_names)
+                        )
+                    if skipped_unsup_names:
+                        all_skipped_text.append(
+                            self.ui(
+                                "sync_bb_skipped_unsup_label", names=skipped_unsup_names
+                            )
+                        )
+                    if failed_part_names:
+                        all_skipped_text.append(
+                            self.ui("sync_bb_failed_label", names=failed_part_names)
+                        )
+                    skipped_block = "\n".join(all_skipped_text)
+
+                    if added == 0 and all_skipped_text:
+                        skipped_count = skipped_large
+                        QMessageBox.warning(
+                            self,
+                            self.ui("sync_blackboard_all_skipped_title"),
+                            self.ui(
+                                "sync_blackboard_all_skipped_body",
+                                skipped_count=skipped_count,
+                                names=skipped_block,
+                            ),
+                        )
+                    elif all_skipped_text:
+                        QMessageBox.information(
+                            self,
+                            self.ui("sync_blackboard_done_title"),
+                            self.ui(
+                                "sync_blackboard_done_with_skipped_body",
+                                count=added,
+                                skipped_details=skipped_block,
+                            ),
+                        )
+                    elif skipped_large > 0:
+                        QMessageBox.information(
+                            self,
+                            self.ui("sync_blackboard_skipped_title"),
+                            self.ui(
+                                "sync_blackboard_skipped_body",
+                                count=added,
+                                skipped_count=skipped_large,
+                                names=msg,
+                            ),
+                        )
+                    else:
+                        QMessageBox.information(
+                            self,
+                            self.ui("sync_blackboard_done_title"),
+                            self.ui(
+                                "sync_blackboard_done_body",
+                                count=added,
+                            ),
+                        )
                 elif status == "cancelled":
                     QMessageBox.information(
                         self,

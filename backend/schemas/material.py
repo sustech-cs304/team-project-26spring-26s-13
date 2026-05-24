@@ -60,6 +60,7 @@ class BlackboardSyncJobInfo(BaseModel):
     added: int = 0
     skipped_existing: int = 0
     skipped_unsupported: int = 0
+    skipped_large: int = 0
     failed: int = 0
     message: str | None = None
     started_at: datetime | None = None

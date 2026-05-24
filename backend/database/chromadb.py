@@ -243,6 +243,73 @@ def query_collections(
     return all_results
 
 
+def query_collections_by_file_ids(
+    query_text: str,
+    file_ids: list[str],
+    n_results: int = 5,
+) -> list[dict]:
+    results: list[dict] = []
+    seen_texts: set[str] = set()
+    for fid in file_ids:
+        collection = _guess_collection_for_file_id(fid)
+        if collection is None:
+            continue
+        if collection.count() == 0:
+            continue
+        try:
+            result = collection.query(
+                query_texts=[query_text],
+                n_results=min(n_results, collection.count()),
+                where={"file_id": fid},
+            )
+        except Exception:
+            continue
+        if not result["documents"] or not result["documents"][0]:
+            continue
+        documents = result["documents"][0]
+        metadatas = (
+            result["metadatas"][0] if result["metadatas"] else [{}] * len(documents)
+        )
+        distances = (
+            result["distances"][0] if result["distances"] else [0.0] * len(documents)
+        )
+        for doc, meta, dist in zip(documents, metadatas, distances):
+            dedup_key = doc[:80]
+            if dedup_key in seen_texts:
+                continue
+            seen_texts.add(dedup_key)
+            results.append(
+                {
+                    "text": doc,
+                    "file_id": meta.get("file_id", fid),
+                    "file_name": meta.get("file_name", ""),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "subject_type": meta.get("subject_type", ""),
+                    "distance": dist,
+                }
+            )
+    results.sort(key=lambda c: c["distance"])
+    return results
+
+
+def _guess_collection_for_file_id(file_id: str) -> Collection | None:
+    for st in ALL_SUBJECT_TYPES:
+        collection = get_collection(st)
+        if collection.count() == 0:
+            continue
+        try:
+            result = collection.get(
+                where={"file_id": file_id},
+                limit=1,
+                include=["metadatas"],
+            )
+            if result["metadatas"]:
+                return collection
+        except Exception:
+            continue
+    return None
+
+
 def keyword_search(
     keyword: str,
     subject_types: list[SubjectType] | None = None,
