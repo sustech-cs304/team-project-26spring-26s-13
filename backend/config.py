@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # ── RAG ─────────────────────────────────────────────
     CHUNK_SIZE: int = 512  # characters per vector chunk
     CHUNK_OVERLAP: int = 64
+
+    # ── Blackboard Sync ─────────────────────────────────
+    TARGET_SEMESTER_YEAR: str = "2026"
+    TARGET_SEMESTER_TERMS: list[str] = ["SP", "Spring", "spring", "春"]
     # Collections that always get queried regardless of subject routing
     RAG_ALWAYS_QUERY: list[str] = ["other"]
 

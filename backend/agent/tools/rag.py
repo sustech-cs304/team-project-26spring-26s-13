@@ -146,14 +146,44 @@ async def query_rag(
         JSON 字符串：{"chunks": [...], "collections_queried": [...]}
         chunks 按 distance 升序；若向量检索无果，会回退到关键词兜底。
     """
-    # 第一步：按学科剪枝做向量语义检索
+    from backend.services.material_service import search_by_file_name
+
+    results: list[dict] = []
+
+    search_keyword = keyword.strip() or query.strip()
+    candidate_ids: list[str] = search_by_file_name(search_keyword, limit=30)
+
+    if candidate_ids:
+        try:
+            results = chromadb_module.query_collections_by_file_ids(
+                query, candidate_ids
+            )
+        except Exception:
+            results = []
+        if results:
+            return json.dumps(
+                {
+                    "chunks": [
+                        {
+                            "text": r["text"],
+                            "file_name": r["file_name"],
+                            "subject_type": r["subject_type"],
+                            "distance": r["distance"],
+                        }
+                        for r in results
+                    ],
+                    "collections_queried": ["filename_index"],
+                    "search_method": "filename_lookup",
+                },
+                ensure_ascii=False,
+            )
+
     collections = rag_service.resolve_collections(subject_hint)
     try:
         results = chromadb_module.query_collections(query, collections)
     except Exception:
         results = []
 
-    # 第二步兜底：猜错学科 → 扩展到全部集合再向量检索一次
     if not results and subject_hint != "unknown":
         from backend.database.chromadb import ALL_SUBJECT_TYPES
 
@@ -163,8 +193,6 @@ async def query_rag(
         except Exception:
             results = []
 
-    # 第三步兜底：向量检索仍无果 → 用 keyword 做字面子串匹配
-    # 这是中文场景的关键兜底（默认英文 embedding 对中文语义差）
     if not results and keyword.strip():
         try:
             results = chromadb_module.keyword_search(keyword.strip())

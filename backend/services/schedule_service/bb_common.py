@@ -2,7 +2,7 @@ from datetime import datetime
 import re
 import secrets
 import time
-from urllib.parse import unquote_plus, urljoin
+from urllib.parse import unquote, unquote_plus, urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -113,6 +113,8 @@ _COURSE_ID_RE = re.compile(
     r"(?:\bcourse_id=|\"courseId\"\s*:\s*['\"]|\'courseId\'\s*:\s*['\"]|\bcourseId\s*:\s*['\"])(_\d+_\d+)",
     re.I,
 )
+_COURSE_ID_FROM_MENU_TOGGLE_RE = re.compile(r"\bcourseMenuToggle_(\d+_\d+)\b", re.I)
+_COURSE_ID_FROM_GROUP_EXPANDER_RE = re.compile(r"\bgroupExpanderLink_(\d+_\d+)\b", re.I)
 _COURSE_LAUNCHER_ID_RE = re.compile(
     r"/webapps/blackboard/execute/launcher\?[^'\"\s<>]*\btype=Course\b[^'\"\s<>]*\bid=(_\d+_\d+)",
     re.I,
@@ -131,12 +133,32 @@ _UPLOAD_ASSIGNMENT_URL_RE = re.compile(
 )
 
 
+def _maybe_unquote_url(url: str) -> str:
+    if not url:
+        return url
+    if "%3F" in url or "%3D" in url or "%26" in url:
+        try:
+            decoded = unquote(url)
+            if decoded != url:
+                return decoded
+        except Exception:
+            pass
+    return url
+
+
 def _extract_course_ids(text: str) -> set[str]:
     raw = text or ""
     ids = {match.group(1) for match in _COURSE_ID_RE.finditer(raw)}
     ids |= {match.group(1) for match in _COURSE_LAUNCHER_ID_RE.finditer(raw)}
     ids |= {match.group(1) for match in _COURSE_TYPE_ID_RE.finditer(raw)}
     ids |= {match.group(1) for match in _DATA_COURSE_ID_RE.finditer(raw)}
+    ids |= {
+        f"_{match.group(1)}" for match in _COURSE_ID_FROM_MENU_TOGGLE_RE.finditer(raw)
+    }
+    ids |= {
+        f"_{match.group(1)}"
+        for match in _COURSE_ID_FROM_GROUP_EXPANDER_RE.finditer(raw)
+    }
 
     try:
         decoded_text = unquote_plus(raw)
@@ -149,6 +171,14 @@ def _extract_course_ids(text: str) -> set[str]:
         }
         ids |= {match.group(1) for match in _COURSE_TYPE_ID_RE.finditer(decoded_text)}
         ids |= {match.group(1) for match in _DATA_COURSE_ID_RE.finditer(decoded_text)}
+        ids |= {
+            f"_{match.group(1)}"
+            for match in _COURSE_ID_FROM_MENU_TOGGLE_RE.finditer(decoded_text)
+        }
+        ids |= {
+            f"_{match.group(1)}"
+            for match in _COURSE_ID_FROM_GROUP_EXPANDER_RE.finditer(decoded_text)
+        }
 
     return ids
 
@@ -266,7 +296,14 @@ async def _crawl_portal_upload_urls(
     def enqueue(next_url: str, referer: str | None) -> None:
         if not next_url or not next_url.startswith(BLACKBOARD_BASE):
             return
+        next_url = _maybe_unquote_url(next_url)
         next_url = next_url.split("#", 1)[0]
+        if (
+            "caret.jsp" in next_url
+            or "email/caret" in next_url
+            or "/email/" in next_url
+        ):
+            return
         if next_url in visited or next_url in queued:
             return
         queued.add(next_url)
@@ -384,6 +421,42 @@ async def _crawl_portal_upload_urls(
                 continue
 
     return seen_course_ids, upload_urls
+
+
+async def _discover_course_ids_via_my_courses(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+) -> set[str]:
+    course_ids: set[str] = set()
+    urls_to_try = [
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_2_1&tabId=_2_1",
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_3_1",
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_4_1",
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_5_1",
+        f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_6_1",
+        f"{BLACKBOARD_BASE}/webapps/blackboard/content/listContent.jsp?course_id=_8015_1&content_id=_588490_1&mode=reset",
+    ]
+    for url in urls_to_try:
+        try:
+            response = await _request_with_retry(
+                client, "GET", url, headers=headers, label="bb.my_courses"
+            )
+            if response.status_code >= 400:
+                logger.debug(
+                    "bb.my_courses: status=%d url=%s",
+                    response.status_code,
+                    str(response.url),
+                )
+                continue
+            ids = _extract_course_ids(response.text)
+            if ids:
+                course_ids |= ids
+                logger.info(
+                    "bb.my_courses: found=%d new_ids from url=%s", len(ids), url
+                )
+        except Exception:
+            pass
+    return course_ids
 
 
 async def _crawl_course_upload_urls(

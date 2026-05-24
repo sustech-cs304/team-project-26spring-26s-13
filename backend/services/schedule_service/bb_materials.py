@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import date
+import gc
 import json
 import os
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import re
 from urllib.parse import unquote, urljoin
 
@@ -13,11 +14,22 @@ from bs4 import BeautifulSoup
 from .bb_auth import _blackboard_authenticated_session
 from .bb_common import (
     _crawl_portal_upload_urls,
+    _discover_course_ids_via_my_courses,
     _extract_course_ids,
     _extract_course_name,
+    _maybe_unquote_url,
 )
 from .http_utils import _request_with_retry
-from .log_utils import _bb_sink_dump, _bb_sink_var, _ensure_file_logging, logger
+from .log_utils import (
+    _bb_sink_dump,
+    _bb_sink_var,
+    _dump_failure_snapshot,
+    _ensure_file_logging,
+    _trace_filter,
+    get_trace_id,
+    is_diag_mode,
+    logger,
+)
 from .service_config import BLACKBOARD_BASE
 
 _COURSE_LISTCONTENT_REFERER_CACHE: dict[str, str] = {}
@@ -140,6 +152,8 @@ class BlackboardMaterial:
     source_url: str
     download_url: str
     file_bytes: bytes
+    skipped_reason: str = ""
+    _tmp_path: str = ""
 
 
 _CONTENT_FILE_VIEW_URL_RE = re.compile(
@@ -193,6 +207,86 @@ def _is_cms_course_path(url: str) -> bool:
         return "/webapps/cmsmain/webui/courses/" in httpx.URL(url).path
     except Exception:
         return False
+
+
+def _check_course_semester_prune(
+    course_id: str,
+    urls: set[str],
+    course_name: str = "",
+) -> str:
+    target_year = os.getenv("BB_TARGET_SEMESTER_YEAR", "2026")
+    target_terms: set[str] = set(
+        t
+        for t in os.getenv("BB_TARGET_SEMESTER_TERMS", "SP,Spring,spring,春").split(",")
+        if t
+    )
+
+    def _extract_semester(text: str) -> tuple[str, str] | None:
+        m = re.search(
+            r"-(\d{4})(SP|Spring|spring|春|FA|Fall|fall|秋|SU|Summer|summer|夏)?(?:[/\-]|$)",
+            text,
+        )
+        if m:
+            return m.group(1), m.group(2) or ""
+        m = re.search(
+            r"(\d{4})\s*(SP|Spring|spring|春|FA|Fall|fall|秋|SU|Summer|summer|夏)", text
+        )
+        if m:
+            return m.group(1), m.group(2)
+        return None
+
+    for url in urls:
+        parsed: httpx.URL | None = None
+        try:
+            parsed = httpx.URL(url)
+        except Exception:
+            continue
+        path = parsed.path
+        sem = _extract_semester(path)
+        if not sem:
+            query = (
+                parsed.query.decode()
+                if isinstance(parsed.query, bytes)
+                else (parsed.query or "")
+            )
+            sem = _extract_semester(query)
+        if not sem:
+            continue
+        year, term = sem
+        if year == target_year and term in target_terms:
+            return ""
+        reason = f"semester={year}{term} (target={target_year}{','.join(sorted(target_terms))}) url={path[:120]}"
+        logger.warning(
+            "bb.materials: prune_semester course_id=%s %s trace=%s",
+            course_id,
+            reason,
+            get_trace_id(),
+        )
+        return reason
+
+    if course_name:
+        sem = _extract_semester(course_name)
+        if sem:
+            year, term = sem
+            if year == target_year and term in target_terms:
+                return ""
+            reason = f"semester={year}{term} from_name course_name={course_name[:80]}"
+            logger.warning(
+                "bb.materials: prune_semester course_id=%s %s trace=%s",
+                course_id,
+                reason,
+                get_trace_id(),
+            )
+            return reason
+
+    reason = "semester=unknown no semester info in any URL or course_name"
+    logger.warning(
+        "bb.materials: prune_semester course_id=%s %s trace=%s",
+        course_id,
+        reason,
+        get_trace_id(),
+    )
+    return reason
 
 
 def _ensure_course_id_param(url: str, course_id: str) -> str:
@@ -401,6 +495,7 @@ async def _fetch_cms_course_file_material(
         content_id = str(parsed.params.get("ctxMenuXythosId") or "").strip()
         file_name = PurePosixPath(unquote(parsed.path)).name
     except Exception:
+        logger.debug("bb.material_cms: parse_url_failed url=%s", page_url)
         if strict:
             raise BlackboardMaterialFetchError("parse_url", page_url)
         return None
@@ -412,6 +507,9 @@ async def _fetch_cms_course_file_material(
             course_id = course_id
 
     if not course_id:
+        logger.debug(
+            "bb.material_cms: missing_course_id url=%s file=%s", page_url, file_name
+        )
         if strict:
             raise BlackboardMaterialFetchError(
                 "missing_course_id",
@@ -638,6 +736,13 @@ async def _fetch_cms_course_file_material(
             )
             menu_response = menu
         except httpx.HTTPError as exc:
+            logger.debug(
+                "bb.material_cms: menu_req_fail url=%s file=%s course=%s err=%s",
+                page_url,
+                file_name,
+                course_id,
+                type(exc).__name__,
+            )
             if strict:
                 raise BlackboardMaterialFetchError(
                     "menu_request_failed",
@@ -650,6 +755,13 @@ async def _fetch_cms_course_file_material(
             menu = None
 
         if menu is None or menu.status_code >= 400:
+            logger.debug(
+                "bb.material_cms: menu_status_fail url=%s file=%s course=%s status=%s",
+                page_url,
+                file_name,
+                course_id,
+                menu_response.status_code if menu_response else None,
+            )
             if strict:
                 raise BlackboardMaterialFetchError(
                     "menu_http_status",
@@ -738,6 +850,16 @@ async def _fetch_cms_course_file_material(
                 break
 
         if download is None:
+            logger.debug(
+                "bb.material_cms: menu_no_dl url=%s file=%s course=%s "
+                "extracted=%d candidates=%d ref=%s",
+                page_url,
+                file_name,
+                course_id,
+                len(extracted_urls),
+                len(candidates),
+                menu_referer[:80] if menu_referer else "none",
+            )
             if strict:
                 raise BlackboardMaterialFetchError(
                     "menu_no_download_url",
@@ -751,11 +873,71 @@ async def _fetch_cms_course_file_material(
                 )
             return None
 
+    if download is None:
+        logger.debug(
+            "bb.material_cms: no_download url=%s file=%s course=%s cid=%s",
+            page_url,
+            file_name,
+            course_id,
+            content_id,
+        )
+        _dump_failure_snapshot(
+            label="cms_all_failed",
+            url=page_url,
+            status_code=None,
+            response_headers=None,
+            response_body=None,
+            extra={
+                "file_name": file_name,
+                "course_id": course_id,
+                "content_id": content_id,
+            },
+        )
+        return None
+
+    content_bytes = download.content
+    if content_bytes:
+        head = content_bytes[:128]
+        if head.lstrip()[:1] == b"<" and (
+            b"<html" in head[:256].lower() or b"<!doctype" in head[:256].lower()
+        ):
+            logger.debug(
+                "bb.material_cms: html_not_file url=%s file=%s course=%s status=%d ct=%s",
+                page_url,
+                file_name,
+                course_id,
+                download.status_code,
+                download.headers.get("Content-Type", ""),
+            )
+            _dump_failure_snapshot(
+                label="cms_html_body",
+                url=page_url,
+                status_code=download.status_code,
+                response_headers=dict(download.headers),
+                response_body=content_bytes,
+            )
+            return None
+
     file_type = (
         (download.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
     )
     actual_name = _filename_from_response(download, title)
+    preferred_name = (file_name or "").strip()
+    if preferred_name:
+        lowered = actual_name.lower()
+        if (
+            lowered.startswith("xid-")
+            or (("." not in actual_name) and ("." in preferred_name))
+            or actual_name == content_id
+        ):
+            actual_name = preferred_name
 
+    logger.debug(
+        "bb.material_cms: success file=%s course=%s dl_url=%s",
+        actual_name,
+        course_id,
+        download_url,
+    )
     return BlackboardMaterial(
         title=title or actual_name,
         course_id=course_id,
@@ -921,6 +1103,19 @@ async def _crawl_course_material_urls(
                 enqueue(absolute_url, final_url)
                 continue
 
+    _prune_reason = _check_course_semester_prune(
+        course_id,
+        set(material_urls.keys()),
+        course_name_cache.get(course_id, "") if course_name_cache else "",
+    )
+    if _prune_reason:
+        return {}
+
+    logger.debug(
+        "bb.materials: crawl_done course_id=%s material_urls=%d",
+        course_id,
+        len(material_urls),
+    )
     return material_urls
 
 
@@ -931,9 +1126,9 @@ async def fetch_blackboard_course_materials(
     course_keyword: str | None = None,
     keyword: str | None = None,
     limit: int | None = None,
-) -> list[BlackboardMaterial]:
+) -> tuple[list[BlackboardMaterial], list[BlackboardMaterial]]:
     _ensure_file_logging()
-    logger.debug("bb.materials: enter account=%s", cas_account)
+    logger.debug("bb.materials: enter account=%s trace=%s", cas_account, get_trace_id())
 
     if not cas_account or not cas_password:
         logger.error(
@@ -955,11 +1150,21 @@ async def fetch_blackboard_course_materials(
             base_url = str(response.url)
             course_ids = _extract_course_ids(response.text)
 
+            extra_tabs = [
+                f"{BLACKBOARD_BASE}/webapps/portal/execute/tabs/tabAction?tab_tab_group_id=_{i}_1"
+                for i in range(1, 7)
+            ]
+            safe_tab_url = _maybe_unquote_url(tab_url)
+            safe_default_tab_url = _maybe_unquote_url(default_tab_url)
             portal_course_ids, _portal_upload_urls = await _crawl_portal_upload_urls(
                 client,
-                [tab_url, default_tab_url],
+                list(dict.fromkeys([safe_tab_url, safe_default_tab_url, *extra_tabs])),
             )
             course_ids |= portal_course_ids
+
+            my_courses_ids = await _discover_course_ids_via_my_courses(client, headers)
+            course_ids |= my_courses_ids
+            logger.debug("bb.materials: my_courses_ids=%s", sorted(my_courses_ids))
 
             course_name_cache: dict[str, str] = {}
             material_url_map: dict[str, str] = {}
@@ -973,7 +1178,9 @@ async def fetch_blackboard_course_materials(
                 add_seed(u, base_url)
             for u in _extract_cms_course_file_urls(response.text, base_url):
                 add_seed(u, base_url)
+            logger.info("bb.materials: course_ids=%s", sorted(course_ids))
             for course_id in sorted(course_ids):
+                logger.debug("bb.materials: crawling course_id=%s", course_id)
                 found = await _crawl_course_material_urls(
                     client, course_id, tab_url, course_name_cache
                 )
@@ -1044,6 +1251,21 @@ async def fetch_blackboard_course_materials(
                     return None
 
                 if _looks_like_file_download(page):
+                    content_bytes = page.content
+                    if content_bytes:
+                        head = content_bytes[:128]
+                        if head.lstrip()[:1] == b"<" and (
+                            b"<html" in head[:256].lower()
+                            or b"<!doctype" in head[:256].lower()
+                        ):
+                            logger.debug(
+                                "bb.materials: html_not_file fetch_one url=%s "
+                                "status=%d ct=%s",
+                                page_url,
+                                page.status_code,
+                                page.headers.get("Content-Type", ""),
+                            )
+                            return None
                     try:
                         page_params = httpx.URL(page_url).params
                         course_id = str(page_params.get("course_id") or "").strip()
@@ -1154,7 +1376,7 @@ async def fetch_blackboard_course_materials(
             course_kw = (course_keyword or "").strip().lower()
             file_kw = (keyword or "").strip().lower()
 
-            def _score(u: str) -> tuple[int, int, str]:
+            def _score(u: str) -> tuple[int, object, str]:
                 lu = u.lower()
                 score = 0
                 if file_kw and file_kw in lu:
@@ -1163,7 +1385,9 @@ async def fetch_blackboard_course_materials(
                     score -= 1
                 is_cms = 1 if _is_cms_course_path(u) else 0
                 score -= is_cms
-                return (score, len(lu), lu)
+                if "2026sp" in lu or "2026-spring" in lu:
+                    score -= 2
+                return (score, (0 if is_cms else 1), lu)
 
             material_pages.sort(key=_score)
 
@@ -1192,13 +1416,13 @@ async def fetch_blackboard_course_materials(
             if configured_scan_limit > 0:
                 scan_limit = configured_scan_limit
             elif desired is None:
-                scan_limit = 600
+                scan_limit = 9999
             elif file_kw or course_kw:
-                scan_limit = max(120, scan_limit * 10)
-                scan_limit = min(scan_limit, 600)
+                scan_limit = max(120, scan_limit * 4)
+                scan_limit = min(scan_limit, 9999)
             else:
-                scan_limit = max(80, scan_limit * 4)
-                scan_limit = min(scan_limit, 240)
+                scan_limit = max(100, scan_limit * 3)
+                scan_limit = min(scan_limit, 9999)
 
             material_pages = material_pages[:scan_limit]
 
@@ -1207,26 +1431,232 @@ async def fetch_blackboard_course_materials(
                 concurrency = int(os.getenv("BB_MATERIAL_CONCURRENCY", "10").strip())
             except Exception:
                 concurrency = 10
-            concurrency = max(1, min(concurrency, 25))
+            concurrency = max(1, min(concurrency, 5))
             sem = asyncio.Semaphore(concurrency)
+            batch_size = max(8, concurrency * 2)
+
+            _MAX_FILE_MB = 40
+
+            def _extract_url_filename(url: str) -> str:
+                try:
+                    path = httpx.URL(url).path
+                    name = path.rstrip("/").rsplit("/", 1)[-1]
+                    name = unquote(name)
+                    if name and "." in name and not name.startswith("xid-"):
+                        return name
+                    qp = httpx.URL(url).params
+                    xid = qp.get("ctxMenuXythosId") or qp.get("content_id") or ""
+                    if xid:
+                        return xid
+                except Exception:
+                    pass
+                return url.rsplit("/", 1)[-1][:120]
+
+            _SKIP_EXTENSIONS = {
+                ".mp4",
+                ".mov",
+                ".avi",
+                ".mkv",
+                ".webm",
+                ".flv",
+                ".zip",
+                ".rar",
+                ".7z",
+                ".tar",
+                ".gz",
+                ".bz2",
+                ".iso",
+                ".exe",
+                ".msi",
+                ".dmg",
+                ".app",
+                ".bin",
+                ".dat",
+                ".dll",
+            }
+
+            def _has_skip_extension(url: str) -> bool:
+                try:
+                    path = httpx.URL(url).path
+                    name = unquote(path.rstrip("/").rsplit("/", 1)[-1])
+                    dot = name.rfind(".")
+                    if dot >= 0:
+                        ext = name[dot:].lower()
+                        return ext in _SKIP_EXTENSIONS
+                except Exception:
+                    pass
+                return False
 
             async def _bound_fetch(u: str) -> BlackboardMaterial | None:
                 async with sem:
-                    return await fetch_one(u)
+                    fname = _extract_url_filename(u)
+                    if _has_skip_extension(u):
+                        logger.debug(
+                            "bb.materials: skip_ext url=%s name=%s",
+                            u,
+                            fname,
+                        )
+                        return BlackboardMaterial(
+                            title=fname,
+                            course_id="",
+                            course_name=None,
+                            content_id="",
+                            file_name=fname,
+                            file_type="",
+                            source_url=u,
+                            download_url=u,
+                            file_bytes=b"",
+                            skipped_reason="unsupported_file_type",
+                        )
+                    try:
+                        head = await client.head(
+                            u,
+                            headers=headers,
+                            timeout=5.0,
+                            follow_redirects=True,
+                        )
+                        cl = head.headers.get("Content-Length")
+                        if cl:
+                            size_mb = int(cl) / (1024 * 1024)
+                            if size_mb > _MAX_FILE_MB:
+                                fname = _extract_url_filename(u)
+                                logger.debug(
+                                    "bb.materials: skip_large url=%s name=%s size_mb=%.1f",
+                                    u,
+                                    fname,
+                                    size_mb,
+                                )
+                                return BlackboardMaterial(
+                                    title=fname,
+                                    course_id="",
+                                    course_name=None,
+                                    content_id="",
+                                    file_name=fname,
+                                    file_type="",
+                                    source_url=u,
+                                    download_url=u,
+                                    file_bytes=b"",
+                                    skipped_reason=f"file_too_large ({size_mb:.1f}MB > {_MAX_FILE_MB}MB)",
+                                )
+                    except Exception:
+                        pass
+                    try:
+                        _dl_t0 = _time2.monotonic()
+                        fname_display = (fname or u)[:100]
+                        logger.debug(
+                            "bb.materials: dl_start url=%s",
+                            u[:120],
+                        )
+                        result = await fetch_one(u)
+                        _dl_elapsed = _time2.monotonic() - _dl_t0
+                        status = "ok" if result else "failed"
+                        logger.debug(
+                            "bb.materials: dl_done status=%s elapsed=%.1fs url=%s",
+                            status,
+                            _dl_elapsed,
+                            u[:120],
+                        )
+                        if result is None:
+                            return BlackboardMaterial(
+                                title=fname,
+                                course_id="",
+                                course_name=None,
+                                content_id="",
+                                file_name=fname,
+                                file_type="",
+                                source_url=u,
+                                download_url=u,
+                                file_bytes=b"",
+                                skipped_reason="download_failed",
+                            )
+                        return result
+                    except Exception:
+                        return BlackboardMaterial(
+                            title=fname,
+                            course_id="",
+                            course_name=None,
+                            content_id="",
+                            file_name=fname,
+                            file_type="",
+                            source_url=u,
+                            download_url=u,
+                            file_bytes=b"",
+                            skipped_reason="download_failed",
+                        )
 
-            tasks = [asyncio.create_task(_bound_fetch(url)) for url in material_pages]
-            try:
-                raw_materials = await asyncio.gather(*tasks)
-            finally:
-                for t in tasks:
-                    if not t.done():
-                        t.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
             deduped: dict[tuple[str, str], BlackboardMaterial] = {}
-            for item in raw_materials:
-                if item is None:
-                    continue
-                deduped[(item.course_id, item.content_id)] = item
+            skipped: dict[str, BlackboardMaterial] = {}
+            _flushed_keys: set[tuple[str, str]] = set()
+
+            import uuid as _uuid
+
+            _tmp_dir = Path(__file__).resolve().parents[3] / "temp" / "bb_bytes"
+            _tmp_dir.mkdir(parents=True, exist_ok=True)
+            for _old_tmp in _tmp_dir.glob("*.dat"):
+                _old_tmp.unlink(missing_ok=True)
+
+            def _flush_batch_to_disk() -> None:
+                for key, mat in deduped.items():
+                    if key in _flushed_keys:
+                        continue
+                    if not mat.file_bytes or mat.skipped_reason:
+                        continue
+                    tmp_name = f"{_uuid.uuid4().hex}.dat"
+                    tmp_path = _tmp_dir / tmp_name
+                    try:
+                        tmp_path.write_bytes(mat.file_bytes)
+                        mat._tmp_path = str(tmp_path)
+                        mat.file_bytes = b""
+                        _flushed_keys.add(key)
+                    except Exception:
+                        pass
+
+            total_batches = (len(material_pages) + batch_size - 1) // batch_size
+            for batch_start in range(0, len(material_pages), batch_size):
+                batch = material_pages[batch_start : batch_start + batch_size]
+                batch_num = batch_start // batch_size + 1
+                logger.debug(
+                    "bb.materials: batch_start batch=%d/%d urls=%d",
+                    batch_num,
+                    total_batches,
+                    len(batch),
+                )
+                import time as _time2
+
+                _batch_t0 = _time2.monotonic()
+                tasks = [asyncio.create_task(_bound_fetch(url)) for url in batch]
+                try:
+                    raw_materials = await asyncio.gather(*tasks)
+                finally:
+                    for t in tasks:
+                        if not t.done():
+                            t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                _batch_elapsed = _time2.monotonic() - _batch_t0
+                for item in raw_materials:
+                    if item is None:
+                        continue
+                    if item.skipped_reason:
+                        skipped.setdefault(item.file_name, item)
+                        continue
+                    key = (item.course_id, item.content_id)
+                    existing = deduped.get(key)
+                    if existing is None or (
+                        not existing.file_bytes and item.file_bytes
+                    ):
+                        deduped[key] = item
+                raw_materials.clear()
+                del raw_materials
+                gc.collect()
+                _flush_batch_to_disk()
+                logger.debug(
+                    "bb.materials: batch progress batch=%d/%d deduped=%d skipped=%d elapsed=%.1fs",
+                    batch_start // batch_size + 1,
+                    total_batches,
+                    len(deduped),
+                    len(skipped),
+                    _batch_elapsed,
+                )
 
             materials = sorted(
                 deduped.values(),
@@ -1310,15 +1740,22 @@ async def fetch_blackboard_course_materials(
                         len(materials),
                     )
 
+            skipped_list = sorted(
+                skipped.values(), key=lambda item: item.file_name.lower()
+            )
+
             logger.info(
-                "bb.materials: course_ids=%d pages=%d materials=%d",
+                "bb.materials: exit trace=%s raw_skipped=%d course_ids=%d pages=%d materials=%d skipped=%d",
+                get_trace_id(),
+                len(skipped),
                 len(course_ids),
                 len(material_pages),
                 len(materials),
+                len(skipped_list),
             )
             if not materials:
                 _bb_sink_dump("materials_empty")
-            return materials
+            return materials, skipped_list
     finally:
         try:
             _bb_sink_var.reset(token)

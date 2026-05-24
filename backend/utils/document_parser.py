@@ -6,8 +6,40 @@ backend/utils/document_parser.py
 
 from dataclasses import dataclass
 import io
+import logging
 from pathlib import Path
 import re
+
+try:
+    from backend.services.schedule_service.log_utils import (
+        _ensure_file_logging,
+        _trace_filter,
+    )
+
+    _ensure_file_logging()
+except Exception:
+    pass
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setLevel(logging.DEBUG)
+    _h.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)s [%(name)s] %(funcName)s:%(lineno)d | %(message)s"
+        )
+    )
+    logger.addHandler(_h)
+    logger.setLevel(logging.DEBUG)
+
+
+def _try_get_trace() -> str:
+    try:
+        from backend.services.schedule_service.log_utils import get_trace_id
+
+        return get_trace_id()
+    except Exception:
+        return "-"
 
 
 @dataclass
@@ -43,20 +75,61 @@ def parse_document(file_path: str, mime_type: str) -> ParsedDocument:
         ValueError: 不支持的 MIME 类型
         IOError:    文件不可读
     """
+    import time as _ptime
+
+    _p0 = _ptime.monotonic()
+    file_size = 0
+    try:
+        file_size = Path(file_path).stat().st_size
+    except Exception:
+        pass
+    logger.info(
+        "doc: parse_start file=%s mime=%s size=%d trace=%s",
+        file_path,
+        mime_type,
+        file_size,
+        _try_get_trace(),
+    )
+    result: ParsedDocument
     if mime_type == "application/pdf":
-        return _parse_pdf(file_path)
-    if (
+        result = _parse_pdf(file_path)
+    elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
-        return _parse_docx(file_path)
-    if "presentation" in mime_type or "powerpoint" in mime_type:
-        return _parse_pptx(file_path)
-    if mime_type in ("image/png", "image/jpeg", "image/webp"):
-        return _parse_image(file_path, mime_type)
-    if mime_type in ("text/markdown", "text/plain"):
-        return _parse_text(file_path, mime_type)
-    raise ValueError(f"Unsupported MIME type: {mime_type}")
+        result = _parse_docx(file_path)
+    elif "presentation" in mime_type or "powerpoint" in mime_type:
+        result = _parse_pptx(file_path)
+    elif mime_type in ("image/png", "image/jpeg", "image/webp"):
+        result = _parse_image(file_path, mime_type)
+    elif mime_type in (
+        "application/msword",
+        "application/vnd.ms-word",
+    ):
+        result = _parse_doc(file_path)
+    elif mime_type in (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+    ):
+        result = _parse_text(file_path, "text/plain")
+    elif mime_type in ("text/markdown", "text/plain"):
+        result = _parse_text(file_path, mime_type)
+    else:
+        raise ValueError(
+            f"Unsupported MIME type: {mime_type} "
+            f"file={file_path} trace={_try_get_trace()}"
+        )
+    elapsed = _ptime.monotonic() - _p0
+    logger.info(
+        "doc: parse_done file=%s mime=%s chars=%d pages=%d elapsed=%.2fs trace=%s",
+        file_path,
+        mime_type,
+        len(result.text),
+        result.page_count,
+        elapsed,
+        _try_get_trace(),
+    )
+    return result
 
 
 def _parse_pdf(file_path: str) -> ParsedDocument:
@@ -92,6 +165,11 @@ def _parse_pdf(file_path: str) -> ParsedDocument:
 
                 ocr_engine = PaddleOcrEngine()
             except Exception:
+                logger.exception(
+                    "doc: ocr_init_failed file=%s trace=%s",
+                    file_path,
+                    _try_get_trace(),
+                )
                 ocr_disabled = True
                 continue
 
@@ -178,6 +256,19 @@ def _parse_docx(file_path: str) -> ParsedDocument:
     )
 
 
+def _parse_doc(file_path: str) -> ParsedDocument:
+    """
+    Attempt to parse .doc (OLE2) files.
+    First tries docx path (many .doc files are actually mislabeled .docx).
+    Falls back to plain text read.
+    """
+    try:
+        return _parse_docx(file_path)
+    except Exception:
+        pass
+    return _parse_text(file_path, "text/plain")
+
+
 def _parse_image(file_path: str, mime_type: str) -> ParsedDocument:
     from PIL import Image  # type: ignore[import-not-found]
 
@@ -260,6 +351,7 @@ def _ocr_pil_image(img) -> str:
     try:
         return (PaddleOcrEngine().ocr_image_array(arr) or "").strip()
     except Exception:
+        logger.exception("doc: ocr_failed trace=%s", _try_get_trace())
         return ""
 
 

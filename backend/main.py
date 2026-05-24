@@ -7,10 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
-    from backend.api import auth, user, agent, materials, dashboard, schedule
+    from backend.api import auth, user, agent, materials, dashboard, schedule, debug
 except Exception as e:
     # If optional dependencies like pydantic_ai are missing, load only essential routers
-    from backend.api import auth, user, materials, dashboard, schedule
+    from backend.api import auth, user, materials, dashboard, schedule, debug
 
     # Log the missing optional module for debugging
     import logging
@@ -39,6 +39,7 @@ app.include_router(user.router)
 app.include_router(materials.router)
 app.include_router(dashboard.router)
 app.include_router(schedule.router)
+app.include_router(debug.router)
 # Optional agent router, included if available
 if "agent" in globals():
     app.include_router(agent.router)
