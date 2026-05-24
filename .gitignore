@@ -32,6 +32,9 @@ test/
 test.db
 coverage.xml
 
+# CI Reports (generated locally)
+reports/
+
 # OS
 .DS_Store
 Thumbs.db

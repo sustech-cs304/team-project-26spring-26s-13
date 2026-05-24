@@ -7,3 +7,4 @@ aiosqlite>=0.19.0
 flake8>=7.0.0
 black>=24.0.0
 pytest-mock>=3.14.0
+lizard>=1.17.0

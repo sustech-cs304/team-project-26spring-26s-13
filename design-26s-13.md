@@ -69,7 +69,7 @@ Purpose:
 - It uses a three-column structure: left sidebar, center chat workspace, and right Thought Trace panel.
 - It matches the implemented frontend structure rather than an abstract multi-page system dashboard.
 
-![Main Dashboard Wireframe](ui-design-package/ui-design/assets/dashboard-wireframe.svg)
+![Main Dashboard Wireframe](Guideline/ui-design-package/ui-design/assets/dashboard-wireframe.svg)
 
 Design notes:
 - The top header contains language switching, settings, schedule refresh, and logout actions.
@@ -85,7 +85,7 @@ Purpose:
 - Instead, a schedule request is issued from the same main dashboard and the response is rendered as a structured result card inside the chat stream.
 - This better matches the current product direction and implementation.
 
-![Schedule Result Wireframe](ui-design-package/ui-design/assets/scheduler-wireframe.svg)
+![Schedule Result Wireframe](Guideline/ui-design-package/ui-design/assets/scheduler-wireframe.svg)
 
 Design notes:
 - The chat composer is set to Schedule mode.
@@ -100,7 +100,7 @@ Purpose:
 - Similar to schedule, Campus Encyclopedia is now represented as a specialized response state inside the main chat interface.
 - The user chooses Campus QA mode, asks a question, and receives a structured answer card with citations.
 
-![Campus QA Result Wireframe](ui-design-package/ui-design/assets/encyclopedia-wireframe.svg)
+![Campus QA Result Wireframe](Guideline/ui-design-package/ui-design/assets/encyclopedia-wireframe.svg)
 
 Design notes:
 - The center panel still remains the same chat workspace.
@@ -115,7 +115,7 @@ Purpose:
 - In the current frontend, the dialog is triggered from the dashboard and is conceptually tied to the Thought Trace panel.
 - It remains one of the most distinctive interfaces in the project.
 
-![HITL Dialog Wireframe](ui-design-package/ui-design/assets/hitl-wireframe.svg)
+![HITL Dialog Wireframe](Guideline/ui-design-package/ui-design/assets/hitl-wireframe.svg)
 
 Design notes:
 - The dimmed background shows that the current workflow is interrupted.
@@ -130,7 +130,7 @@ Purpose:
 - This does not open a separate feature page. Instead, it opens a modal dialog on top of the current workspace.
 - The dialog is important because it configures the two external dependencies that the frontend actually exposes to users: CAS credentials and the LLM API key.
 
-![Settings Dialog Wireframe](ui-design-package/ui-design/assets/settings-wireframe.svg)
+![Settings Dialog Wireframe](Guideline/ui-design-package/ui-design/assets/settings-wireframe.svg)
 
 Design notes:
 - The settings interface belongs to the current dashboard context and appears as an overlay rather than a route switch.

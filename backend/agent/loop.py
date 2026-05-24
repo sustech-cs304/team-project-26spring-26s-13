@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 
+from pydantic_ai import usage as pai_usage
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.messages import (
@@ -234,6 +235,7 @@ async def run_agent(
                 deps=deps,
                 model=dynamic_model,
                 message_history=message_history,
+                usage_limits=pai_usage.UsageLimits(request_limit=500),
             ),
             timeout=settings.AGENT_RUN_TIMEOUT_SECONDS,
         )

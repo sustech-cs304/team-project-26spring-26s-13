@@ -3,26 +3,23 @@
 ## 1. Functional Requirements
 The proposed system is an Autonomous AI Agent designed to assist SUSTech students by integrating multiple data sources and executing complex tasks, such as cleaning up the schedule, organizing files and hunting down campus information. The system features the following distinct, orthogonal functionalities:
 
-1. **Agentic Loop Architecture**
-    - **Dynamic Perception-Action Loop:** Implements the core architecture (Perception -> Reasoning -> Tool Use -> Observation). The Agent doesn't follow a hardcoded script but decides actions dynamically based on user goals.
-    - **Self-Correction** The Agent reads tool outputs and error logs. If a task fails (e.g., a login timeout), it autonomously reasons a recovery strategy or tries an alternative tool without manual intervention.
-2. **Intelligent GUI Design**
-   - **Personalized Dashboard:** A customizable chat interface managing user accounts, personal files and historical chat logs.
-   - **Thought Trace Panel:** A dedicated UI component that streams the Agent's internal reasoning logic and tool-calling sequence (Observation & Planning) in real-time.
-   - **Human-in-the-Loop Interceptor:** A mandatory security prompt that intercepts heavy and high-risk execution requests (e.g., deleting files, modifying schedules) and waits for explicit user authorization before proceeding.
-3. **Multi-Source Scheduler**
+1. **Multi-Source Scheduler**
    - **Web Parsing:** Automatically scrapes and parses scheduling data from the Official SUSTech Calendar and Blackboard deadlines.
    - **Schedule Planning:** Autonomously detects time conflicts with personal TODOs and dynamically suggests an optimized study/event calendar.
-4. **Campus Encyclopedia based on RAG Knowledge Retrieval**
+2. **Batch Blackboard Material Crawler & RAG Ingestion**
+   - **Course Material Discovery:** BFS-crawls all enrolled courses on Blackboard, iterating through course content pages to discover downloadable file URLs.
+   - **Batch Download & Filtering:** Downloads discovered files in parallel with concurrency control. Automatically filters to current-semester materials by default, and supports keyword-based filtering by course name or file name.
+   - **Automated RAG Ingestion:** Each downloaded file is validated, parsed to extract text, classified, chunked, and embedded into local ChromaDB vector database.
+3. **Campus Encyclopedia based on RAG Knowledge Retrieval**
    - Acts as an intelligent QA system capable of answering complex campus-related queries (e.g., degree requirements, dormitory policies).
    - Utilizes Retrieval-Augmented Generation (RAG) by searching embedded chunks from official documents (like the SUSTech Student Handbook) stored in a local Vector Database.
-5. **Library Discussion Room Query**
+4. **Library Discussion Room Query**
    - Queries the availability of discussion rooms in the SUSTech Library based on user-specified criteria including location, desired time slot and room capacity.
    - Returns a list of matching discussion rooms with their availability status, enabling students to quickly find and plan group study sessions.
-6. **Study Copilot**
+5. **Study Copilot**
    - Processes user-uploaded or local academic materials, such as lecture PPTs, PDFs, Markdown notes and so on.
    - The Agent reads the extracted text to autonomously extract key concepts, generate concise study summaries and create customized practice quizzes.
-7. **System-Level OS Automation**
+6. **System-Level OS Automation**
    - Executes operating system-level automation scripts via natural language commands.
    - Capable of performing file manipulation tasks (e.g., reading, creating, deleting, and batch renaming messy lab files to a specific format).
 
