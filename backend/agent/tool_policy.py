@@ -9,6 +9,7 @@ Agent 工具暴露策略。
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -47,6 +48,8 @@ _FILE_ACTION_TERMS = {
     "load",
     "list",
     "ls",
+    "generate",
+    "生成",
     "读取",
     "打开",
     "创建",
@@ -90,7 +93,18 @@ _FILE_TARGET_TERMS = {
     "路径",
     "本地",
     "工作区",
+    "报告",
+    "report",
+    "里面",
+    "该文件",
+    "这个文件",
+    "刚才",
 }
+
+_FILENAME_RE = re.compile(
+    r"[\w\u4e00-\u9fff.-]+\.(?:txt|md|py|json|csv|docx?|pptx?|pdf)\b",
+    re.IGNORECASE,
+)
 
 _LIBRARY_TERMS = {
     "图书馆",
@@ -156,7 +170,9 @@ def has_explicit_file_operation_intent(prompt: str | Sequence[Any] | None) -> bo
     lowered = text.lower()
 
     has_action = any(term in lowered for term in _FILE_ACTION_TERMS)
-    has_target = any(term in lowered for term in _FILE_TARGET_TERMS)
+    has_target = any(term in lowered for term in _FILE_TARGET_TERMS) or bool(
+        _FILENAME_RE.search(text)
+    )
 
     if has_action and has_target:
         return True

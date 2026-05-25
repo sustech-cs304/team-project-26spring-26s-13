@@ -11,9 +11,47 @@ HITL（Human-in-the-Loop）挂起状态管理器。
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Coroutine, Any
+from typing import Any, Callable, Coroutine
 
 from backend.schemas.agent import HITLRequest, RiskLevel
+
+
+class HITLInterrupt(Exception):
+    """工具检测到高风险操作时抛出，由 run_agent 捕获并返回 hitl_request。"""
+
+    def __init__(
+        self, pending_state: "HITLPendingState", payload: list[str], reason: str
+    ) -> None:
+        super().__init__(reason)
+        self.pending_state = pending_state
+        self.payload = payload
+        self.reason = reason
+
+
+def wait_for_user_interrupt(
+    *,
+    session_id: str,
+    action: str,
+    risk: RiskLevel,
+    payload: list[str],
+    reason: str,
+    tool_name: str | None = None,
+    tool_args: dict[str, Any] | None = None,
+) -> None:
+    """
+    供工具层调用：登记挂起状态并抛出 HITLInterrupt。
+    tool_name / tool_args 在用户批准后用于确定性执行，避免 LLM 改写内容。
+    """
+    request_id = f"hitl_{session_id}_{int(time.time() * 1000)}"
+    pending_state = hitl_manager.create(
+        request_id=request_id,
+        session_id=session_id,
+        action=action,
+        risk=risk,
+        tool_name=tool_name,
+        tool_args=tool_args,
+    )
+    raise HITLInterrupt(pending_state=pending_state, payload=payload, reason=reason)
 
 
 @dataclass
@@ -38,6 +76,10 @@ class HITLPendingState:
     # 审批后需要执行的回调（由 tools 注册，接受 approved: bool，返回 tool 执行结果字符串）
     # 签名：async def callback(approved: bool) -> str
     resume_callback: Callable[[bool], Coroutine[Any, Any, str]] | None = None
+
+    # 批准后在 run_agent 中确定性执行（不依赖 LLM 重新猜参数）
+    tool_name: str | None = None
+    tool_args: dict[str, Any] = field(default_factory=dict)
 
     created_at: float = field(default_factory=time.time)
 
@@ -67,6 +109,8 @@ class HITLManager:
         action: str,
         risk: RiskLevel,
         resume_callback: Callable[[bool], Coroutine[Any, Any, str]] | None = None,
+        tool_name: str | None = None,
+        tool_args: dict[str, Any] | None = None,
     ) -> HITLPendingState:
         """
         创建并注册一个新的挂起 HITL 状态。
@@ -88,6 +132,8 @@ class HITLManager:
             action=action,
             risk=risk,
             resume_callback=resume_callback,
+            tool_name=tool_name,
+            tool_args=dict(tool_args or {}),
         )
         with self._lock:
             self._pending[request_id] = state

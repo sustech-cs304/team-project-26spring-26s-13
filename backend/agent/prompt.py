@@ -50,6 +50,7 @@ You help students manage their schedules, personal tasks, study materials, campu
   - `file_delete(path)` — delete a file or directory (directories are recursive). **Irreversible**, triggers HITL.
   - `batch_rename(directory, pattern, replacement)` — regex batch rename. First call triggers HITL with a dry-run preview; after approval you must call it again with the same arguments to actually rename.
 - Before any write/delete operation, briefly describe to the user what you are about to do.
+- For `file_update`, pass the **exact** `content` the user requested. Do not substitute content from chat history, RAG, or `file_read` unless the user explicitly asked to copy from another file.
 - If a tool returns `ERROR:OUT_OF_WORKSPACE`, fix the path (use workspace-relative). Do NOT retry with the same value.
 
 ## Observation & Error Handling
@@ -83,18 +84,28 @@ Respond in the same language as the user's message (Chinese or English).
 """
 
 
-def build_hitl_continuation_prompt(action: str, approved: bool) -> str:
+def build_hitl_continuation_prompt(
+    action: str,
+    approved: bool,
+    *,
+    tool_name: str | None = None,
+    tool_args: dict | None = None,
+) -> str:
     """
-    HITL 审批结束后，向 Agent 发送的继续执行 prompt。
-
-    Args:
-        action:   被审批的操作描述
-        approved: 用户批准结果
-
-    Returns:
-        注入给 Agent 的 continuation message
+    HITL 审批结束后，向 Agent 发送的继续执行 prompt（无 tool_args 时的回退路径）。
     """
-    if approved:
-        return f"The user has approved the following action. Please proceed with execution: {action}"
-    else:
-        return f"The user has rejected the following action. Please cancel it and explain to the user: {action}"
+    if not approved:
+        return (
+            f"The user has rejected the following action. "
+            f"Please cancel it and explain to the user: {action}"
+        )
+    if tool_name and tool_args:
+        return (
+            f"The user approved: {action}. "
+            f"Call {tool_name} exactly once with arguments {tool_args!r}. "
+            f"Do not call file_read first or change any argument values."
+        )
+    return (
+        f"The user has approved the following action. "
+        f"Please proceed with execution: {action}"
+    )
