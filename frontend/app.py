@@ -187,6 +187,12 @@ PROFILE = {
     },
 }
 
+HITL_REQUEST = {
+    "action": {"en": "Pending Action", "zh": "待处理操作"},
+    "risk": {"en": "low", "zh": "低"},
+    "reason": {"en": "No reason provided", "zh": "未提供原因"},
+}
+
 # Demo accounts shown on the login page as a convenience hint
 AUTH_DEMO_ACCOUNTS = [
     {"username": "demo", "password": "demo123"},
