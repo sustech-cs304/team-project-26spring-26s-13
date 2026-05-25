@@ -1,15 +1,34 @@
-"""Tests for file-operation intent gating."""
+"""Tests for tool exposure policy (LLM-driven tool selection)."""
 
-from backend.agent.tool_policy import has_explicit_file_operation_intent
+import pytest
 
-
-def test_generate_txt_triggers_file_tools() -> None:
-    assert has_explicit_file_operation_intent("直接生成一个报告.txt 里面放123456")
+from backend.agent.tool_policy import prepare_tools_for_prompt
 
 
-def test_overwrite_without_filename_still_triggers_with_cover_action() -> None:
-    assert has_explicit_file_operation_intent("覆盖里面的内容为456789")
+class _FakeTool:
+    def __init__(self, name: str) -> None:
+        self.name = name
 
 
-def test_memory_request_not_file_operation() -> None:
-    assert not has_explicit_file_operation_intent("请为我记忆：我 5 月 15 日去考 TOEFL")
+class _FakeCtx:
+    prompt = "你好，今天天气怎么样"
+
+
+@pytest.mark.asyncio
+async def test_prepare_tools_always_exposes_file_tools() -> None:
+    tool_defs = [
+        _FakeTool("query_rag"),
+        _FakeTool("file_create"),
+        _FakeTool("file_update"),
+    ]
+    visible = await prepare_tools_for_prompt(_FakeCtx(), tool_defs)
+    visible_names = {t.name for t in visible}
+    assert visible_names == {"query_rag", "file_create", "file_update"}
+    assert "file_create" in visible_names
+
+
+@pytest.mark.asyncio
+async def test_prepare_tools_does_not_filter_on_greeting() -> None:
+    tool_defs = [_FakeTool(name) for name in ("save_personal_task", "file_delete")]
+    visible = await prepare_tools_for_prompt(_FakeCtx(), tool_defs)
+    assert len(visible) == 2
