@@ -23,18 +23,22 @@ from pathlib import Path
 from pydantic_ai import RunContext
 
 from backend.agent.core import AgentDeps, agent
-from backend.agent.loop import wait_for_user_interrupt
+from backend.agent.hitl import HITLPendingState, wait_for_user_interrupt
 from backend.config import settings
 from backend.services import audit_service
 
 # ── Workspace 与路径安全 ───────────────────────────────────────────────────────
 
 
-def _get_workspace(ctx: RunContext[AgentDeps]) -> Path:
-    """返回当前用户的 workspace 绝对路径，不存在则创建。"""
-    root = Path(settings.WORKSPACE_DIR) / str(ctx.deps.user.user_id)
+def _workspace_for_user_id(user_id) -> Path:
+    root = Path(settings.WORKSPACE_DIR) / str(user_id)
     root.mkdir(parents=True, exist_ok=True)
     return root.resolve()
+
+
+def _get_workspace(ctx: RunContext[AgentDeps]) -> Path:
+    """返回当前用户的 workspace 绝对路径，不存在则创建。"""
+    return _workspace_for_user_id(ctx.deps.user.user_id)
 
 
 def _safe_path(workspace: Path, target: str) -> Path:
@@ -232,12 +236,18 @@ async def file_update(
 
     rel = _rel(workspace, safe)
     if not ctx.deps.hitl_approved:
+        preview = content if len(content) <= 120 else content[:120] + "..."
         wait_for_user_interrupt(
             session_id=ctx.deps.session_id,
             action=f"Overwrite file '{rel}'",
             risk="medium",
-            payload=[f"Overwrite '{rel}' with {len(content)} chars of new content"],
+            payload=[
+                f"Overwrite '{rel}' with {len(content)} chars",
+                f"New content preview: {preview!r}",
+            ],
             reason="文件覆盖是不可逆操作，需要您的确认。",
+            tool_name="file_update",
+            tool_args={"path": path, "content": content},
         )
 
     # 只有 HITL 批准后才会到达这里
@@ -292,6 +302,8 @@ async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
                 + (" and ALL its contents" if kind == "directory" else "")
             ],
             reason=f"删除{kind}不可恢复，需要您的确认。",
+            tool_name="file_delete",
+            tool_args={"path": path},
         )
 
     if safe.is_dir():
@@ -384,6 +396,13 @@ async def batch_rename(
             risk="high",
             payload=[f"{item['original']}  ->  {item['renamed']}" for item in preview],
             reason=f"批量重命名将影响 {len(preview)} 个文件，需要您的确认。",
+            tool_name="batch_rename",
+            tool_args={
+                "directory": directory,
+                "pattern": pattern,
+                "replacement": replacement,
+                "preview": preview,
+            },
         )
 
     # 批准后真正执行
@@ -424,3 +443,105 @@ async def batch_rename(
         },
         ensure_ascii=False,
     )
+
+
+async def execute_approved_hitl_operation(
+    deps: AgentDeps, state: HITLPendingState
+) -> str:
+    """
+    用户 HITL 批准后确定性执行已登记的工具参数，避免 LLM 二次改写 content。
+    """
+    workspace = _workspace_for_user_id(deps.user.user_id)
+    name = state.tool_name
+    args = state.tool_args or {}
+
+    if name == "file_update":
+        path = str(args.get("path", ""))
+        content = str(args.get("content", ""))
+        safe = _safe_path(workspace, path)
+        if not safe.exists() or not safe.is_file():
+            return f"ERROR:FILE_NOT_FOUND ({path})"
+        rel = _rel(workspace, safe)
+        safe.write_text(content, encoding="utf-8")
+        await audit_service.log(
+            db=deps.db,
+            user_id=deps.user.user_id,
+            session_id=deps.session_id,
+            action_type="update",
+            target_path=str(safe),
+            description=f"Overwrite file '{rel}' ({len(content)} chars, HITL approved)",
+            hitl_required=True,
+            hitl_approved=True,
+        )
+        preview = content if len(content) <= 80 else content[:80] + "..."
+        return (
+            f"已覆盖 workspace 文件 `{rel}`（{len(content)} 字符）。"
+            f"内容预览：{preview!r}"
+        )
+
+    if name == "file_delete":
+        path = str(args.get("path", ""))
+        safe = _safe_path(workspace, path)
+        if not safe.exists():
+            return f"ERROR:FILE_NOT_FOUND ({path})"
+        rel = _rel(workspace, safe)
+        kind = "directory" if safe.is_dir() else "file"
+        if safe.is_dir():
+            shutil.rmtree(safe)
+        else:
+            safe.unlink()
+        await audit_service.log(
+            db=deps.db,
+            user_id=deps.user.user_id,
+            session_id=deps.session_id,
+            action_type="delete",
+            target_path=str(safe),
+            description=f"Delete {kind} '{rel}' (HITL approved)",
+            hitl_required=True,
+            hitl_approved=True,
+        )
+        return f"已删除 workspace 中的 {kind} `{rel}`。"
+
+    if name == "batch_rename":
+        import json as _json
+
+        directory = str(args.get("directory", "."))
+        preview = list(args.get("preview") or [])
+        target_dir = _safe_path(workspace, directory)
+        if not target_dir.exists() or not target_dir.is_dir():
+            return f"ERROR:DIR_NOT_FOUND ({directory})"
+        renamed: list[dict] = []
+        skipped: list[dict] = []
+        for item in preview:
+            src = target_dir / item["original"]
+            dst = target_dir / item["renamed"]
+            if dst.exists():
+                skipped.append({**item, "reason": "TARGET_EXISTS"})
+                continue
+            try:
+                src.rename(dst)
+                renamed.append(item)
+            except OSError as e:
+                skipped.append({**item, "reason": str(e)})
+        rel_dir = _rel(workspace, target_dir) or "."
+        await audit_service.log(
+            db=deps.db,
+            user_id=deps.user.user_id,
+            session_id=deps.session_id,
+            action_type="rename",
+            target_path=str(target_dir),
+            description=f"Batch rename in '{rel_dir}', renamed={len(renamed)}",
+            hitl_required=True,
+            hitl_approved=True,
+        )
+        return _json.dumps(
+            {
+                "dry_run": False,
+                "renamed": renamed,
+                "skipped": skipped,
+                "count": len(renamed),
+            },
+            ensure_ascii=False,
+        )
+
+    return f"ERROR:UNSUPPORTED_HITL_TOOL ({name})"

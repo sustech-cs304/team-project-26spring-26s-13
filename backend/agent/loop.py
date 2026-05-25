@@ -47,7 +47,8 @@ from backend.schemas.agent import (
     TraceItem,
     UIPayload,
 )
-from backend.agent.hitl import HITLPendingState, hitl_manager
+from backend.agent.hitl import HITLInterrupt, HITLPendingState, hitl_manager
+from backend.agent.tools.os_automation import execute_approved_hitl_operation
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
@@ -56,45 +57,6 @@ from backend.agent.validators import ResponseValidationContext, detect_alignment
 import traceback
 
 TraceEmitter = Callable[[TraceItem], Awaitable[None] | None]
-
-
-# ── HITL 异常 ─────────────────────────────────────────────────────────────────
-
-
-class HITLInterrupt(Exception):
-    """
-    工具函数检测到高风险操作时抛出此异常，由 run_agent 捕获。
-    """
-
-    def __init__(
-        self, pending_state: HITLPendingState, payload: list[str], reason: str
-    ) -> None:
-        super().__init__(reason)
-        self.pending_state = pending_state
-        self.payload = payload
-        self.reason = reason
-
-
-def wait_for_user_interrupt(
-    *,
-    session_id: str,
-    action: str,
-    risk: RiskLevel,
-    payload: list[str],
-    reason: str,
-) -> None:
-    """
-    供工具层调用的标准化 “Wait-for-User” 中断钩子。
-    工具一旦进入高风险路径，应调用本函数抛出 HITLInterrupt。
-    """
-    request_id = f"hitl_{session_id}_{int(time.time() * 1000)}"
-    pending_state = hitl_manager.create(
-        request_id=request_id,
-        session_id=session_id,
-        action=action,
-        risk=risk,
-    )
-    raise HITLInterrupt(pending_state=pending_state, payload=payload, reason=reason)
 
 
 # ── 主入口 ────────────────────────────────────────────────────────────────────
@@ -186,8 +148,87 @@ async def run_agent(
 
     user_prompt = request.message
     if hitl_context and request.hitl_reply is not None:
+        if not request.hitl_reply.approved:
+            hitl_manager.remove(hitl_context.request_id)
+            await emit_trace(
+                TraceItem(
+                    phase="Tool Use",
+                    title="用户拒绝授权",
+                    detail=hitl_context.action,
+                    status="done",
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            return AgentResponse(
+                session_id=request.session_id,
+                assistant_message=AssistantMessage(
+                    role="assistant",
+                    content=f"已取消操作：{hitl_context.action}",
+                    timestamp=datetime.now(timezone.utc),
+                ),
+                trace=traces,
+                route="os_automation",
+                ui_payload=UIPayload(),
+                hitl_request=None,
+                error=None,
+            )
+
+        if hitl_context.tool_name and hitl_context.tool_args:
+            tool_result = await execute_approved_hitl_operation(deps, hitl_context)
+            hitl_manager.remove(hitl_context.request_id)
+            await emit_trace(
+                TraceItem(
+                    phase="Tool Use",
+                    title="已执行授权操作",
+                    detail=tool_result,
+                    status="done",
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            stmt_session = select(ChatSession).where(
+                ChatSession.session_id == request.session_id
+            )
+            chat_session = (await db.execute(stmt_session)).scalar_one_or_none()
+            if chat_session is None:
+                chat_session = ChatSession(
+                    session_id=request.session_id, user_id=user.user_id
+                )
+                db.add(chat_session)
+            chat_session.updated_at = datetime.now(timezone.utc)
+            db.add(
+                ChatMessage(
+                    session_id=request.session_id,
+                    role="user",
+                    content=request.message or hitl_context.action,
+                )
+            )
+            db.add(
+                ChatMessage(
+                    session_id=request.session_id,
+                    role="assistant",
+                    content=tool_result,
+                )
+            )
+            await db.commit()
+            return AgentResponse(
+                session_id=request.session_id,
+                assistant_message=AssistantMessage(
+                    role="assistant",
+                    content=tool_result,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+                trace=traces,
+                route="os_automation",
+                ui_payload=UIPayload(),
+                hitl_request=None,
+                error=None,
+            )
+
         user_prompt = build_hitl_continuation_prompt(
-            hitl_context.action, request.hitl_reply.approved
+            hitl_context.action,
+            request.hitl_reply.approved,
+            tool_name=hitl_context.tool_name,
+            tool_args=hitl_context.tool_args,
         )
 
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
