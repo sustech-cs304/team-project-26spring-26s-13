@@ -1,7 +1,6 @@
 # Final Report — Team 26s-13
 
 > **Student Productivity Agent**
-> SUSTech CS304 Software Engineering, Spring 2026
 
 ---
 
@@ -13,9 +12,9 @@ We use a custom metrics script (`scripts/generate_metrics.py`) together with **l
 
 | Metric | Value |
 |--------|-------|
-| Total Lines of Code | **25,579** |
-| Python LOC | **25,515** |
-| Total Source Files | **131** |
+| Total Lines of Code | **25,628** |
+| Python LOC | **25,576** |
+| Total Source Files | **129** |
 | Python Files | **128** |
 
 **LOC by Directory:**
@@ -25,7 +24,7 @@ We use a custom metrics script (`scripts/generate_metrics.py`) together with **l
 | `backend/` | 15,084 | FastAPI backend: API routes, agent loop, services, tools |
 | `frontend/` | 7,842 | PyQt6 desktop client: views, components, workers |
 | `tests/` | 1,951 | pytest test suite (15 test files, 141 test cases) |
-| `scripts/` | 293 | Build & metrics scripts |
+| `scripts/` | 354 | Build & metrics scripts |
 | `alembic/` | 259 | Database migration files |
 | `root` | 138 | Top-level scripts (`run.py`, etc.) |
 
@@ -55,9 +54,9 @@ We use a custom metrics script (`scripts/generate_metrics.py`) together with **l
 
 | Metric | Value |
 |--------|-------|
-| Total Dependencies | **36** |
+| Direct Dependencies (from `generate_metrics.py`) | **37** |
 
-**Dependency Breakdown:**
+**Direct Dependency Breakdown:**
 
 | Category | Dependencies |
 |----------|-------------|
@@ -71,7 +70,7 @@ We use a custom metrics script (`scripts/generate_metrics.py`) together with **l
 | Testing & Quality | pytest, pytest-asyncio, pytest-cov, pytest-mock, black, flake8, lizard |
 | Other | python-multipart |
 
-> **Tool:** Dependencies counted by `scripts/generate_metrics.py` parsing `requirements.txt` and `requirements-dev.txt`.
+> **Tool:** Dependencies counted by `scripts/generate_metrics.py` using `pip list --format=freeze` to read all installed packages, supplemented with requirements file parsing for direct dependency classification.
 
 ### 1.4 Metrics Script & Generated Report
 
@@ -79,13 +78,13 @@ We use a custom metrics script (`scripts/generate_metrics.py`) together with **l
 - **JSON Output:** `reports/metrics.json`
 - **HTML Report:** `reports/metrics.html` (viewable in any browser)
 
-<!-- TODO: Insert screenshot of metrics.html opened in browser -->
+<!-- TODO: Insert screenshot of metrics.html opened in browser后续全量实现后补充完整 -->
 ![Metrics HTML Report](screenshots/metrics-report.png)
 *Screenshot: Open `reports/metrics.html` in your browser to view the full metrics dashboard.*
 
 ---
 
-## Part II. CI/CD Pipeline Description (2 points)
+## Part II. CI/CD Pipeline Description
 
 Our project implements a **dual CI/CD pipeline** using both **GitHub Actions** and **Jenkins**, ensuring that every push to `main` / `master` triggers an automated build-test-package-deploy workflow.
 
@@ -204,9 +203,3 @@ docker build -t student-productivity-agent .
 2. **Metrics HTML:** Open `reports/metrics.html` in a browser
 3. **GitHub Actions Artifacts:** Go to repo → Actions → click a run → download Artifacts
 4. **Jenkins Artifacts:** Go to build page → Build Artifacts → download `reports/`
-
----
-
-## Team
-
-Team 26s-13 — SUSTech CS304 Software Engineering, Spring 2026

@@ -1,7 +1,5 @@
 # Student Productivity Agent
 
-> **Team 26s-13 · SUSTech CS304 Software Engineering · Spring 2026**
-
 An AI-powered desktop assistant for SUSTech students, integrating schedule management, campus Q&A, study aids, library room booking, batch Blackboard material crawling, and file system automation into a unified chat-first interface.
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
@@ -337,7 +335,7 @@ team-project-26spring-26s-13/
 │   ├── components/                  # Reusable UI widgets
 │   └── workers/agent_worker.py      # QThread for async API calls
 │
-├── tests/                           # pytest test suite (98 tests)
+├── tests/                           # pytest test suite (141 test cases)
 ├── alembic/                         # Database migration files
 ├── run.py                           # One-click startup script
 ├── .github/workflows/ci.yml         # CI/CD pipeline
@@ -397,24 +395,30 @@ python -m pytest tests/test_auth.py
 python -m pytest tests/ -v
 ```
 
-The suite includes **98 test cases** covering API routes, business logic, and agent tools. All LLM and network calls are mocked.
+The suite includes **141 test cases** covering API routes, business logic, and agent tools. All LLM and network calls are mocked.
 
 ---
 
 ## CI/CD Pipeline
 
-The project uses **GitHub Actions** for continuous integration. The pipeline is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and triggers on every push/PR to `main`.
+The project uses a **dual CI/CD pipeline** with both **GitHub Actions** and **Jenkins**, ensuring every push to `main`/`master` triggers an automated build-test-package-deploy workflow.
+
+- **GitHub Actions:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — runs on `ubuntu-latest` with PostgreSQL 15 service container
+- **Jenkins:** [`Jenkinsfile`](Jenkinsfile) — runs on local Windows with conda environment
 
 ### Pipeline Steps
 
 | Step | Tool | Description |
 |------|------|-------------|
-| 1. Setup | Python 3.10 + PostgreSQL 15 service | Prepare runtime environment |
-| 2. Dependencies | pip | Install from `requirements.txt` + `requirements-dev.txt` |
+| 1. Checkout | Git | Clone repository source code |
+| 2. Install Dependencies | pip | Install `requirements.txt` + `requirements-dev.txt` + `lizard` |
 | 3. Format Check | Black | Verify code formatting (`black --check .`) |
 | 4. Lint | Flake8 | Static analysis (`flake8 .`) |
-| 5. Test | pytest | Run full test suite with coverage |
-| 6. Coverage Report | Codecov | Upload coverage XML report |
+| 5. Test | pytest + pytest-cov | Run 141 test cases with coverage (XML + HTML reports) |
+| 6. Coverage Upload | Codecov | Upload coverage XML (GitHub Actions) |
+| 7. Metrics | `scripts/generate_metrics.py`, lizard | Generate LOC, complexity, dependency metrics |
+| 8. Docker Build | Docker | Build image from [`Dockerfile`](Dockerfile) (`python:3.10-slim`) |
+| 9. Docker Push | Docker Hub | Push `kabukimonosakura/student-productivity-agent:latest` + commit SHA tag |
 
 ### Running CI Locally
 
@@ -422,6 +426,8 @@ The project uses **GitHub Actions** for continuous integration. The pipeline is 
 black --check .
 flake8 .
 python -m pytest tests/ --cov=backend --cov-report=term-missing
+python scripts/generate_metrics.py
+docker build -t student-productivity-agent .
 ```
 
 ---
@@ -432,8 +438,6 @@ python -m pytest tests/ --cov=backend --cov-report=term-missing
 - **LLM non-determinism**: Agent responses may vary between runs due to the non-deterministic nature of LLM outputs.
 - **Blackboard scraping fragility**: The web crawler depends on SUSTech Blackboard's HTML structure, which may change between semesters.
 - **Windows-only OS Automation**: The file automation feature is designed for Windows and has not been tested on macOS/Linux.
-- **DeepSeek rate limits**: Heavy usage may hit API rate limits. Users can configure their own API key via the Settings dialog.
-- **No Docker deployment**: The system currently runs directly on the host machine without containerization.
 
 ---
 
@@ -447,9 +451,3 @@ python -m pytest tests/ --cov=backend --cov-report=term-missing
 | [Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md) | Backend API contract (Chinese) |
 | [Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md](Guideline/docs/Frontend%20Relevant/frontend-api-connection-zh.md) | Frontend API connection guide |
 | `http://127.0.0.1:8000/docs` | Interactive Swagger API docs (when backend is running) |
-
----
-
-## Team
-
-Team 26s-13 — SUSTech CS304 Software Engineering, Spring 2026.

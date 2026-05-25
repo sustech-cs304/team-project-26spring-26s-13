@@ -1,8 +1,6 @@
 # Student Productivity Agent
 
-> **Team 26s-13 · 南方科技大学 CS304 软件工程 · 2026 春季**
-
-面向南科大学生的 AI 智能体桌面助手，集成日程管理、校园百科、学习辅助、图书馆讨论间查询、Blackboard 课件批量爬取与文件自动化操作，以统一的对话式界面呈现。
+面向南科大学生的 AI 智能体桌面助手，集成日程管理、校园百科、学习辅助、图书馆讨论间查询、Blackboard 课件批量爬取与文件自动化操作，以统一的对话式界面呈现
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-green)
@@ -235,15 +233,15 @@ python run.py lint      # 使用 flake8 检查代码
 > "我这学期有哪些课？"
 
 ### 日程模式
-询问截止日期或时间冲突：
+询问作业截止日期或事务冲突：
 
-> "这周有什么截止日期？"
-> "下周一我有时间冲突吗？"
+> "这周有什么作业DDL吗？"
+> "下周我有事务冲突吗？"
 
 ### 校园问答模式
 询问校园政策相关问题：
 
-> "CS 专业的学位要求是什么？"
+> "CS 专业的毕业要求是什么？"
 > "宿舍管理规定有哪些？"
 
 ### 图书馆讨论间查询
@@ -263,11 +261,11 @@ python run.py lint      # 使用 flake8 检查代码
 
 ## 截图展示
 
-<!-- TODO: 添加截图 -->
+<!-- TODO: 添加截图,等全量完成后再填入 -->
 
 ### 主界面 (Main Dashboard)
 
-<!-- ![主界面](screenshots/dashboard.png) -->
+<!-- ![主界面](Guideline/screenshots/dashboard.png) -->
 *待添加截图。*
 
 ### 日程结果卡片 (Schedule Result)
@@ -347,7 +345,7 @@ team-project-26spring-26s-13/
 │   ├── components/                  # 可复用 UI 组件
 │   └── workers/agent_worker.py      # QThread 异步 API 调用
 │
-├── tests/                           # pytest 测试套件（98 个用例）
+├── tests/                           # pytest 测试套件（141 个用例）
 ├── alembic/                         # 数据库迁移文件
 ├── run.py                           # 一键启动脚本
 ├── .github/workflows/ci.yml         # CI/CD 流水线
@@ -407,24 +405,30 @@ python -m pytest tests/test_auth.py
 python -m pytest tests/ -v
 ```
 
-全套 **98 个测试用例**覆盖后端 API 路由、业务逻辑与 Agent 工具层。所有 LLM 和网络调用均通过 `unittest.mock` 拦截。
+全套 **141 个测试用例**覆盖后端 API 路由、业务逻辑与 Agent 工具层。所有 LLM 和网络调用均通过 `unittest.mock` 拦截。
 
 ---
 
 ## CI/CD 流水线
 
-项目使用 **GitHub Actions** 进行持续集成，配置文件位于 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，每次向 `main` 分支 push 或发起 PR 时自动触发。
+项目使用 **GitHub Actions + Jenkins 双流水线** 进行持续集成与持续部署，确保每次向 `main`/`master` 分支 push 时自动触发构建-测试-打包-部署流程。
+
+- **GitHub Actions:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 在 `ubuntu-latest` 上运行，含 PostgreSQL 15 服务容器
+- **Jenkins:** [`Jenkinsfile`](Jenkinsfile) — 在本地 Windows 环境的 conda 环境中运行
 
 ### 流水线步骤
 
 | 步骤 | 工具 | 说明 |
 |------|------|------|
-| 1. 环境准备 | Python 3.10 + PostgreSQL 15 服务 | 搭建运行环境 |
-| 2. 安装依赖 | pip | 安装 `requirements.txt` + `requirements-dev.txt` |
+| 1. 代码检出 | Git | 克隆仓库源代码 |
+| 2. 安装依赖 | pip | 安装 `requirements.txt` + `requirements-dev.txt` + `lizard` |
 | 3. 格式检查 | Black | 验证代码格式（`black --check .`） |
 | 4. 静态分析 | Flake8 | Lint 检查（`flake8 .`） |
-| 5. 运行测试 | pytest | 执行全部测试并生成覆盖率报告 |
-| 6. 覆盖率上报 | Codecov | 上传 XML 覆盖率报告 |
+| 5. 运行测试 | pytest + pytest-cov | 执行 141 个测试用例，生成 XML/HTML 覆盖率报告 |
+| 6. 覆盖率上报 | Codecov | 上传 XML 覆盖率报告（GitHub Actions） |
+| 7. 度量报告 | `scripts/generate_metrics.py`, lizard | 生成 LOC、圈复杂度、依赖数等度量 |
+| 8. Docker 构建 | Docker | 基于 [`Dockerfile`](Dockerfile) 构建镜像（`python:3.10-slim`） |
+| 9. Docker 推送 | Docker Hub | 推送 `kabukimonosakura/student-productivity-agent:latest` + commit SHA 标签 |
 
 ### 本地模拟 CI
 
@@ -432,6 +436,8 @@ python -m pytest tests/ -v
 black --check .
 flake8 .
 python -m pytest tests/ --cov=backend --cov-report=term-missing
+python scripts/generate_metrics.py
+docker build -t student-productivity-agent .
 ```
 
 ---
@@ -441,9 +447,7 @@ python -m pytest tests/ --cov=backend --cov-report=term-missing
 - **Alembic 异步兼容性**：`alembic upgrade head` 因 asyncpg 驱动兼容问题可能无法正常建表，建议手动执行 SQL 建表。
 - **LLM 输出不确定性**：Agent 回复可能因 LLM 的非确定性而在不同运行间产生差异。
 - **Blackboard 爬虫脆弱性**：爬虫依赖南科大 Blackboard 的 HTML 结构，学期间可能发生变化。
-- **OS 自动化仅支持 Windows**：文件自动化功能针对 Windows 设计，未在 macOS/Linux 上测试。
-- **DeepSeek API 限流**：高频使用可能触发 API 限流，用户可在设置对话框中配置自己的 API Key。
-- **无 Docker 部署**：系统目前直接在宿主机运行，未提供容器化部署方案。
+- **OS 自动化仅支持 Windows**：文件自动化功能针对 Windows 设计。
 
 ---
 
@@ -457,9 +461,3 @@ python -m pytest tests/ --cov=backend --cov-report=term-missing
 | [Guideline/docs/Frontend Relevant/backend-interface-contract-zh.md](Guideline/docs/Frontend%20Relevant/backend-interface-contract-zh.md) | 后端接口契约 |
 | [Guideline/docs/Frontend Relevant/frontend-api-connection-zh.md](Guideline/docs/Frontend%20Relevant/frontend-api-connection-zh.md) | 前端 API 对接说明 |
 | `http://127.0.0.1:8000/docs` | FastAPI Swagger 交互式文档（后端运行后可访问） |
-
----
-
-## 团队
-
-Team 26s-13 — 南方科技大学 CS304 软件工程，2026 春季。
