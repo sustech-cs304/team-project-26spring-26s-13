@@ -285,7 +285,12 @@ class BackendApiClient:
         self._request("DELETE", f"/api/agent/sessions/{session_id}")
 
     def refresh_schedule(self) -> dict[str, Any]:
-        payload = self._request("POST", "/api/schedule/refresh", json_body={})
+        payload = self._request(
+            "POST",
+            "/api/schedule/refresh",
+            json_body={},
+            timeout=max(self.timeout, 300.0),
+        )
         if not isinstance(payload, dict):
             raise BackendApiError("Schedule response must be a JSON object.")
         return payload
