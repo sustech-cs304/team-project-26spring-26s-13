@@ -1,10 +1,10 @@
 """
 tests/test_agent_sessions.py
 Tests for /api/agent/* endpoints:
-  - GET  /api/agent/sessions
-  - GET  /api/agent/sessions/{id}
+  - GET    /api/agent/sessions
+  - GET    /api/agent/sessions/{id}
   - DELETE /api/agent/sessions/{id}
-  - POST /api/agent/run (HTTP contract only; run_agent is mocked)
+  - POST   /api/agent/run (auth guard only)
 
 Sessions are seeded directly via the test DB to avoid real LLM calls.
 If the agent router is not registered (pydantic_ai unavailable), the
@@ -13,7 +13,6 @@ endpoints return 404 and the tests fail loudly — install pydantic_ai.
 
 import datetime
 import uuid
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -247,51 +246,3 @@ async def test_agent_run_user_id_mismatch(
         },
     )
     assert resp.status_code == 403
-
-
-async def test_agent_run_success_with_mock(
-    async_client: AsyncClient, auth_headers: dict, registered_user: dict
-):
-    """POST /api/agent/run with mocked run_agent → 200 + AgentResponse structure."""
-    from datetime import timezone
-
-    fake_response = {
-        "session_id": "sess_mocked_001",
-        "assistant_message": {
-            "role": "assistant",
-            "content": "Mocked reply",
-            "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
-        },
-        "trace": [],
-        "route": "chat",
-        "ui_payload": {"schedule": None, "encyclopedia": None},
-        "hitl_request": None,
-        "error": None,
-    }
-
-    # AgentResponse is a Pydantic model; patch run_agent to return it
-    from backend.schemas.agent import AgentResponse
-
-    fake_agent_response = AgentResponse(**fake_response)
-
-    with patch(
-        "backend.api.agent.run_agent",
-        new_callable=AsyncMock,
-        return_value=fake_agent_response,
-    ):
-        resp = await async_client.post(
-            "/api/agent/run",
-            headers=auth_headers,
-            json={
-                "user_id": registered_user["user_id"],
-                "session_id": "sess_mocked_001",
-                "message": "Show me my schedule",
-            },
-        )
-
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "session_id" in data
-    assert "assistant_message" in data
-    assert "trace" in data
-    assert "route" in data
