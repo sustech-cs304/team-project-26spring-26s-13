@@ -18,6 +18,7 @@ class UserProfile(BaseModel):
     display_name: str
     major: str
     preferences: UserPreferences
+    working_dir: str | None = None
 
 
 class UpdateProfileRequest(BaseModel):
@@ -36,3 +37,4 @@ class UpdateCredentialsRequest(BaseModel):
     cas_account: str | None = Field(None, description="南科大 CAS 统一认证账号")
     cas_password: str | None = Field(None, description="CAS 明文密码，后端加密存储")
     llm_api_key: str | None = Field(None, description="DeepSeek API Key，后端加密存储")
+    working_dir: str | None = Field(None, description="用户自定义的 OS 工作目录路径")

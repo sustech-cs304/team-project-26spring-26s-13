@@ -187,6 +187,11 @@ PROFILE = {
     },
 }
 
+# Demo accounts shown on the login page as a convenience hint
+AUTH_DEMO_ACCOUNTS = [
+    {"username": "demo", "password": "demo123"},
+]
+
 
 class ApiWorker(QThread):
     """Run a single blocking API call on a background thread and emit the result."""
@@ -410,6 +415,54 @@ class InlineTracePanel(QWidget):
         else:
             txt = f"✦  查看思考过程（{n} 步）  {chevron}"
         self._toggle_btn.setText(txt)
+
+
+_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+
+class ThinkingIndicator(QWidget):
+    """Animated 'thinking' bubble shown while waiting for the agent."""
+
+    def __init__(self, sender_label: str) -> None:
+        super().__init__()
+        now = datetime.now(timezone.utc).astimezone().strftime("%H:%M")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 8, 24, 8)
+        outer.setSpacing(0)
+
+        card = QFrame()
+        card.setObjectName("AgentMessageCard")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(18, 14, 18, 14)
+        card_layout.setSpacing(10)
+
+        header = QLabel(f"{sender_label}  ·  {now}")
+        header.setObjectName("BubbleTimeLabel")
+        card_layout.addWidget(header)
+
+        self._spinner_label = QLabel()
+        self._spinner_label.setObjectName("AgentMessageText")
+        self._frame = 0
+        self._update_text()
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(80)
+
+        card_layout.addWidget(self._spinner_label)
+        outer.addWidget(card)
+        outer.addSpacing(12)
+
+    def _tick(self) -> None:
+        self._frame = (self._frame + 1) % len(_SPINNER_FRAMES)
+        self._update_text()
+
+    def _update_text(self) -> None:
+        self._spinner_label.setText(
+            f"{_SPINNER_FRAMES[self._frame]}  Thinking..."
+        )
 
 
 class BubbleWidget(QWidget):
@@ -832,10 +885,12 @@ class SettingsDialog(QDialog):
         texts: dict[str, str],
         cas_state: dict[str, Any],
         api_state: dict[str, Any],
+        workdir_state: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(parent)
         self.texts = texts
         self.intent: str | None = None
+        _workdir = workdir_state or {}
 
         self.setWindowTitle(texts["settings_dialog_title"])
         self.setMinimumWidth(620)
@@ -901,6 +956,35 @@ class SettingsDialog(QDialog):
         api_layout.addLayout(api_form)
         api_layout.addWidget(api_button, 0, Qt.AlignmentFlag.AlignLeft)
 
+        # ── Working Directory card ──────────────────────────────────────────
+        workdir_card = QFrame()
+        workdir_card.setObjectName("PanelCard")
+        workdir_layout = QVBoxLayout(workdir_card)
+        workdir_layout.setContentsMargins(16, 16, 16, 16)
+        workdir_layout.setSpacing(10)
+        workdir_title = QLabel(texts["settings_workdir_title"])
+        workdir_title.setObjectName("SectionTitle")
+        workdir_body = QLabel(texts["settings_workdir_body"])
+        workdir_body.setObjectName("MutedText")
+        workdir_body.setWordWrap(True)
+
+        workdir_row = QHBoxLayout()
+        workdir_row.setSpacing(8)
+        self.workdir_input = QLineEdit(str(_workdir.get("path", "")))
+        self.workdir_input.setPlaceholderText(str(Path.home() / "Desktop"))
+        browse_button = QPushButton(texts["settings_workdir_browse"])
+        browse_button.clicked.connect(self._browse_workdir)
+        workdir_row.addWidget(self.workdir_input, 1)
+        workdir_row.addWidget(browse_button)
+
+        workdir_save = QPushButton(texts["settings_save_workdir"])
+        workdir_save.setObjectName("PrimaryButton")
+        workdir_save.clicked.connect(self._accept_workdir)
+        workdir_layout.addWidget(workdir_title)
+        workdir_layout.addWidget(workdir_body)
+        workdir_layout.addLayout(workdir_row)
+        workdir_layout.addWidget(workdir_save, 0, Qt.AlignmentFlag.AlignLeft)
+
         close_row = QHBoxLayout()
         close_button = QPushButton(texts["settings_close"])
         close_button.clicked.connect(self.reject)
@@ -911,6 +995,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(subtitle)
         layout.addWidget(cas_card)
         layout.addWidget(api_card)
+        layout.addWidget(workdir_card)
         layout.addLayout(close_row)
 
     def _accept_cas(self) -> None:
@@ -921,11 +1006,23 @@ class SettingsDialog(QDialog):
         self.intent = "api"
         self.accept()
 
+    def _accept_workdir(self) -> None:
+        self.intent = "workdir"
+        self.accept()
+
+    def _browse_workdir(self) -> None:
+        directory = QFileDialog.getExistingDirectory(
+            self, self.texts["settings_workdir_title"], self.workdir_input.text() or str(Path.home())
+        )
+        if directory:
+            self.workdir_input.setText(directory)
+
     def payload(self) -> dict[str, str]:
         return {
             "cas_username": self.cas_account_input.text().strip(),
             "cas_password": self.cas_password_input.text(),
             "api_key": self.api_key_input.text().strip(),
+            "working_dir": self.workdir_input.text().strip(),
         }
 
 
@@ -948,6 +1045,10 @@ class MainWindow(QMainWindow):
         }
         self.api_settings = {
             "api_key": "",
+            "saved": False,
+        }
+        self.working_dir_settings = {
+            "path": "",
             "saved": False,
         }
         self.material_records: list[dict[str, Any]] = []
@@ -1063,6 +1164,28 @@ class MainWindow(QMainWindow):
         if remaining > 32:
             return 12
         return 8
+
+    def _show_thinking_indicator(self) -> None:
+        """Insert an animated thinking bubble at the end of the chat."""
+        if not hasattr(self, "chat_layout"):
+            return
+        sender_label = self._sender_label("agent")
+        indicator = ThinkingIndicator(sender_label)
+        indicator.setObjectName("_ThinkingIndicator")
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, indicator)
+        self._scroll_chat_to_bottom()
+
+    def _remove_thinking_indicator(self) -> None:
+        """Remove the thinking indicator from the chat layout."""
+        if not hasattr(self, "chat_layout"):
+            return
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            if item and item.widget() and item.widget().objectName() == "_ThinkingIndicator":
+                w = self.chat_layout.takeAt(i).widget()
+                if w is not None:
+                    w.deleteLater()
+                return
 
     def _scroll_chat_to_bottom(self) -> None:
         if not hasattr(self, "chat_scroll_area"):
@@ -2411,14 +2534,14 @@ class MainWindow(QMainWindow):
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(8, 8, 8, 24)
-        content_layout.setSpacing(24)
+        content_layout.setContentsMargins(24, 16, 24, 32)
+        content_layout.setSpacing(28)
 
         hero = QFrame()
         hero.setObjectName("HomeHeroCard")
         hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(28, 30, 28, 30)
-        hero_layout.setSpacing(14)
+        hero_layout.setContentsMargins(36, 36, 36, 36)
+        hero_layout.setSpacing(16)
 
         hero_kicker = QLabel(self.ui("home_kicker"))
         hero_kicker.setObjectName("AuthKicker")
@@ -2446,14 +2569,14 @@ class MainWindow(QMainWindow):
         hero_layout.addLayout(hero_buttons)
 
         feature_grid = QGridLayout()
-        feature_grid.setHorizontalSpacing(14)
-        feature_grid.setVerticalSpacing(14)
+        feature_grid.setHorizontalSpacing(16)
+        feature_grid.setVerticalSpacing(16)
         for index, item in enumerate(HOME_CORE_FEATURES):
             card = QFrame()
             card.setObjectName("HomeFeatureCard")
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(18, 18, 18, 18)
-            card_layout.setSpacing(8)
+            card_layout.setContentsMargins(22, 22, 22, 22)
+            card_layout.setSpacing(10)
             card_title = QLabel(self.local(item["title"]))
             card_title.setObjectName("SectionTitle")
             card_detail = QLabel(self.local(item["detail"]))
@@ -2467,16 +2590,18 @@ class MainWindow(QMainWindow):
         section_title.setObjectName("HomeSectionTitle")
 
         skills_grid = QGridLayout()
-        skills_grid.setHorizontalSpacing(14)
-        skills_grid.setVerticalSpacing(14)
+        skills_grid.setHorizontalSpacing(16)
+        skills_grid.setVerticalSpacing(16)
         for index, item in enumerate(HOME_SKILLS):
             card = QFrame()
             card.setObjectName("HomeSkillCard")
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(18, 18, 18, 18)
-            card_layout.setSpacing(8)
+            card_layout.setContentsMargins(22, 22, 22, 22)
+            card_layout.setSpacing(10)
             icon = QLabel(item["icon"])
             icon.setObjectName("SkillIcon")
+            icon.setFixedWidth(60)
+            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             title = QLabel(self.local(item["title"]))
             title.setObjectName("SectionTitle")
             detail = QLabel(self.local(item["detail"]))
@@ -2490,8 +2615,8 @@ class MainWindow(QMainWindow):
         banner = QFrame()
         banner.setObjectName("HomeBannerCard")
         banner_layout = QVBoxLayout(banner)
-        banner_layout.setContentsMargins(24, 24, 24, 24)
-        banner_layout.setSpacing(10)
+        banner_layout.setContentsMargins(28, 28, 28, 28)
+        banner_layout.setSpacing(12)
         banner_title = QLabel(self.local(HOME_BANNER["title"]))
         banner_title.setObjectName("HomeSectionTitle")
         banner_detail = QLabel(self.local(HOME_BANNER["detail"]))
@@ -3277,13 +3402,13 @@ class MainWindow(QMainWindow):
             )
 
         event_format = QTextCharFormat()
-        event_format.setBackground(QColor(90, 124, 255, 95))
-        event_format.setForeground(QColor("#ffffff"))
+        event_format.setBackground(QColor(59, 130, 246, 100))
+        event_format.setForeground(QColor("#f0f4ff"))
         event_format.setFontWeight(QFont.Weight.Bold)
 
         conflict_format = QTextCharFormat()
-        conflict_format.setBackground(QColor(255, 140, 120, 95))
-        conflict_format.setForeground(QColor("#ffffff"))
+        conflict_format.setBackground(QColor(239, 68, 68, 100))
+        conflict_format.setForeground(QColor("#f0f4ff"))
         conflict_format.setFontWeight(QFont.Weight.Bold)
 
         conflict_days = self._conflict_dates(grouped)
@@ -3503,7 +3628,11 @@ class MainWindow(QMainWindow):
 
     def open_settings_dialog(self) -> None:
         dialog = SettingsDialog(
-            self, UI_TEXTS[self.language], self.cas_settings, self.api_settings
+            self,
+            UI_TEXTS[self.language],
+            self.cas_settings,
+            self.api_settings,
+            self.working_dir_settings,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.intent:
             return
@@ -3543,6 +3672,35 @@ class MainWindow(QMainWindow):
                 self,
                 self.ui("settings_saved_title"),
                 self.ui("settings_cas_saved"),
+            )
+            return
+
+        if dialog.intent == "workdir":
+            workdir = payload["working_dir"]
+            if not workdir:
+                QMessageBox.warning(
+                    self,
+                    self.ui("settings_dialog_title"),
+                    self.ui("settings_missing_workdir"),
+                )
+                return
+
+            if self.api_client.enabled and self.api_client.authenticated:
+                try:
+                    self.api_client.update_credentials(working_dir=workdir)
+                except BackendApiError as exc:
+                    QMessageBox.warning(
+                        self,
+                        self.ui("settings_dialog_title"),
+                        self.ui("trace_backend_unavailable_detail", error=str(exc)),
+                    )
+                    return
+
+            self.working_dir_settings = {"path": workdir, "saved": True}
+            QMessageBox.information(
+                self,
+                self.ui("settings_saved_title"),
+                self.ui("settings_workdir_saved"),
             )
             return
 
@@ -3656,6 +3814,10 @@ class MainWindow(QMainWindow):
             "major": major,
             "focus": self.ui("authenticated_focus"),
         }
+
+        working_dir = user_profile.get("working_dir")
+        if working_dir:
+            self.working_dir_settings = {"path": str(working_dir), "saved": True}
 
         active_session_id = str(payload.get("active_session_id", "")).strip()
         chat_history = payload.get("chat_history", [])
@@ -3843,6 +4005,7 @@ class MainWindow(QMainWindow):
             )
 
         def _on_error(err):
+            self._remove_thinking_indicator()
             self._append_trace(
                 self.local({"en": "Observation", "zh": "观察"}),
                 self.ui("trace_backend_unavailable_title"),
@@ -4054,6 +4217,7 @@ class MainWindow(QMainWindow):
         self._load_chat_messages(self.chat_messages)
         if self._run_remote_agent(message=text, attachments=attachments):
             self.message_input.clear()
+            self._show_thinking_indicator()
             return
 
         QMessageBox.warning(
