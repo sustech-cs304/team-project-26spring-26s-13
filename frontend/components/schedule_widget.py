@@ -224,8 +224,8 @@ class ScheduleWidget(QWidget):
             )
 
         event_format = QTextCharFormat()
-        event_format.setBackground(QColor(90, 124, 255, 95))
-        event_format.setForeground(QColor("#ffffff"))
+        event_format.setBackground(QColor(59, 130, 246, 100))
+        event_format.setForeground(QColor("#f0f4ff"))
         event_format.setFontWeight(QFont.Weight.Bold)
         for day_value in grouped:
             self._calendar.setDateTextFormat(

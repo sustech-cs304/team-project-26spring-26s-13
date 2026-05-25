@@ -57,7 +57,7 @@ class HITLDialog(QDialog):
         risk = str(req.get("risk", "medium")).lower()
         risk_label = QLabel(f"Risk: {risk}", self)
         if risk == "high":
-            risk_label.setStyleSheet("color: #d9534f; font-weight: 600;")
+            risk_label.setStyleSheet("color: #ef4444; font-weight: 600;")
         layout.addWidget(risk_label)
 
         action = str(req.get("action", ""))
