@@ -64,4 +64,6 @@ if __name__ == "__main__":
     # NOTE: Using reload=True on Windows can cause frequent restarts and transient
     # connection failures (WinError 10061) for the desktop client. Keep reload off
     # for a stable local run; developers can enable it manually when needed.
-    uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=False)
+    uvicorn.run(
+        "backend.main:app", host=settings.HOST, port=settings.PORT, reload=False
+    )
