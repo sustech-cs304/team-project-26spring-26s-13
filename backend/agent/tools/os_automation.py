@@ -30,15 +30,15 @@ from backend.services import audit_service
 # ── Workspace 与路径安全 ───────────────────────────────────────────────────────
 
 
-def _workspace_for_user_id(user_id) -> Path:
-    root = Path(settings.WORKSPACE_DIR) / str(user_id)
+def _workspace_for_user(username: str) -> Path:
+    root = Path(settings.WORKSPACE_DIR) / username
     root.mkdir(parents=True, exist_ok=True)
     return root.resolve()
 
 
 def _get_workspace(ctx: RunContext[AgentDeps]) -> Path:
-    """返回当前用户的 workspace 绝对路径，不存在则创建。"""
-    return _workspace_for_user_id(ctx.deps.user.user_id)
+    """返回当前用户的 workspace 绝对路径（以 username 命名），不存在则创建。"""
+    return _workspace_for_user(ctx.deps.user.username)
 
 
 def _safe_path(workspace: Path, target: str) -> Path:
@@ -215,16 +215,19 @@ async def file_update(
     content: str,
 ) -> str:
     """
-    覆盖 workspace 内已有文件的全部内容。**不可逆**，触发 HITL（risk=medium）。
-    用户在前端弹窗中批准后，工具会被再次调用以实际执行。
+    覆盖 workspace 内已有文件的全部内容。**不可逆**，仅当文件存在时触发 HITL（risk=medium）。
+
+    调用前：若不确定文件是否存在，先 `file_list(".")`；
+    path 必须与用户指定的文件名一致。
 
     Args:
         path:    相对于 workspace 的文件路径（必须已存在）
-        content: 新的完整文件内容
+        content: 新的完整文件内容（用户要求的原文，不要擅自替换）
 
     Returns:
         批准并执行成功："OK:FILE_UPDATED:{relpath}"
-        其他错误："ERROR:FILE_NOT_FOUND" / "ERROR:OUT_OF_WORKSPACE"
+        文件不存在："ERROR:FILE_NOT_FOUND"（不会弹 HITL，应列出目录并询问用户）
+        其他错误："ERROR:OUT_OF_WORKSPACE"
     """
     workspace = _get_workspace(ctx)
     try:
@@ -232,7 +235,9 @@ async def file_update(
     except PermissionError:
         return "ERROR:OUT_OF_WORKSPACE"
     if not safe.exists() or not safe.is_file():
-        return "ERROR:FILE_NOT_FOUND"
+        entries = sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        listing = ", ".join(entries) if entries else "(empty)"
+        return f"ERROR:FILE_NOT_FOUND. Current workspace contents: [{listing}]. Do NOT call file_list again — report this to the user immediately."
 
     rel = _rel(workspace, safe)
     if not ctx.deps.hitl_approved:
@@ -272,14 +277,18 @@ async def file_update(
 async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
     """
     删除 workspace 内的文件或目录（**目录会递归删除**）。
-    **不可逆**，触发 HITL（risk=high）。
+    **不可逆**，仅当目标存在时触发 HITL（risk=high）。
+
+    调用前：若用户给出的文件名不确定，先 `file_list(".")` 确认存在；
+    必须使用用户指定的路径，不要换成其他文件名。
 
     Args:
-        path: 相对于 workspace 的目标路径
+        path: 相对于 workspace 的目标路径（须与用户要求一致）
 
     Returns:
         批准并执行成功："OK:FILE_DELETED:{relpath}"
-        其他错误："ERROR:FILE_NOT_FOUND" / "ERROR:OUT_OF_WORKSPACE"
+        目标不存在："ERROR:FILE_NOT_FOUND"（不会弹 HITL，应列出目录并询问用户）
+        其他错误："ERROR:OUT_OF_WORKSPACE"
     """
     workspace = _get_workspace(ctx)
     try:
@@ -287,7 +296,10 @@ async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
     except PermissionError:
         return "ERROR:OUT_OF_WORKSPACE"
     if not safe.exists():
-        return "ERROR:FILE_NOT_FOUND"
+        # Return current listing so LLM can reply in one shot without extra file_list calls
+        entries = sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        listing = ", ".join(entries) if entries else "(empty)"
+        return f"ERROR:FILE_NOT_FOUND. Current workspace contents: [{listing}]. Do NOT call file_list again — report this to the user immediately."
 
     rel = _rel(workspace, safe)
     kind = "directory" if safe.is_dir() else "file"
@@ -451,7 +463,7 @@ async def execute_approved_hitl_operation(
     """
     用户 HITL 批准后确定性执行已登记的工具参数，避免 LLM 二次改写 content。
     """
-    workspace = _workspace_for_user_id(deps.user.user_id)
+    workspace = _workspace_for_user(deps.user.username)
     name = state.tool_name
     args = state.tool_args or {}
 
