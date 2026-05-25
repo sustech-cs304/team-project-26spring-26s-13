@@ -291,7 +291,7 @@ async def test_service_sync_blackboard_materials_filters_course_and_keyword():
     ), patch(
         "backend.services.material_service.fetch_blackboard_course_materials",
         new_callable=AsyncMock,
-        return_value=bb_items,
+        return_value=(bb_items, []),
     ), patch(
         "backend.services.material_service._create_material_from_bytes",
         new_callable=AsyncMock,

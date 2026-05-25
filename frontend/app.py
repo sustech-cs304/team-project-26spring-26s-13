@@ -328,30 +328,27 @@ class BubbleWidget(QWidget):
     ) -> None:
         super().__init__()
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 10)
+        outer.setContentsMargins(16, 2, 16, 8)
 
         bubble = QFrame()
         bubble.setObjectName("UserBubble" if sender == "user" else "AgentBubble")
-        bubble.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        # Constrain bubble width for ChatGPT aesthetic
+        bubble.setMaximumWidth(680)
+        bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         bubble_layout = QVBoxLayout(bubble)
-        bubble_layout.setContentsMargins(14, 12, 14, 12)
-        bubble_layout.setSpacing(6)
+        bubble_layout.setContentsMargins(14, 10, 14, 10)
+        bubble_layout.setSpacing(4)
 
-        header_row = QHBoxLayout()
-        header_row.setSpacing(8)
-        sender_title = QLabel(sender_label)
-        sender_title.setObjectName("CardTitle")
-        type_chip = QLabel(message_type_label)
-        type_chip.setObjectName("MessageTypeChip")
+        # Agent messages get a small sender label; user messages are clean
+        if sender != "user":
+            sender_title = QLabel(sender_label)
+            sender_title.setObjectName("CardTitle")
+            bubble_layout.addWidget(sender_title)
+
         text_label = QLabel(text)
         text_label.setObjectName("BodyText")
         text_label.setWordWrap(True)
         text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-
-        header_row.addWidget(sender_title)
-        header_row.addWidget(type_chip)
-        header_row.addStretch(1)
-        bubble_layout.addLayout(header_row)
         bubble_layout.addWidget(text_label)
 
         if sender == "user":
@@ -2570,12 +2567,20 @@ class MainWindow(QMainWindow):
         page.setObjectName("DashboardPage")
         root_layout = QVBoxLayout(page)
         root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(16)
+        root_layout.setSpacing(0)
 
-        root_layout.addLayout(self._build_header())
+        # Slim top header bar
+        header_bar = QFrame()
+        header_bar.setObjectName("AppHeaderBar")
+        header_bar_layout = QHBoxLayout(header_bar)
+        header_bar_layout.setContentsMargins(0, 0, 0, 0)
+        header_bar_layout.setSpacing(0)
+        header_bar_layout.addLayout(self._build_header())
+        root_layout.addWidget(header_bar)
 
         body_layout = QHBoxLayout()
-        body_layout.setSpacing(16)
+        body_layout.setSpacing(0)
+        body_layout.setContentsMargins(0, 0, 0, 0)
 
         sidebar = self._build_sidebar()
         center = self._build_center_panel()
@@ -2589,17 +2594,11 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QHBoxLayout:
         layout = QHBoxLayout()
-        layout.setSpacing(12)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(8)
 
-        title_group = QVBoxLayout()
-        title_group.setSpacing(4)
         title = QLabel(self.app_title())
-        title.setObjectName("TitleLabel")
-        subtitle = QLabel(self.ui("header_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
-        title_group.addWidget(title)
-        title_group.addWidget(subtitle)
+        title.setObjectName("HomeBrand")
 
         self.header_user_label = QLabel()
         self.header_user_label.setObjectName("BadgeLabel")
@@ -2615,7 +2614,8 @@ class MainWindow(QMainWindow):
         logout_button = QPushButton(self.ui("log_out"))
         logout_button.clicked.connect(self.logout)
 
-        layout.addLayout(title_group, 1)
+        layout.addWidget(title)
+        layout.addStretch(1)
         layout.addWidget(self.backend_mode_label)
         layout.addWidget(self.header_user_label)
         layout.addWidget(lang_button)
@@ -2750,65 +2750,59 @@ class MainWindow(QMainWindow):
     def _build_chat_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(14)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        chat_card = QFrame()
-        chat_card.setObjectName("PanelCard")
-        chat_layout = QVBoxLayout(chat_card)
-        chat_layout.setContentsMargins(16, 16, 16, 16)
-        chat_layout.setSpacing(10)
-
-        chat_title = QLabel(self.ui("tab_agent_chat"))
-        chat_title.setObjectName("SectionTitle")
-
+        # ── Chat messages scroll area (seamless, no card wrapper) ──────────────
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setObjectName("ChatScrollArea")
         self.chat_scroll_area = scroll_area
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
-        self.chat_layout.setContentsMargins(4, 4, 4, 4)
+        self.chat_layout.setContentsMargins(0, 16, 0, 16)
         self.chat_layout.setSpacing(0)
         self.chat_layout.addStretch(1)
         scroll_area.setWidget(self.chat_container)
+        layout.addWidget(scroll_area, 1)
 
-        chat_layout.addWidget(chat_title)
-        chat_layout.addWidget(scroll_area, 1)
-        layout.addWidget(chat_card, 1)
-
+        # ── Composer bar (floating rounded card at the bottom) ─────────────────
         composer_card = QFrame()
-        composer_card.setObjectName("PanelCard")
-        composer_layout = QVBoxLayout(composer_card)
-        composer_layout.setContentsMargins(16, 16, 16, 16)
-        composer_layout.setSpacing(10)
+        composer_card.setObjectName("ChatComposerCard")
+        composer_outer = QVBoxLayout(composer_card)
+        composer_outer.setContentsMargins(16, 10, 16, 10)
+        composer_outer.setSpacing(6)
 
-        composer_title = QLabel(self.ui("send_task"))
-        composer_title.setObjectName("SectionTitle")
-        self.message_input = QTextEdit()
-        self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
-        self.message_input.setFixedHeight(110)
-
-        button_row = QHBoxLayout()
-        button_row.setSpacing(10)
         self.mode_button = None
         self.mode_menu = None
         self.mode_actions = {}
 
-        send_button = QPushButton(self.ui("send"))
-        send_button.setObjectName("PrimaryButton")
+        # Input + send button on same row
+        input_row = QHBoxLayout()
+        input_row.setSpacing(8)
+        self.message_input = QTextEdit()
+        self.message_input.setObjectName("ChatComposer")
+        self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
+        self.message_input.setFixedHeight(80)
+        send_button = QPushButton("↑")
+        send_button.setObjectName("SendButton")
         send_button.clicked.connect(self.handle_send_message)
+        self.send_button = send_button
+        input_row.addWidget(self.message_input, 1)
+        input_row.addWidget(send_button, 0, Qt.AlignmentFlag.AlignBottom)
+
+        # Mode selector + clear button row below input
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        self._refresh_mode_selector()
         clear_button = QPushButton(self.ui("clear_draft"))
         clear_button.clicked.connect(self.message_input.clear)
-        button_row.addStretch(1)
-        button_row.addWidget(clear_button)
-        button_row.addWidget(send_button)
-        self._refresh_mode_selector()
+        action_row.addStretch(1)
+        action_row.addWidget(clear_button)
 
-        composer_layout.addWidget(composer_title)
-        composer_layout.addWidget(self.message_input)
-        composer_layout.addLayout(button_row)
-
+        composer_outer.addLayout(input_row)
+        composer_outer.addLayout(action_row)
         layout.addWidget(composer_card)
         return tab
 
