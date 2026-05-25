@@ -3,7 +3,7 @@ backend/agent/tools/os_automation.py
 OS 文件系统自动化工具。
 
 安全约束：
-  1. 所有操作严格限制在用户 workspace 内（settings.WORKSPACE_DIR / {user_id}/）
+  1. 所有操作严格限制在用户 workspace 内（user.working_dir 优先，否则 settings.WORKSPACE_DIR / {username}/）
   2. UPDATE / DELETE / 批量 RENAME 触发 HITL（不可绕过）
   3. 所有写操作完成后写入 audit_logs 表
   4. 工具只用 pathlib / shutil API，不允许执行任意 shell 命令
@@ -30,15 +30,15 @@ from backend.services import audit_service
 # ── Workspace 与路径安全 ───────────────────────────────────────────────────────
 
 
-def _workspace_for_user(username: str) -> Path:
-    root = Path(settings.WORKSPACE_DIR) / username
+def _workspace_for_user(username: str, working_dir: str | None = None) -> Path:
+    root = Path(working_dir) if working_dir else Path(settings.WORKSPACE_DIR) / username
     root.mkdir(parents=True, exist_ok=True)
     return root.resolve()
 
 
 def _get_workspace(ctx: RunContext[AgentDeps]) -> Path:
-    """返回当前用户的 workspace 绝对路径（以 username 命名），不存在则创建。"""
-    return _workspace_for_user(ctx.deps.user.username)
+    """返回当前用户的 workspace 绝对路径，优先使用用户自定义 working_dir。"""
+    return _workspace_for_user(ctx.deps.user.username, ctx.deps.user.working_dir)
 
 
 def _safe_path(workspace: Path, target: str) -> Path:
@@ -463,7 +463,7 @@ async def execute_approved_hitl_operation(
     """
     用户 HITL 批准后确定性执行已登记的工具参数，避免 LLM 二次改写 content。
     """
-    workspace = _workspace_for_user(deps.user.username)
+    workspace = _workspace_for_user(deps.user.username, deps.user.working_dir)
     name = state.tool_name
     args = state.tool_args or {}
 
