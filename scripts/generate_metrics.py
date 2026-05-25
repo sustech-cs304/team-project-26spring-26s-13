@@ -304,9 +304,7 @@ def parse_coverage_xml():
                 if cls_name.endswith(".py"):
                     classes.append({"name": cls_name, "rate": cls_rate})
             classes.sort(key=lambda x: x["rate"])
-            result["packages"].append(
-                {"name": name, "rate": rate, "classes": classes}
-            )
+            result["packages"].append({"name": name, "rate": rate, "classes": classes})
     except Exception:
         pass
     return result
@@ -425,7 +423,9 @@ def generate_html_report(metrics, junit, coverage):
     ]
     for i, (cat, pkgs) in enumerate(dep_categories.items()):
         col = colors[i % len(colors)]
-        badges = " ".join(f'<span class="dep-tag" style="border-color:{col}">{p}</span>' for p in pkgs)
+        badges = " ".join(
+            f'<span class="dep-tag" style="border-color:{col}">{p}</span>' for p in pkgs
+        )
         dep_grid += f"""
         <div class="dep-card" style="border-top:3px solid {col}">
           <div class="dep-card-title">{cat}</div>
@@ -433,7 +433,8 @@ def generate_html_report(metrics, junit, coverage):
           <div class="dep-card-list">{badges}</div>
         </div>"""
 
-    html = f"""<!DOCTYPE html>
+    html = (
+        f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -716,7 +717,8 @@ tr:hover td {{ background:var(--gray-50); }}
     <div class="panel-body">
       <table>
         <tr><th>Test File</th><th>Total</th><th>Passed</th><th>Failed</th><th>Time</th><th>Status</th></tr>
-""" + "".join(f"""
+"""
+        + "".join(f"""
         <tr>
           <td><code>{f.replace('tests/', '')}</code></td>
           <td>{d['total']}</td>
@@ -724,20 +726,25 @@ tr:hover td {{ background:var(--gray-50); }}
           <td style="color:var(--danger);font-weight:600">{d['failed'] + d['errors']}</td>
           <td>{d['time']:.2f}s</td>
           <td>{'<span class="cc-badge" style="background:var(--success)">PASS</span>' if d['failed'] + d['errors'] == 0 else '<span class="cc-badge" style="background:var(--danger)">FAIL</span>'}</td>
-        </tr>""" for f, d in sorted(junit.get("by_file", {}).items())) + """
+        </tr>""" for f, d in sorted(junit.get("by_file", {}).items()))
+        + """
       </table>
     </div>
   </div>
   <div class="panel">
-    <div class="panel-header">All Test Cases <span style="font-weight:400;font-size:.8rem;color:var(--gray-500)">""" + f"{junit['total']} total" + """</span></div>
+    <div class="panel-header">All Test Cases <span style="font-weight:400;font-size:.8rem;color:var(--gray-500)">"""
+        + f"{junit['total']} total"
+        + """</span></div>
     <div class="panel-body" style="max-height:500px;overflow-y:auto">
       <table>
         <tr><th style="width:50px">#</th><th>Test</th><th style="width:80px">Time</th><th style="width:70px">Status</th></tr>
-""" + "".join(
-        f"""        <tr><td>{i+1}</td><td><code class="fn-name">{c['name']}</code><br><span class="fn-file">{f.replace('tests/', '')}</span></td><td>{c['time']:.3f}s</td><td>{'<span style="color:var(--success)">&#10003;</span>' if c['status'] == 'passed' else '<span style="color:var(--danger)">&#10007;</span>'}</td></tr>\n"""
-        for i, (f, d) in enumerate(sorted(junit.get("by_file", {}).items()))
-        for c in d.get("cases", [])
-    ) + f"""      </table>
+"""
+        + "".join(
+            f"""        <tr><td>{i+1}</td><td><code class="fn-name">{c['name']}</code><br><span class="fn-file">{f.replace('tests/', '')}</span></td><td>{c['time']:.3f}s</td><td>{'<span style="color:var(--success)">&#10003;</span>' if c['status'] == 'passed' else '<span style="color:var(--danger)">&#10007;</span>'}</td></tr>\n"""
+            for i, (f, d) in enumerate(sorted(junit.get("by_file", {}).items()))
+            for c in d.get("cases", [])
+        )
+        + f"""      </table>
     </div>
   </div>
 </div>
@@ -782,14 +789,13 @@ tr:hover td {{ background:var(--gray-50); }}
     <div class="panel-body">
       <table>
         <tr><th>Package</th><th style="width:80px">Rate</th><th>Bar</th></tr>
-""" + "".join(
-        f"""        <tr>
+"""
+        + "".join(f"""        <tr>
           <td><code>{p['name'] or '.'}</code></td>
           <td style="font-weight:600;color:{_cc_color(100-int(p['rate']*100))}">{p['rate']*100:.1f}%</td>
           <td><div class="mini-bar-track" style="max-width:300px"><div class="mini-bar-fill" style="width:{p['rate']*100:.1f}%;background:{_cc_color(100-int(p['rate']*100))}"></div></div></td>
-        </tr>\n"""
-        for p in coverage.get("packages", [])
-    ) + """      </table>
+        </tr>\n""" for p in coverage.get("packages", []))
+        + """      </table>
     </div>
   </div>
   <div class="panel">
@@ -797,17 +803,19 @@ tr:hover td {{ background:var(--gray-50); }}
     <div class="panel-body" style="max-height:500px;overflow-y:auto">
       <table>
         <tr><th>Module</th><th style="width:80px">Rate</th><th>Bar</th></tr>
-""" + "".join(
-        f"""        <tr>
+"""
+        + "".join(
+            f"""        <tr>
           <td><code class="fn-name">{c['name']}</code></td>
           <td style="font-weight:600;color:{_cc_color(100-int(c['rate']*100))}">{c['rate']*100:.1f}%</td>
           <td><div class="mini-bar-track" style="max-width:250px"><div class="mini-bar-fill" style="width:{max(c['rate']*100,1):.1f}%;background:{_cc_color(100-int(c['rate']*100))}"></div></div></td>
         </tr>\n"""
-        for c in sorted(
-            [c for p in coverage.get("packages", []) for c in p.get("classes", [])],
-            key=lambda x: x["rate"],
-        )[:30]
-    ) + f"""      </table>
+            for c in sorted(
+                [c for p in coverage.get("packages", []) for c in p.get("classes", [])],
+                key=lambda x: x["rate"],
+            )[:30]
+        )
+        + f"""      </table>
     </div>
   </div>
 </div>
@@ -832,6 +840,7 @@ document.querySelectorAll('.nav-tab').forEach(function(tab) {{
 </script>
 </body>
 </html>"""
+    )
     return html
 
 
@@ -899,7 +908,9 @@ def main():
         )
         print(f"  Duration:     {junit['time']:.1f}s")
     if coverage["lines_valid"] > 0:
-        print(f"  Coverage:     {coverage['line_rate']*100:.1f}% ({coverage['lines_covered']}/{coverage['lines_valid']} lines)")
+        print(
+            f"  Coverage:     {coverage['line_rate']*100:.1f}% ({coverage['lines_covered']}/{coverage['lines_valid']} lines)"
+        )
 
 
 if __name__ == "__main__":

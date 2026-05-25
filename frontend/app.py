@@ -808,11 +808,7 @@ class MainWindow(QMainWindow):
         return self.current_user_id_value or self.current_username or "local_student"
 
     def _message_placeholder_for_mode(self) -> str:
-        return {
-            "agent_chat": self.ui("message_placeholder_chat"),
-            "scheduler": self.ui("message_placeholder_schedule"),
-            "encyclopedia": self.ui("message_placeholder_encyclopedia"),
-        }.get(self.selected_mode, self.ui("message_placeholder_chat"))
+        return self.ui("message_placeholder")
 
     def _mode_label(self, mode: str) -> str:
         return {
@@ -1103,10 +1099,44 @@ class MainWindow(QMainWindow):
         ui_payload: dict[str, Any] = {"schedule": None, "encyclopedia": None}
         hitl_request: dict[str, Any] | None = None
 
-        if any(
+        # Check keywords to route automatically in mock mode
+        is_hitl = any(
             keyword in lowered
             for keyword in ("delete", "overwrite", "modify", "删除", "覆盖", "修改")
-        ):
+        )
+        is_schedule = any(
+            keyword in lowered
+            for keyword in (
+                "schedule",
+                "conflict",
+                "calendar",
+                "event",
+                "日程",
+                "冲突",
+                "日历",
+                "安排",
+            )
+        )
+        is_encyclopedia = any(
+            keyword in lowered
+            for keyword in (
+                "credit",
+                "dorm",
+                "handbook",
+                "policy",
+                "学分",
+                "宿舍",
+                "手册",
+                "规定",
+                "毕业",
+            )
+        )
+        is_library = any(
+            keyword in lowered
+            for keyword in ("library", "room", "book", "图书馆", "讨论间", "预约")
+        )
+
+        if is_hitl:
             route = "os_automation"
             assistant_text = self.ui("reply_hitl")
             trace = [
@@ -1119,14 +1149,14 @@ class MainWindow(QMainWindow):
             ]
             hitl_request = self._build_localized_hitl_request()
             hitl_request["request_id"] = f"hitl_mock_{uuid4().hex[:10]}"
-        elif self.selected_mode == "scheduler":
+        elif is_schedule:
             route = "scheduler"
             assistant_text = self.ui("reply_schedule")
             ui_payload["schedule"] = {
                 "events": [dict(item) for item in self.schedule_events],
                 "conflicts": [dict(item) for item in self.conflicts],
             }
-        elif self.selected_mode == "encyclopedia":
+        elif is_encyclopedia:
             route = "encyclopedia"
             if "dorm" in lowered or "宿舍" in lowered:
                 key = "dorm"
@@ -1152,6 +1182,30 @@ class MainWindow(QMainWindow):
                     "status": "done",
                 }
             )
+        elif is_library:
+            route = "library"
+            assistant_text = self.ui("library_card_intro")
+            ui_payload["library"] = {
+                "query_time": self.local(
+                    {"en": "Tomorrow afternoon", "zh": "明天下午"}
+                ),
+                "query_location": self.local({"en": "1st Floor", "zh": "一楼"}),
+                "query_capacity": 6,
+                "rooms": [
+                    {
+                        "room_name": "Room 101",
+                        "location": self.local({"en": "1st Floor", "zh": "一楼"}),
+                        "capacity": 6,
+                        "time_slots": ["14:00-16:00", "16:00-18:00"],
+                    },
+                    {
+                        "room_name": "Room 102",
+                        "location": self.local({"en": "1st Floor", "zh": "一楼"}),
+                        "capacity": 8,
+                        "time_slots": ["15:00-17:00"],
+                    },
+                ],
+            }
 
         return {
             "session_id": self.session_id,
@@ -2267,6 +2321,12 @@ class MainWindow(QMainWindow):
             else ""
         )
 
+        chat_message = (
+            self.message_input.toPlainText()
+            if hasattr(self, "message_input") and self.message_input is not None
+            else ""
+        )
+
         self.language = "zh" if self.language == "en" else "en"
         self._reset_dynamic_state()
         self._build_root()
@@ -2278,6 +2338,12 @@ class MainWindow(QMainWindow):
 
         if current_page == "DashboardPage":
             self.stack.setCurrentWidget(self.dashboard_page)
+            if (
+                hasattr(self, "message_input")
+                and self.message_input is not None
+                and chat_message
+            ):
+                self.message_input.setPlainText(chat_message)
             if self.current_username and self.api_client.authenticated:
                 self.sync_bootstrap_data(record_trace=False)
         elif current_page == "AuthPage":
@@ -2828,30 +2894,15 @@ class MainWindow(QMainWindow):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
-        self.mode_button = QPushButton()
-        self.mode_button.setObjectName("ModeDropdownButton")
-        self.mode_button.clicked.connect(self._open_mode_menu)
-        self.mode_menu = QMenu(self)
-        self.mode_menu.setObjectName("ModeDropdownMenu")
+        self.mode_button = None
+        self.mode_menu = None
         self.mode_actions = {}
-        for mode, label_key in (
-            ("agent_chat", "mode_agent_chat"),
-            ("scheduler", "mode_scheduler"),
-            ("encyclopedia", "mode_encyclopedia"),
-        ):
-            action = self.mode_menu.addAction(self.ui(label_key))
-            action.setCheckable(True)
-            action.triggered.connect(
-                lambda _checked=False, value=mode: self._set_selected_mode(value)
-            )
-            self.mode_actions[mode] = action
 
         send_button = QPushButton(self.ui("send"))
         send_button.setObjectName("PrimaryButton")
         send_button.clicked.connect(self.handle_send_message)
         clear_button = QPushButton(self.ui("clear_draft"))
         clear_button.clicked.connect(self.message_input.clear)
-        button_row.addWidget(self.mode_button)
         button_row.addStretch(1)
         button_row.addWidget(clear_button)
         button_row.addWidget(send_button)
@@ -3668,6 +3719,8 @@ class MainWindow(QMainWindow):
             else None
         )
         extra_messages = self._build_response_cards(response)
+        if extra_messages:
+            assistant_text = ""
         inferred_schedule_event = self._add_frontend_schedule_event_from_reply(
             assistant_text
         )
@@ -3815,7 +3868,9 @@ class MainWindow(QMainWindow):
                 )
 
             def _on_error(err):
-                QMessageBox.warning(self, self.ui("login_failed"), err)
+                QMessageBox.warning(
+                    self, self.ui("login_failed"), self.ui("login_error_body")
+                )
 
             self._start_worker(_call, _on_done, _on_error)
             return
@@ -3881,7 +3936,9 @@ class MainWindow(QMainWindow):
                 )
 
             def _on_error(err):
-                QMessageBox.warning(self, self.ui("register_failed"), err)
+                QMessageBox.warning(
+                    self, self.ui("register_failed"), self.ui("register_error_body")
+                )
 
             self._start_worker(_call, _on_done, _on_error)
             return
@@ -3962,7 +4019,11 @@ class MainWindow(QMainWindow):
             try:
                 self.api_client.delete_session(session_id)
             except BackendApiError as exc:
-                QMessageBox.warning(self, self.ui("delete_chat_failed_title"), str(exc))
+                QMessageBox.warning(
+                    self,
+                    self.ui("delete_chat_failed_title"),
+                    self.ui("delete_chat_failed_body", details=str(exc)),
+                )
                 return
 
         self.conversations = [
@@ -4109,7 +4170,11 @@ class MainWindow(QMainWindow):
             )
 
         def _on_error(err):
-            QMessageBox.warning(self, self.ui("refresh_schedule_failed_title"), err)
+            QMessageBox.warning(
+                self,
+                self.ui("refresh_schedule_failed_title"),
+                self.ui("refresh_schedule_failed_body", details=err),
+            )
             self._append_trace(
                 self.local({"en": "Observation", "zh": "观察"}),
                 self.ui("refresh_schedule_failed_title"),
@@ -4118,6 +4183,20 @@ class MainWindow(QMainWindow):
             )
 
         self._start_worker(self.api_client.refresh_schedule, _on_done, _on_error)
+
+    def _cleanup_bb_sync(self, result: int) -> None:
+        timer = getattr(self, "_bb_sync_timer", None)
+        if isinstance(timer, QTimer):
+            timer.stop()
+        self._bb_sync_polling = False
+        job_id = getattr(self, "_bb_sync_job_id", None)
+        if job_id:
+            self._bb_sync_job_id = None
+
+            def _call_cancel():
+                return self.api_client.cancel_sync_blackboard_job(job_id)
+
+            self._start_worker(_call_cancel, lambda _x: None, lambda _e: None)
 
     def _sync_blackboard_materials(self) -> None:
         if not (self.api_client.enabled and self.api_client.authenticated):
@@ -4162,6 +4241,7 @@ class MainWindow(QMainWindow):
                 self,
             )
             self._bb_sync_dialog = dialog
+            dialog.finished.connect(self._cleanup_bb_sync)
 
             def _cancel():
                 dialog.set_cancellable(False)
@@ -4293,6 +4373,7 @@ class MainWindow(QMainWindow):
                 ]
                 self._load_resource_files()
 
+                self._bb_sync_job_id = None
                 dialog = getattr(self, "_bb_sync_dialog", None)
                 if isinstance(dialog, BlackboardSyncDialog):
                     dialog.close()
