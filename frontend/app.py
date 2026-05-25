@@ -322,41 +322,158 @@ class InfoCard(QFrame):
         layout.addWidget(body_label)
 
 
+class InlineTracePanel(QWidget):
+    """Collapsible '思考过程' section rendered inside an agent message card."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._expanded = False
+        self._trace_widgets: list[QFrame] = []
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ── Toggle header row ─────────────────────────────────────────────────
+        toggle_btn = QPushButton()
+        toggle_btn.setObjectName("TraceToggleButton")
+        toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        toggle_btn.setFlat(True)
+        toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        toggle_btn.setFixedHeight(36)
+        self._toggle_btn = toggle_btn
+        self._update_toggle_label()
+        toggle_btn.clicked.connect(self._toggle)
+        root.addWidget(toggle_btn)
+
+        # ── Collapsible body ──────────────────────────────────────────────────
+        self._body = QWidget()
+        self._body.setObjectName("TraceInlineBody")
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(0, 6, 0, 0)
+        self._body_layout.setSpacing(6)
+        self._body.setVisible(False)
+        root.addWidget(self._body)
+
+    # ── Public API ────────────────────────────────────────────────────────────
+    def set_trace_events(self, events: list[dict[str, str]], status_fn) -> None:
+        """Rebuild body with the given trace event dicts."""
+        # Clear existing
+        while self._body_layout.count():
+            item = self._body_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        self._trace_widgets.clear()
+
+        for event in events:
+            item_frame = QFrame()
+            item_frame.setObjectName(
+                f"TraceItem{event.get('status', 'pending').capitalize()}"
+            )
+            item_layout = QVBoxLayout(item_frame)
+            item_layout.setContentsMargins(12, 8, 12, 8)
+            item_layout.setSpacing(3)
+
+            phase_lbl = QLabel(
+                f"{event.get('phase', '')}  ·  {status_fn(event.get('status', 'pending'))}"
+            )
+            phase_lbl.setObjectName("CardTitle")
+            title_lbl = QLabel(event.get("title", ""))
+            title_lbl.setObjectName("SectionTitle")
+            detail_lbl = QLabel(event.get("detail", ""))
+            detail_lbl.setObjectName("MutedText")
+            detail_lbl.setWordWrap(True)
+
+            item_layout.addWidget(phase_lbl)
+            item_layout.addWidget(title_lbl)
+            if event.get("detail", "").strip():
+                item_layout.addWidget(detail_lbl)
+
+            self._body_layout.addWidget(item_frame)
+            self._trace_widgets.append(item_frame)
+
+        self._update_toggle_label()
+        self.setVisible(bool(events))
+
+    # ── Private ───────────────────────────────────────────────────────────────
+    def _toggle(self) -> None:
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        self._update_toggle_label()
+
+    def _update_toggle_label(self) -> None:
+        n = len(self._trace_widgets)
+        chevron = "∧" if self._expanded else "∨"
+        if n == 0:
+            txt = f"✦  思考过程  {chevron}"
+        else:
+            txt = f"✦  查看思考过程（{n} 步）  {chevron}"
+        self._toggle_btn.setText(txt)
+
+
 class BubbleWidget(QWidget):
     def __init__(
         self, sender: str, sender_label: str, text: str, message_type_label: str
     ) -> None:
         super().__init__()
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(16, 2, 16, 8)
+        now = datetime.now(timezone.utc).astimezone().strftime("%H:%M")
 
-        bubble = QFrame()
-        bubble.setObjectName("UserBubble" if sender == "user" else "AgentBubble")
-        # Constrain bubble width for ChatGPT aesthetic
-        bubble.setMaximumWidth(680)
-        bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        bubble_layout = QVBoxLayout(bubble)
-        bubble_layout.setContentsMargins(14, 10, 14, 10)
-        bubble_layout.setSpacing(4)
-
-        # Agent messages get a small sender label; user messages are clean
-        if sender != "user":
-            sender_title = QLabel(sender_label)
-            sender_title.setObjectName("CardTitle")
-            bubble_layout.addWidget(sender_title)
-
-        text_label = QLabel(text)
-        text_label.setObjectName("BodyText")
-        text_label.setWordWrap(True)
-        text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        bubble_layout.addWidget(text_label)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 8, 24, 8)
+        outer.setSpacing(0)
 
         if sender == "user":
-            outer.addStretch(1)
-            outer.addWidget(bubble, 0)
+            # ── User: flat, no card, left-aligned ────────────────────────────
+            header = QLabel(f"{sender_label}  ·  {now}")
+            header.setObjectName("BubbleTimeLabel")
+
+            text_label = QLabel(text)
+            text_label.setObjectName("UserMessageText")
+            text_label.setWordWrap(True)
+            text_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+
+            outer.addWidget(header)
+            outer.addSpacing(6)
+            outer.addWidget(text_label)
+            outer.addSpacing(16)
+            self._trace_panel: InlineTracePanel | None = None
+
         else:
-            outer.addWidget(bubble, 0)
-            outer.addStretch(1)
+            # ── Agent: subtle bordered card, left-aligned ─────────────────────
+            card = QFrame()
+            card.setObjectName("AgentMessageCard")
+            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(18, 14, 18, 14)
+            card_layout.setSpacing(10)
+
+            header = QLabel(f"{sender_label}  ·  {now}")
+            header.setObjectName("BubbleTimeLabel")
+            card_layout.addWidget(header)
+
+            # Inline collapsible trace panel (hidden until events are supplied)
+            self._trace_panel = InlineTracePanel()
+            self._trace_panel.setVisible(False)
+            card_layout.addWidget(self._trace_panel)
+
+            text_label = QLabel(text)
+            text_label.setObjectName("AgentMessageText")
+            text_label.setWordWrap(True)
+            text_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            card_layout.addWidget(text_label)
+
+            outer.addWidget(card)
+            outer.addSpacing(12)
+
+    def set_trace_events(self, events: list[dict[str, str]], status_fn) -> None:
+        """Push trace events into the embedded InlineTracePanel (agent only)."""
+        if self._trace_panel is not None:
+            self._trace_panel.set_trace_events(events, status_fn)
 
 
 class ScheduleResultWidget(QWidget):
@@ -3079,6 +3196,9 @@ class MainWindow(QMainWindow):
                     self.ui("message_type_chat"),
                 )
             self.chat_layout.insertWidget(self.chat_layout.count() - 1, widget)
+
+        # Attach current trace events to the last agent BubbleWidget
+        self._attach_inline_trace()
         self._refresh_conversation_list()
         self._scroll_chat_to_bottom()
 
@@ -3100,7 +3220,23 @@ class MainWindow(QMainWindow):
                     self._status_label(event["status"]),
                 ),
             )
+        # Also refresh the inline trace in the last agent chat bubble
+        self._attach_inline_trace()
         self._sync_active_conversation()
+
+    def _attach_inline_trace(self) -> None:
+        """Find the last BubbleWidget for an agent message and push trace events into it."""
+        if not hasattr(self, "chat_layout") or not self.trace_events:
+            return
+        last_bubble: BubbleWidget | None = None
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            if item and isinstance(item.widget(), BubbleWidget):
+                w = item.widget()
+                if hasattr(w, "_trace_panel") and w._trace_panel is not None:  # type: ignore[union-attr]
+                    last_bubble = w  # type: ignore[assignment]
+        if last_bubble is not None:
+            last_bubble.set_trace_events(self.trace_events, self._status_label)
 
     def _refresh_schedule_views(self) -> None:
         if not hasattr(self, "schedule_calendar"):

@@ -430,4 +430,57 @@ QTextEdit#ChatComposer:focus {
 QScrollArea#ChatScrollArea, QScrollArea#ChatScrollArea > QWidget {
     background-color: transparent;
 }
+
+/* ── AI-Studio-style message bubbles ────────────────────────────────────── */
+
+/* Timestamp / sender label  "User · 19:05" */
+QLabel#BubbleTimeLabel {
+    color: #9b9b9b;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+}
+
+/* User message: plain text, no card */
+QLabel#UserMessageText {
+    color: #ececec;
+    font-size: 16px;
+    line-height: 1.65;
+}
+
+/* Agent message: subtle card wrapper */
+QFrame#AgentMessageCard {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d2d;
+    border-radius: 14px;
+}
+
+/* Agent message body text */
+QLabel#AgentMessageText {
+    color: #d4d4d4;
+    font-size: 16px;
+    line-height: 1.65;
+}
+
+/* ── Inline trace toggle button ─────────────────────────────────────────── */
+QPushButton#TraceToggleButton {
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid #2d2d2d;
+    border-radius: 0px;
+    color: #9b9b9b;
+    font-size: 13px;
+    text-align: left;
+    padding: 0 0 0 2px;
+}
+
+QPushButton#TraceToggleButton:hover {
+    color: #d4d4d4;
+    background-color: transparent;
+}
+
+/* ── Inline trace body ───────────────────────────────────────────────────── */
+QWidget#TraceInlineBody {
+    background-color: transparent;
+}
 """
