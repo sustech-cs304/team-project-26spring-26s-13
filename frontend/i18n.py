@@ -204,6 +204,10 @@ UI_TEXTS = {
         "delete_chat_confirm_body": "This removes the selected chat from the sidebar. In REST mode it will also request backend deletion when possible.",
         "delete_chat_failed_title": "Delete Chat Failed",
         "refresh_schedule_failed_title": "Schedule Refresh Failed",
+        "backend_disconnected_title": "Disconnected",
+        "backend_disconnected_body": "The backend is not available. Please start the backend to use the agent.",
+        "login_error_body": "Login failed. Please check your credentials and try again.",
+        "register_error_body": "Registration failed. Please try again later.",
     },
     "zh": {
         "home_subtitle": "面向课程安排、校园知识与安全操作的 AI 工作台",
@@ -390,5 +394,9 @@ UI_TEXTS = {
         "delete_chat_confirm_body": "这会把当前选中的聊天从左侧列表移除；在 REST 模式下也会尽量同步请求后端删除。",
         "delete_chat_failed_title": "删除聊天失败",
         "refresh_schedule_failed_title": "刷新日程失败",
+        "backend_disconnected_title": "连接断开",
+        "backend_disconnected_body": "后端不可用，请先启动后端再使用智能体功能。",
+        "login_error_body": "登录失败，请检查账号密码后重试。",
+        "register_error_body": "注册失败，请稍后重试。",
     },
 }

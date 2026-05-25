@@ -642,10 +642,6 @@ class MainWindow(QMainWindow):
             "saved": False,
         }
         self.material_records: list[dict[str, Any]] = []
-        self.selected_mode = "agent_chat"
-        self.mode_button: QPushButton | None = None
-        self.mode_menu: QMenu | None = None
-        self.mode_actions: dict[str, Any] = {}
         self.resource_files = []
         self.conversations: list[dict[str, Any]] = []
         self.active_conversation_id: str | None = None
@@ -703,44 +699,6 @@ class MainWindow(QMainWindow):
 
     def current_user_id(self) -> str:
         return self.current_user_id_value or self.current_username or "local_student"
-
-    def _message_placeholder_for_mode(self) -> str:
-        return {
-            "agent_chat": self.ui("message_placeholder_chat"),
-            "scheduler": self.ui("message_placeholder_schedule"),
-            "encyclopedia": self.ui("message_placeholder_encyclopedia"),
-        }.get(self.selected_mode, self.ui("message_placeholder_chat"))
-
-    def _mode_label(self, mode: str) -> str:
-        return {
-            "agent_chat": self.ui("mode_agent_chat"),
-            "scheduler": self.ui("mode_scheduler"),
-            "encyclopedia": self.ui("mode_encyclopedia"),
-        }.get(mode, self.ui("mode_agent_chat"))
-
-    def _set_selected_mode(self, mode: str) -> None:
-        if mode not in {"agent_chat", "scheduler", "encyclopedia"}:
-            mode = "agent_chat"
-        self.selected_mode = mode
-        self._refresh_mode_selector()
-        if hasattr(self, "center_tabs") and hasattr(self, "schedule_tab") and mode == "scheduler":
-            self.center_tabs.setCurrentWidget(self.schedule_tab)
-        elif hasattr(self, "center_tabs") and hasattr(self, "chat_tab"):
-            self.center_tabs.setCurrentWidget(self.chat_tab)
-
-    def _refresh_mode_selector(self) -> None:
-        if self.mode_button is not None:
-            self.mode_button.setText(f"{self._mode_label(self.selected_mode)}  v")
-        for mode, action in self.mode_actions.items():
-            action.setChecked(mode == self.selected_mode)
-        if hasattr(self, "message_input"):
-            self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
-
-    def _open_mode_menu(self) -> None:
-        if self.mode_menu is None or self.mode_button is None:
-            return
-        position = self.mode_button.mapToGlobal(QPoint(0, self.mode_button.height() + 6))
-        self.mode_menu.exec(position)
 
     def _response_chunk_size(self, text: str, cursor: int) -> int:
         remaining = max(0, len(text) - cursor)
@@ -1387,11 +1345,16 @@ class MainWindow(QMainWindow):
             self.register_display_name_input.text() if hasattr(self, "register_display_name_input") else ""
         )
         register_major = self.register_major_input.text() if hasattr(self, "register_major_input") else ""
+        draft_text = ""
+        if hasattr(self, "message_input") and self.message_input is not None:
+            draft_text = self.message_input.toPlainText()
 
         self.language = "zh" if self.language == "en" else "en"
         self._reset_dynamic_state()
         self._build_root()
 
+        if draft_text and hasattr(self, "message_input") and self.message_input is not None:
+            self.message_input.setPlainText(draft_text)
         self.login_username_input.setText(login_username)
         self.register_username_input.setText(register_username)
         self.register_display_name_input.setText(register_display_name)
@@ -1421,13 +1384,9 @@ class MainWindow(QMainWindow):
 
         brand = QLabel(self.app_title())
         brand.setObjectName("HomeBrand")
-        subtitle = QLabel(self.ui("home_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
         brand_group = QVBoxLayout()
         brand_group.setSpacing(4)
         brand_group.addWidget(brand)
-        brand_group.addWidget(subtitle)
 
         lang_button = QPushButton(self.ui("lang_button"))
         lang_button.clicked.connect(self.toggle_language)
@@ -1462,9 +1421,6 @@ class MainWindow(QMainWindow):
         hero_title = QLabel(self.app_title())
         hero_title.setObjectName("HomeHeroTitle")
         hero_title.setWordWrap(True)
-        hero_subtitle = QLabel(self.ui("home_hero_subtitle"))
-        hero_subtitle.setObjectName("HomeHeroSubtitle")
-        hero_subtitle.setWordWrap(True)
 
         hero_buttons = QHBoxLayout()
         hero_buttons.setSpacing(10)
@@ -1479,7 +1435,6 @@ class MainWindow(QMainWindow):
 
         hero_layout.addWidget(hero_kicker)
         hero_layout.addWidget(hero_title)
-        hero_layout.addWidget(hero_subtitle)
         hero_layout.addLayout(hero_buttons)
 
         feature_grid = QGridLayout()
@@ -1493,11 +1448,7 @@ class MainWindow(QMainWindow):
             card_layout.setSpacing(8)
             card_title = QLabel(self.local(item["title"]))
             card_title.setObjectName("SectionTitle")
-            card_detail = QLabel(self.local(item["detail"]))
-            card_detail.setObjectName("BodyText")
-            card_detail.setWordWrap(True)
             card_layout.addWidget(card_title)
-            card_layout.addWidget(card_detail)
             feature_grid.addWidget(card, 0, index)
 
         section_title = QLabel(self.ui("home_section_title"))
@@ -1516,12 +1467,8 @@ class MainWindow(QMainWindow):
             icon.setObjectName("SkillIcon")
             title = QLabel(self.local(item["title"]))
             title.setObjectName("SectionTitle")
-            detail = QLabel(self.local(item["detail"]))
-            detail.setObjectName("MutedText")
-            detail.setWordWrap(True)
             card_layout.addWidget(icon)
             card_layout.addWidget(title)
-            card_layout.addWidget(detail)
             skills_grid.addWidget(card, index // 3, index % 3)
 
         banner = QFrame()
@@ -1531,14 +1478,10 @@ class MainWindow(QMainWindow):
         banner_layout.setSpacing(10)
         banner_title = QLabel(self.local(HOME_BANNER["title"]))
         banner_title.setObjectName("HomeSectionTitle")
-        banner_detail = QLabel(self.local(HOME_BANNER["detail"]))
-        banner_detail.setObjectName("BodyText")
-        banner_detail.setWordWrap(True)
         banner_button = QPushButton(self.ui("enter_login"))
         banner_button.setObjectName("PrimaryButton")
         banner_button.clicked.connect(lambda: self._show_auth(0))
         banner_layout.addWidget(banner_title)
-        banner_layout.addWidget(banner_detail)
         banner_layout.addWidget(banner_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         content_layout.addWidget(hero)
@@ -1571,13 +1514,9 @@ class MainWindow(QMainWindow):
         title = QLabel(self.app_title())
         title.setObjectName("HeroTitle")
         title.setWordWrap(True)
-        body = QLabel(self.ui("auth_body"))
-        body.setObjectName("HeroBody")
-        body.setWordWrap(True)
 
         hero_layout.addWidget(kicker)
         hero_layout.addWidget(title)
-        hero_layout.addWidget(body)
 
         for item in AUTH_FEATURES:
             pill = QFrame()
@@ -1587,11 +1526,7 @@ class MainWindow(QMainWindow):
             pill_layout.setSpacing(6)
             pill_title = QLabel(self.local(item["title"]))
             pill_title.setObjectName("SectionTitle")
-            pill_detail = QLabel(self.local(item["detail"]))
-            pill_detail.setObjectName("MutedText")
-            pill_detail.setWordWrap(True)
             pill_layout.addWidget(pill_title)
-            pill_layout.addWidget(pill_detail)
             hero_layout.addWidget(pill)
 
         hero_layout.addStretch(1)
@@ -1609,9 +1544,6 @@ class MainWindow(QMainWindow):
 
         auth_title = QLabel(self.ui("welcome_back"))
         auth_title.setObjectName("AuthTitle")
-        auth_subtitle = QLabel(self.ui("auth_subtitle"))
-        auth_subtitle.setObjectName("HeroBody")
-        auth_subtitle.setWordWrap(True)
 
         self.auth_tabs = QTabWidget()
         self.auth_tabs.addTab(self._build_login_tab(), self.ui("login"))
@@ -1632,7 +1564,6 @@ class MainWindow(QMainWindow):
         bottom_row.addWidget(lang_button)
 
         auth_layout.addWidget(auth_title)
-        auth_layout.addWidget(auth_subtitle)
         auth_layout.addWidget(self.auth_tabs, 1)
         auth_layout.addWidget(footer)
         auth_layout.addLayout(bottom_row)
@@ -1746,11 +1677,7 @@ class MainWindow(QMainWindow):
         title_group.setSpacing(4)
         title = QLabel(self.app_title())
         title.setObjectName("TitleLabel")
-        subtitle = QLabel(self.ui("header_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
         title_group.addWidget(title)
-        title_group.addWidget(subtitle)
 
         self.header_user_label = QLabel()
         self.header_user_label.setObjectName("BadgeLabel")
@@ -1792,9 +1719,6 @@ class MainWindow(QMainWindow):
         workspace_title.setObjectName("CardTitle")
         self.workspace_name_label = QLabel()
         self.workspace_name_label.setObjectName("WorkspaceName")
-        self.workspace_hint_label = QLabel()
-        self.workspace_hint_label.setObjectName("BodyText")
-        self.workspace_hint_label.setWordWrap(True)
 
         workspace_stats = QHBoxLayout()
         workspace_stats.setSpacing(8)
@@ -1811,7 +1735,6 @@ class MainWindow(QMainWindow):
 
         workspace_layout.addWidget(workspace_title)
         workspace_layout.addWidget(self.workspace_name_label)
-        workspace_layout.addWidget(self.workspace_hint_label)
         workspace_layout.addLayout(workspace_stats)
 
         history_card = QFrame()
@@ -1928,37 +1851,19 @@ class MainWindow(QMainWindow):
         composer_title = QLabel(self.ui("send_task"))
         composer_title.setObjectName("SectionTitle")
         self.message_input = QTextEdit()
-        self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
+        self.message_input.setPlaceholderText(self.ui("message_placeholder"))
         self.message_input.setFixedHeight(110)
 
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
-        self.mode_button = QPushButton()
-        self.mode_button.setObjectName("ModeDropdownButton")
-        self.mode_button.clicked.connect(self._open_mode_menu)
-        self.mode_menu = QMenu(self)
-        self.mode_menu.setObjectName("ModeDropdownMenu")
-        self.mode_actions = {}
-        for mode, label_key in (
-            ("agent_chat", "mode_agent_chat"),
-            ("scheduler", "mode_scheduler"),
-            ("encyclopedia", "mode_encyclopedia"),
-        ):
-            action = self.mode_menu.addAction(self.ui(label_key))
-            action.setCheckable(True)
-            action.triggered.connect(lambda _checked=False, value=mode: self._set_selected_mode(value))
-            self.mode_actions[mode] = action
-
         send_button = QPushButton(self.ui("send"))
         send_button.setObjectName("PrimaryButton")
         send_button.clicked.connect(self.handle_send_message)
         clear_button = QPushButton(self.ui("clear_draft"))
         clear_button.clicked.connect(self.message_input.clear)
-        button_row.addWidget(self.mode_button)
         button_row.addStretch(1)
         button_row.addWidget(clear_button)
         button_row.addWidget(send_button)
-        self._refresh_mode_selector()
 
         composer_layout.addWidget(composer_title)
         composer_layout.addWidget(self.message_input)
@@ -2104,12 +2009,8 @@ class MainWindow(QMainWindow):
         title = QLabel(self.ui("thought_trace"))
         title.setObjectName("TitleLabel")
         title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        subtitle = QLabel(self.ui("thought_trace_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
 
         layout.addWidget(title)
-        layout.addWidget(subtitle)
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -2389,8 +2290,6 @@ class MainWindow(QMainWindow):
         self.backend_mode_label.setText(self.backend_status_text())
         if hasattr(self, "workspace_name_label"):
             self.workspace_name_label.setText(self.current_user["name"])
-        if hasattr(self, "workspace_hint_label"):
-            self.workspace_hint_label.setText(self.ui("workspace_hint"))
         if hasattr(self, "workspace_conversation_chip"):
             self.workspace_conversation_chip.setText(
                 self.ui("workspace_conversations", count=len(self.conversations))
@@ -2698,7 +2597,7 @@ class MainWindow(QMainWindow):
                 )
 
             def _on_error(err):
-                QMessageBox.warning(self, self.ui("login_failed"), err)
+                QMessageBox.warning(self, self.ui("login_failed"), self.ui("login_error_body"))
 
             self._start_worker(_call, _on_done, _on_error)
             return
@@ -2750,7 +2649,7 @@ class MainWindow(QMainWindow):
                 )
 
             def _on_error(err):
-                QMessageBox.warning(self, self.ui("register_failed"), err)
+                QMessageBox.warning(self, self.ui("register_failed"), self.ui("register_error_body"))
 
             self._start_worker(_call, _on_done, _on_error)
             return
@@ -2854,7 +2753,7 @@ class MainWindow(QMainWindow):
         self._move_active_conversation_to_top()
         self._load_chat_messages(self.chat_messages)
         if not self._run_remote_agent(message=text, attachments=attachments):
-             QMessageBox.warning(self, "Disconnected", "The backend is not available. Please start the backend to use the agent.")
+             QMessageBox.warning(self, self.ui("backend_disconnected_title"), self.ui("backend_disconnected_body"))
         self.message_input.clear()
 
     def _append_trace(self, phase: str, title: str, detail: str, status: str) -> None:
