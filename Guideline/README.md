@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS materials (
     file_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(user_id),
     file_name VARCHAR(256) NOT NULL,
-    file_type VARCHAR(64) NOT NULL,
+    file_type VARCHAR(128) NOT NULL,
     file_path VARCHAR(512) NOT NULL,
     subject_type VARCHAR(32) NOT NULL,
     vectorized BOOLEAN NOT NULL DEFAULT FALSE,
