@@ -437,8 +437,7 @@ async def run_agent(
             assistant_message=AssistantMessage(
                 role="assistant",
                 content=(
-                    f"我需要您的授权来执行：{e.pending_state.action}。"
-                    f"{e.reason}"
+                    f"我需要您的授权来执行：{e.pending_state.action}。" f"{e.reason}"
                 ),
                 timestamp=datetime.now(timezone.utc),
             ),

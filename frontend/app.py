@@ -460,9 +460,7 @@ class ThinkingIndicator(QWidget):
         self._update_text()
 
     def _update_text(self) -> None:
-        self._spinner_label.setText(
-            f"{_SPINNER_FRAMES[self._frame]}  Thinking..."
-        )
+        self._spinner_label.setText(f"{_SPINNER_FRAMES[self._frame]}  Thinking...")
 
 
 class BubbleWidget(QWidget):
@@ -1012,7 +1010,9 @@ class SettingsDialog(QDialog):
 
     def _browse_workdir(self) -> None:
         directory = QFileDialog.getExistingDirectory(
-            self, self.texts["settings_workdir_title"], self.workdir_input.text() or str(Path.home())
+            self,
+            self.texts["settings_workdir_title"],
+            self.workdir_input.text() or str(Path.home()),
         )
         if directory:
             self.workdir_input.setText(directory)
@@ -1181,7 +1181,11 @@ class MainWindow(QMainWindow):
             return
         for i in range(self.chat_layout.count()):
             item = self.chat_layout.itemAt(i)
-            if item and item.widget() and item.widget().objectName() == "_ThinkingIndicator":
+            if (
+                item
+                and item.widget()
+                and item.widget().objectName() == "_ThinkingIndicator"
+            ):
                 w = self.chat_layout.takeAt(i).widget()
                 if w is not None:
                     w.deleteLater()

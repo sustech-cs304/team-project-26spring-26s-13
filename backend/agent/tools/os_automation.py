@@ -235,7 +235,9 @@ async def file_update(
     except PermissionError:
         return "ERROR:OUT_OF_WORKSPACE"
     if not safe.exists() or not safe.is_file():
-        entries = sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        entries = (
+            sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        )
         listing = ", ".join(entries) if entries else "(empty)"
         return f"ERROR:FILE_NOT_FOUND. Current workspace contents: [{listing}]. Do NOT call file_list again — report this to the user immediately."
 
@@ -297,7 +299,9 @@ async def file_delete(ctx: RunContext[AgentDeps], path: str) -> str:
         return "ERROR:OUT_OF_WORKSPACE"
     if not safe.exists():
         # Return current listing so LLM can reply in one shot without extra file_list calls
-        entries = sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        entries = (
+            sorted(p.name for p in workspace.iterdir()) if workspace.exists() else []
+        )
         listing = ", ".join(entries) if entries else "(empty)"
         return f"ERROR:FILE_NOT_FOUND. Current workspace contents: [{listing}]. Do NOT call file_list again — report this to the user immediately."
 
