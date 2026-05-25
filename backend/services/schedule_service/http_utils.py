@@ -2,7 +2,9 @@ import asyncio
 
 import httpx
 
-from .log_utils import _bb_sink_add, logger
+from .log_utils import _bb_sink_add, get_trace_id, is_diag_mode, logger
+
+_HTTP_TIMEOUT = 60.0
 
 
 def _is_retryable_status(status_code: int) -> bool:
@@ -26,22 +28,49 @@ async def _request_with_retry(
     content: str | bytes | None = None,
     data: dict | None = None,
     label: str = "",
+    timeout: float | None = None,
 ) -> httpx.Response:
+    import time as _time
+
+    _t0 = _time.monotonic()
     max_attempts = 3
+    tid = get_trace_id()
+    effective_timeout = timeout or _HTTP_TIMEOUT
     for attempt in range(1, max_attempts + 1):
         try:
-            response = await client.request(
-                method, url, headers=headers, content=content, data=data
+            response = await asyncio.wait_for(
+                client.request(
+                    method, url, headers=headers, content=content, data=data
+                ),
+                timeout=effective_timeout,
             )
+        except asyncio.TimeoutError:
+            logger.error(
+                "bb.http: timeout attempt=%d/%d method=%s url=%s label=%s timeout=%.0fs trace=%s",
+                attempt,
+                max_attempts,
+                method,
+                url,
+                label,
+                effective_timeout,
+                tid,
+            )
+            if attempt >= max_attempts:
+                raise httpx.TimeoutException(
+                    f"Request timeout after {attempt} attempts ({effective_timeout}s each)"
+                )
+            await asyncio.sleep(_backoff_seconds(attempt))
+            continue
         except httpx.HTTPError as exc:
             logger.exception(
-                "bb.http: error attempt=%d/%d method=%s url=%s label=%s err=%s",
+                "bb.http: error attempt=%d/%d method=%s url=%s label=%s err=%s trace=%s",
                 attempt,
                 max_attempts,
                 method,
                 url,
                 label,
                 _request_error_summary(exc),
+                tid,
             )
             if attempt >= max_attempts:
                 raise
@@ -50,6 +79,19 @@ async def _request_with_retry(
 
         if label:
             _bb_sink_add(label, response)
+
+        elapsed = _time.monotonic() - _t0
+        if elapsed > 3.0:
+            logger.debug(
+                "bb.http: slow_req method=%s url=%s label=%s elapsed=%.1fs status=%d size=%d trace=%s",
+                method,
+                url[:120],
+                label,
+                elapsed,
+                response.status_code,
+                len(response.content),
+                tid,
+            )
 
         if _is_retryable_status(response.status_code):
             logger.warning(

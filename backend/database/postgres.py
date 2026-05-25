@@ -8,7 +8,16 @@ import uuid
 from datetime import datetime
 from typing import AsyncGenerator
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -30,6 +39,13 @@ async def ensure_tables_exist() -> None:
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for sql in [
+            "ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_hash VARCHAR(64)",
+        ]:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -169,7 +185,7 @@ class Material(Base):
     )
     file_name: Mapped[str] = mapped_column(String(256), nullable=False)
     file_type: Mapped[str] = mapped_column(
-        String(64), nullable=False
+        String(128), nullable=False
     )  # MIME type, e.g. "application/pdf"
     file_path: Mapped[str] = mapped_column(
         String(512), nullable=False
@@ -179,6 +195,7 @@ class Material(Base):
     subject_type: Mapped[str] = mapped_column(
         String(32), nullable=False, default="other"
     )
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vectorized: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
