@@ -14,6 +14,7 @@ Covers:
 from email.mime.multipart import MIMEMultipart
 import smtplib
 from unittest.mock import MagicMock, patch
+from urllib.parse import unquote
 
 import pytest
 
@@ -308,7 +309,7 @@ def test_extra_files_attached():
             if p.get_content_disposition() == "attachment"
         ]
         assert len(attachments) >= 2  # .txt + extra file
-        filenames = [a.get("Content-Disposition", "") for a in attachments]
+        filenames = [unquote(a.get("Content-Disposition", "")) for a in attachments]
         assert "原始文件名.pdf" in filenames[1] or any(
             "原始文件名.pdf" in f for f in filenames
         )
@@ -389,7 +390,7 @@ def test_multiple_extra_files():
             if p.get_content_disposition() == "attachment"
         ]
         assert len(attachments) == 2  # .txt + zip
-        filenames = [a.get("Content-Disposition", "") for a in attachments]
+        filenames = [unquote(a.get("Content-Disposition", "")) for a in attachments]
         assert any("原始资料.zip" in f for f in filenames)
 
 
@@ -466,6 +467,6 @@ def test_single_extra_file_not_zipped():
             if p.get_content_disposition() == "attachment"
         ]
         assert len(attachments) == 2  # .txt + single file
-        filenames = [a.get("Content-Disposition", "") for a in attachments]
+        filenames = [unquote(a.get("Content-Disposition", "")) for a in attachments]
         assert any("单独文件.pdf" in f for f in filenames)
         assert not any("原始资料.zip" in f for f in filenames)
