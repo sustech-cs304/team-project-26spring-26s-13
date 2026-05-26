@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.postgres import User
@@ -83,6 +84,7 @@ def _make_agent() -> Agent[AgentDeps, FinalResponse]:
         output_type=FinalResponse,  # [修改] 从原本的 str 改为强制输出 FinalResponse 结构
         system_prompt=SYSTEM_PROMPT,
         prepare_tools=prepare_tools_for_prompt,
+        model_settings=ModelSettings(temperature=0.1),
     )
 
 

@@ -45,4 +45,6 @@ async def log(
         hitl_approved=hitl_approved,
     )
     db.add(record)
-    await db.commit()
+    # 仅 flush，勿 commit：Agent 工具与 loop 共用同一 AsyncSession，嵌套 commit 会触发
+    # IllegalStateChangeError（见 file_read 在 agent.run 中途写审计日志）。
+    await db.flush()

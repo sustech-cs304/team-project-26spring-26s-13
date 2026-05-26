@@ -92,6 +92,9 @@ class User(Base):
         LargeBinary, nullable=True
     )
 
+    # 用户自定义的工作目录（明文存储）
+    working_dir: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     # 前端偏好（主题、语言等），JSONB 自由扩展
     preferences: Mapped[dict] = mapped_column(JSONB, default=dict)
 

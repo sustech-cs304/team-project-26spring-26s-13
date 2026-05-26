@@ -33,6 +33,7 @@ def to_profile(user: User) -> UserProfile:
         display_name=user.display_name,
         major=user.major,
         preferences=prefs,
+        working_dir=user.working_dir,
     )
 
 
@@ -75,4 +76,6 @@ async def update_credentials(
         user.cas_password_encrypted = encrypt(body.cas_password)
     if body.llm_api_key is not None:
         user.llm_api_key_encrypted = encrypt(body.llm_api_key)
+    if body.working_dir is not None:
+        user.working_dir = body.working_dir
     await db.commit()

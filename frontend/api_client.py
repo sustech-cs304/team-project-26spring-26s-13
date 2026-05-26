@@ -103,11 +103,13 @@ class BackendApiClient:
         cas_account: str | None = None,
         cas_password: str | None = None,
         llm_api_key: str | None = None,
+        working_dir: str | None = None,
     ) -> None:
         body = {
             "cas_account": cas_account,
             "cas_password": cas_password,
             "llm_api_key": llm_api_key,
+            "working_dir": working_dir,
         }
         self._request("PUT", "/api/user/credentials", json_body=body)
 
