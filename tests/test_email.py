@@ -527,19 +527,27 @@ def test_export_conversation_formats_rounds():
     now = datetime(2026, 5, 26, 14, 0, 0, tzinfo=timezone.utc)
     msgs = [
         ChatMessage(
-            session_id="s1", role="user", content="问题1",
+            session_id="s1",
+            role="user",
+            content="问题1",
             timestamp=now,
         ),
         ChatMessage(
-            session_id="s1", role="assistant", content="回答1",
+            session_id="s1",
+            role="assistant",
+            content="回答1",
             timestamp=now,
         ),
         ChatMessage(
-            session_id="s1", role="user", content="问题2",
+            session_id="s1",
+            role="user",
+            content="问题2",
             timestamp=now,
         ),
         ChatMessage(
-            session_id="s1", role="assistant", content="回答2",
+            session_id="s1",
+            role="assistant",
+            content="回答2",
             timestamp=now,
         ),
     ]
@@ -555,6 +563,7 @@ def test_export_conversation_formats_rounds():
     ctx.deps.db = mock_db
 
     import asyncio
+
     md = asyncio.run(export_conversation(ctx, rounds=0))
 
     assert "# 对话记录导出" in md
@@ -598,6 +607,7 @@ def test_export_conversation_respects_rounds_limit():
     ctx.deps.db = mock_db
 
     import asyncio
+
     md = asyncio.run(export_conversation(ctx, rounds=1))
 
     assert "Q3" in md
@@ -623,6 +633,7 @@ def test_export_conversation_empty():
     ctx.deps.db = mock_db
 
     import asyncio
+
     result = asyncio.run(export_conversation(ctx, rounds=0))
 
     assert "没有历史记录" in result
@@ -639,8 +650,12 @@ def test_export_output_feeds_send_mail():
 
     now = datetime(2026, 5, 26, 14, 0, 0, tzinfo=timezone.utc)
     msgs = [
-        ChatMessage(session_id="s1", role="user", content="总结对话并发邮件给我", timestamp=now),
-        ChatMessage(session_id="s1", role="assistant", content="好的，已发送。", timestamp=now),
+        ChatMessage(
+            session_id="s1", role="user", content="总结对话并发邮件给我", timestamp=now
+        ),
+        ChatMessage(
+            session_id="s1", role="assistant", content="好的，已发送。", timestamp=now
+        ),
     ]
 
     mock_db = AsyncMock()
