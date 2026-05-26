@@ -1,0 +1,64 @@
+﻿============================= test session starts =============================
+collected 25 items
+
+tests\test_email.py ..............F........F.                            [100%]
+
+================================== FAILURES ===================================
+_______________________ test_unicode_content_preserved ________________________
+tests\test_email.py:206: in test_unicode_content_preserved
+    sent_msg: MIMEMultipart = mock_server.send_message.call_args[0][0]
+E   TypeError: 'NoneType' object is not subscriptable
+___________________________ test_large_file_skipped ___________________________
+tests\test_email.py:394: in test_large_file_skipped
+    result = send_md_mail(
+backend\utils\email_sender.py:58: in send_md_mail
+    if not fp.is_file():
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\pathlib.py:1322: in is_file
+    return S_ISREG(self.stat().st_mode)
+E   TypeError: an integer is required
+============================== warnings summary ===============================
+backend\config.py:10
+  D:\Codes\SoftwareEngineering\team-project-26spring-26s-13\backend\config.py:10: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106
+  C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106
+  C:\Users\Administrator\miniconda3\envs\software-engineering\lib\abc.py:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\site-packages\opentelemetry\_events\__init__.py:201
+  C:\Users\Administrator\miniconda3\envs\software-engineering\lib\site-packages\opentelemetry\_events\__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+backend\agent\core.py:76
+  D:\Codes\SoftwareEngineering\team-project-26spring-26s-13\backend\agent\core.py:76: DeprecationWarning: `OpenAIModel` was renamed to `OpenAIChatModel` to clearly distinguish it from `OpenAIResponsesModel` which uses OpenAI's newer Responses API. Use that unless you're using an OpenAI Chat Completions-compatible API, or require a feature that the Responses API doesn't support yet like audio.
+    model = OpenAIModel(
+
+backend\main.py:48
+  D:\Codes\SoftwareEngineering\team-project-26spring-26s-13\backend\main.py:48: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+C:\Users\Administrator\miniconda3\envs\software-engineering\lib\site-packages\fastapi\applications.py:4598
+  C:\Users\Administrator\miniconda3\envs\software-engineering\lib\site-packages\fastapi\applications.py:4598: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_email.py::test_unicode_content_preserved - TypeError: 'None...
+FAILED tests/test_email.py::test_large_file_skipped - TypeError: an integer i...
+================== 2 failed, 23 passed, 9 warnings in 9.45s ===================

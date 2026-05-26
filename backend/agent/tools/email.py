@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from backend.agent.core import AgentDeps, agent
 from backend.config import settings
-from backend.database.postgres import ChatMessage
+from backend.database.postgres import ChatMessage, Material
 from backend.utils.email_sender import send_md_mail
 
 
@@ -21,9 +21,10 @@ async def send_email(
     subject: str,
     md_content: str,
     attachment_filename: str = "summary.md",
+    referenced_files: list[str] | str | None = None,
 ) -> str:
     """
-    发送邮件到用户的学校邮箱。
+    发送邮件到用户的学校邮箱，可附带知识库中的原始资料文件。
 
     调用条件（以下任一触发）：
       - 用户说"发邮件""用邮件""email me""mail to me""以邮件形式""via email"
@@ -32,15 +33,20 @@ async def send_email(
     工作流程：
       1. LLM 先用其他工具（query_rag、scheduler 等）生成完整回答
       2. 将完整回答整理为文字内容，传给 md_content
-      3. 邮件正文自动提取前 400 字作为摘要预览
-      4. 完整内容以纯文本附件 (.txt) 发送
+      3. 如有引用资料（referenced_files），自动从知识库查找原始文件作为附件
+      4. 邮件正文为简短引导语，完整内容 + 原始资料以附件发送
 
     Args:
         subject:  邮件主题（中英文均可，如"中国C9高校名单"）
         md_content: 【重要】你刚刚生成给用户的完整回答。
                     不要只写标题或一行摘要，必须包含全部内容。
                     这就是邮件附件的全部正文。最少 50 字。
-        attachment_filename: 附件文件名，如 "C9高校名单.md"
+        attachment_filename: 摘要附件文件名，如 "C9高校名单.md"
+        referenced_files:   query_rag 结果中的被引用文件名列表。
+                            示例: ["01 中国城镇化.pdf", "户籍制度改革.pdf"]
+                            也可写成 JSON 字符串: '[\"file1.pdf\", \"file2.pdf\"]'
+                            系统自动查找文件的磁盘路径作为附件。
+                            不传 → 仅发送摘要附件（原有行为）。
 
     Returns:
         "邮件已成功发送至 xxx@mail.sustech.edu.cn" 或 "ERROR: ..."
@@ -63,6 +69,11 @@ async def send_email(
     if not attachment_filename.endswith(".md"):
         attachment_filename = attachment_filename + ".md"
 
+    extra_paths: list[tuple[str, str]] | None = None
+    normalized_files: list[str] = _normalize_referenced_files(referenced_files)
+    if normalized_files:
+        extra_paths = await _lookup_material_paths(ctx, normalized_files)
+
     result = send_md_mail(
         password=password,
         to=to,
@@ -70,7 +81,50 @@ async def send_email(
         md_content=md_content,
         attachment_filename=attachment_filename,
         recipient_name=cas_id,
+        extra_files=extra_paths,
     )
+    return result
+
+
+def _normalize_referenced_files(raw: list[str] | str | None) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return raw
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(x) for x in parsed]
+        return []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+async def _lookup_material_paths(
+    ctx: RunContext[AgentDeps],
+    file_names: list[str],
+) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    from sqlalchemy import or_
+
+    for name in file_names:
+        name_clean = name.strip()
+        if not name_clean:
+            continue
+        stmt = (
+            select(Material.file_path, Material.file_name)
+            .where(
+                or_(
+                    Material.file_name == name_clean,
+                    Material.file_name.ilike(f"%{name_clean}%"),
+                )
+            )
+            .limit(1)
+        )
+        db_result = await ctx.deps.db.execute(stmt)
+        row = db_result.first()
+        if row:
+            result.append((row[0], row[1]))
     return result
 
 
