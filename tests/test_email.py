@@ -470,3 +470,201 @@ def test_single_extra_file_not_zipped():
         filenames = [unquote(a.get("Content-Disposition", "")) for a in attachments]
         assert any("单独文件.pdf" in f for f in filenames)
         assert not any("原始资料.zip" in f for f in filenames)
+
+
+# ── _normalize_referenced_files unit tests ────────────────────────────────────
+
+
+def test_normalize_none():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    assert _normalize_referenced_files(None) == []
+
+
+def test_normalize_list():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    result = _normalize_referenced_files(["a.pdf", "b.pdf"])
+    assert result == ["a.pdf", "b.pdf"]
+
+
+def test_normalize_empty_list():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    assert _normalize_referenced_files([]) == []
+
+
+def test_normalize_json_string():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    result = _normalize_referenced_files('["a.pdf", "b.pdf"]')
+    assert result == ["a.pdf", "b.pdf"]
+
+
+def test_normalize_malformed_json():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    assert _normalize_referenced_files("not json") == []
+
+
+def test_normalize_json_non_list():
+    from backend.agent.tools.email import _normalize_referenced_files
+
+    assert _normalize_referenced_files('{"key": "val"}') == []
+
+
+# ── export_conversation markdown format tests ──────────────────────────────────
+
+
+def test_export_conversation_formats_rounds():
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+
+    from backend.agent.core import AgentDeps
+    from backend.agent.tools.email import export_conversation
+    from backend.database.postgres import ChatMessage
+
+    now = datetime(2026, 5, 26, 14, 0, 0, tzinfo=timezone.utc)
+    msgs = [
+        ChatMessage(
+            session_id="s1", role="user", content="问题1",
+            timestamp=now,
+        ),
+        ChatMessage(
+            session_id="s1", role="assistant", content="回答1",
+            timestamp=now,
+        ),
+        ChatMessage(
+            session_id="s1", role="user", content="问题2",
+            timestamp=now,
+        ),
+        ChatMessage(
+            session_id="s1", role="assistant", content="回答2",
+            timestamp=now,
+        ),
+    ]
+
+    mock_db = AsyncMock()
+    mock_db_result = MagicMock()
+    mock_db_result.scalars.return_value.all.return_value = msgs
+    mock_db.execute.return_value = mock_db_result
+
+    ctx = MagicMock()
+    ctx.deps = MagicMock(spec=AgentDeps)
+    ctx.deps.session_id = "s1"
+    ctx.deps.db = mock_db
+
+    import asyncio
+    md = asyncio.run(export_conversation(ctx, rounds=0))
+
+    assert "# 对话记录导出" in md
+    assert "Session:" in md
+    assert "问题1" in md
+    assert "回答1" in md
+    assert "问题2" in md
+    assert "回答2" in md
+    assert "## Round 1" in md
+    assert "## Round 2" in md
+    assert "### You" in md
+    assert "### Assistant" in md
+
+
+def test_export_conversation_respects_rounds_limit():
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+
+    from backend.agent.core import AgentDeps
+    from backend.agent.tools.email import export_conversation
+    from backend.database.postgres import ChatMessage
+
+    now = datetime(2026, 5, 26, 14, 0, 0, tzinfo=timezone.utc)
+    msgs = [
+        ChatMessage(session_id="s1", role="user", content="Q1", timestamp=now),
+        ChatMessage(session_id="s1", role="assistant", content="A1", timestamp=now),
+        ChatMessage(session_id="s1", role="user", content="Q2", timestamp=now),
+        ChatMessage(session_id="s1", role="assistant", content="A2", timestamp=now),
+        ChatMessage(session_id="s1", role="user", content="Q3", timestamp=now),
+        ChatMessage(session_id="s1", role="assistant", content="A3", timestamp=now),
+    ]
+
+    mock_db = AsyncMock()
+    mock_db_result = MagicMock()
+    mock_db_result.scalars.return_value.all.return_value = msgs
+    mock_db.execute.return_value = mock_db_result
+
+    ctx = MagicMock()
+    ctx.deps = MagicMock(spec=AgentDeps)
+    ctx.deps.session_id = "s1"
+    ctx.deps.db = mock_db
+
+    import asyncio
+    md = asyncio.run(export_conversation(ctx, rounds=1))
+
+    assert "Q3" in md
+    assert "A3" in md
+    assert "Q2" not in md
+    assert "A2" not in md
+
+
+def test_export_conversation_empty():
+    from unittest.mock import AsyncMock
+
+    from backend.agent.core import AgentDeps
+    from backend.agent.tools.email import export_conversation
+
+    mock_db = AsyncMock()
+    mock_db_result = MagicMock()
+    mock_db_result.scalars.return_value.all.return_value = []
+    mock_db.execute.return_value = mock_db_result
+
+    ctx = MagicMock()
+    ctx.deps = MagicMock(spec=AgentDeps)
+    ctx.deps.session_id = "s1"
+    ctx.deps.db = mock_db
+
+    import asyncio
+    result = asyncio.run(export_conversation(ctx, rounds=0))
+
+    assert "没有历史记录" in result
+
+
+def test_export_output_feeds_send_mail():
+    import asyncio
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+
+    from backend.agent.core import AgentDeps
+    from backend.agent.tools.email import export_conversation
+    from backend.database.postgres import ChatMessage
+
+    now = datetime(2026, 5, 26, 14, 0, 0, tzinfo=timezone.utc)
+    msgs = [
+        ChatMessage(session_id="s1", role="user", content="总结对话并发邮件给我", timestamp=now),
+        ChatMessage(session_id="s1", role="assistant", content="好的，已发送。", timestamp=now),
+    ]
+
+    mock_db = AsyncMock()
+    mock_db_result = MagicMock()
+    mock_db_result.scalars.return_value.all.return_value = msgs
+    mock_db.execute.return_value = mock_db_result
+
+    ctx = MagicMock()
+    ctx.deps = MagicMock(spec=AgentDeps)
+    ctx.deps.session_id = "s1"
+    ctx.deps.db = mock_db
+
+    md = asyncio.run(export_conversation(ctx, rounds=0))
+
+    with patch("smtplib.SMTP") as mock_smtp_class:
+        mock_server = MagicMock()
+        mock_smtp_class.return_value.__enter__.return_value = mock_server
+
+        result = send_md_mail(
+            password="pwd",
+            to="u@x.com",
+            subject="对话记录导出",
+            md_content=md,
+            attachment_filename="conversation.md",
+        )
+        assert result.startswith("邮件已成功发送至")
+        assert "conversation.txt" in result
