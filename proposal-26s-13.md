@@ -25,6 +25,7 @@ The proposed system is an Autonomous AI Agent designed to assist SUSTech student
 
 7. **Email Service**
    - Supports dialogue summary and specific tasks and sends email to users' email-box.
+   - Supports sending related attachments under zip compression maintaining the original file name.
 
 ## 2. Non-functional Requirements
 - **Usability:** The GUI must cleanly separate the main chat interface from the Thought Trace panel to prevent information overload. Rich text and generated schedules must be rendered elegantly.
