@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
+from backend.config import settings
 from backend.services.schedule_service.cas_auth import (
     _apply_cached_cas_cookies,
     _cas_login_for_tis,
@@ -26,6 +27,10 @@ _COMMON_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
     ),
 }
+
+
+def _is_success_code(value: object) -> bool:
+    return str(value).strip() == "0"
 
 
 def _extract_service_url(address: str) -> str:
@@ -72,7 +77,7 @@ async def _booking_auth_address(client: httpx.AsyncClient) -> str | None:
     )
     response.raise_for_status()
     payload = response.json()
-    if not isinstance(payload, dict) or payload.get("code") != 0:
+    if not isinstance(payload, dict) or not _is_success_code(payload.get("code")):
         return None
     data = payload.get("data")
     return str(data).strip() if data else None
@@ -80,7 +85,7 @@ async def _booking_auth_address(client: httpx.AsyncClient) -> str | None:
 
 async def _refresh_user_token(client: httpx.AsyncClient) -> None:
     payload = await _json_get(client, "auth/userInfo", label="library.auth.userInfo")
-    if payload.get("code") != 0:
+    if not _is_success_code(payload.get("code")):
         raise PermissionError(str(payload.get("message") or "Library CAS login failed"))
     data = payload.get("data")
     if isinstance(data, dict):
@@ -97,7 +102,7 @@ async def _ensure_library_login(
     _apply_cached_cas_cookies(client, cas_account)
 
     user_info = await _json_get(client, "auth/userInfo", label="library.auth.check")
-    if user_info.get("code") == 0:
+    if _is_success_code(user_info.get("code")):
         data = user_info.get("data")
         if isinstance(data, dict) and data.get("token"):
             client.headers["token"] = str(data["token"])
@@ -107,7 +112,11 @@ async def _ensure_library_login(
     address = await _booking_auth_address(client)
     service_url = BOOKING_HOME
     if address:
-        response = await client.get(address, headers=_COMMON_HEADERS)
+        response = await client.get(
+            address,
+            headers=_COMMON_HEADERS,
+            timeout=float(settings.LIBRARY_REQUEST_TIMEOUT_SECONDS),
+        )
         if "cas.sustech.edu.cn" in str(response.url):
             service_url = _extract_service_url(str(response.url))
         else:
@@ -128,8 +137,9 @@ async def library_authenticated_session(
 ):
     async with httpx.AsyncClient(
         follow_redirects=True,
-        timeout=httpx.Timeout(25.0),
+        timeout=httpx.Timeout(float(settings.LIBRARY_REQUEST_TIMEOUT_SECONDS)),
         headers=dict(_COMMON_HEADERS),
+        trust_env=False,
     ) as client:
         await _ensure_library_login(client, cas_account, cas_password)
         yield client

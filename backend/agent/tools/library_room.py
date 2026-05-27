@@ -6,6 +6,7 @@ backend/agent/tools/library_room.py
 from __future__ import annotations
 
 import json
+import asyncio
 
 from pydantic_ai import RunContext
 
@@ -14,6 +15,7 @@ from backend.agent.tools.base import safe_tool
 from backend.services.library_room_service import (
     LibraryRoomQueryError,
     query_available_rooms,
+    query_available_rooms_window,
 )
 
 
@@ -58,42 +60,74 @@ async def query_library_rooms(
         return "ERROR:CAS_LOGIN_FAILED"
 
     try:
-        normalized_query, rooms = await query_available_rooms(
-            cas_account,
-            cas_password,
-            location=location,
-            time_slot=time_slot,
-            capacity=capacity,
-        )
+        if not (time_slot or "").strip():
+            window_results = await query_available_rooms_window(
+                cas_account,
+                cas_password,
+                location=location,
+                capacity=capacity,
+                days=3,
+            )
+            rooms_by_id = {}
+            for query, day_rooms in window_results:
+                day = query.target_date.isoformat()
+                for room in day_rooms:
+                    key = (room.room_id, room.room_name, room.location, room.capacity)
+                    existing = rooms_by_id.setdefault(
+                        key,
+                        {
+                            "room_id": room.room_id,
+                            "room_name": room.room_name,
+                            "location": room.location,
+                            "capacity": room.capacity,
+                            "time_slots": [],
+                        },
+                    )
+                    existing["time_slots"].extend(
+                        f"{day} {slot}" for slot in room.time_slots
+                    )
+            rooms_payload = list(rooms_by_id.values())
+            query_time = "未来 3 天"
+        else:
+            normalized_query, rooms = await query_available_rooms(
+                cas_account,
+                cas_password,
+                location=location,
+                time_slot=time_slot,
+                capacity=capacity,
+            )
+            query_time = normalized_query.target_date.isoformat()
+            if normalized_query.start_time and normalized_query.end_time:
+                query_time = (
+                    f"{query_time} "
+                    f"{normalized_query.start_time}-{normalized_query.end_time}"
+                )
+            rooms_payload = [
+                {
+                    "room_id": room.room_id,
+                    "room_name": room.room_name,
+                    "location": room.location,
+                    "capacity": room.capacity,
+                    "time_slots": room.time_slots,
+                }
+                for room in rooms
+            ]
     except PermissionError:
         return "ERROR:CAS_LOGIN_FAILED"
+    except asyncio.TimeoutError:
+        return "ERROR:LIBRARY_ROOM_QUERY_TIMEOUT"
     except LibraryRoomQueryError as exc:
         message = str(exc)
         return message if message.startswith("ERROR:") else f"ERROR:{message}"
     except Exception as exc:
         return f"ERROR:LIBRARY_ROOM_QUERY_FAILED:{type(exc).__name__}"
 
-    query_time = normalized_query.target_date.isoformat()
-    if normalized_query.start_time and normalized_query.end_time:
-        query_time = (
-            f"{query_time} {normalized_query.start_time}-{normalized_query.end_time}"
-        )
-
     result = {
         "query_location": location,
         "query_time": query_time,
         "query_capacity": capacity if capacity > 0 else None,
-        "has_available": bool(rooms),
-        "rooms": [
-            {
-                "room_id": room.room_id,
-                "room_name": room.room_name,
-                "location": room.location,
-                "capacity": room.capacity,
-                "time_slots": room.time_slots,
-            }
-            for room in rooms
-        ],
+        "has_available": bool(rooms_payload),
+        "rooms": rooms_payload,
     }
     return json.dumps(result, ensure_ascii=False)
 
