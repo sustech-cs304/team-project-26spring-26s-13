@@ -11,3 +11,4 @@ from backend.agent.tools import study_copilot  # noqa: F401
 from backend.agent.tools import personal_tasks  # noqa: F401
 from backend.agent.tools import library_room  # noqa: F401
 from backend.agent.tools import time_utils  # noqa: F401
+from backend.agent.tools import email  # noqa: F401

@@ -23,6 +23,10 @@ The proposed system is an Autonomous AI Agent designed to assist SUSTech student
    - Executes operating system-level automation scripts via natural language commands.
    - Capable of performing file manipulation tasks (e.g., reading, creating, deleting, and batch renaming messy lab files to a specific format).
 
+7. **Email Service**
+   - Supports dialogue summary and specific tasks and sends email to users' email-box.
+   - Supports sending related attachments under zip compression maintaining the original file name.
+
 ## 2. Non-functional Requirements
 - **Usability:** The GUI must cleanly separate the main chat interface from the Thought Trace panel to prevent information overload. Rich text and generated schedules must be rendered elegantly.
 - **Safety & Security** Sensitive user credentials (e.g., Blackboard passwords) must be securely encrypted. The system must strictly adheres to the HITL mechanism to prevent unauthorized local OS modifications.
