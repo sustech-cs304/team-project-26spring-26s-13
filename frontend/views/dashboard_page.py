@@ -41,6 +41,7 @@ class DashboardPage(QWidget):
         self._session_id = f"sess_{uuid.uuid4().hex[:8]}"
         self._current_worker: AgentWorker | None = None
         self._display_name = display_name
+        self._trace_already_streamed = False
         self._setup_ui()
         self._load_bootstrap()
 
@@ -118,6 +119,7 @@ class DashboardPage(QWidget):
             self.chat_widget.set_input_enabled(False)
         if hasattr(self.trace_widget, "clear"):
             self.trace_widget.clear()
+        self._trace_already_streamed = False
 
         self._current_worker = AgentWorker(
             session_id=self._session_id,
@@ -133,6 +135,7 @@ class DashboardPage(QWidget):
 
     @pyqtSlot(dict)
     def _on_trace_streamed(self, trace_item: dict) -> None:
+        self._trace_already_streamed = True
         if hasattr(self.trace_widget, "append_trace"):
             self.trace_widget.append_trace(trace_item)
 
@@ -162,7 +165,7 @@ class DashboardPage(QWidget):
                 self.chat_widget.add_message("assistant", content)
 
         trace_items = response.get("trace", [])
-        if isinstance(trace_items, list):
+        if not self._trace_already_streamed and isinstance(trace_items, list):
             self.trace_widget.update_trace(trace_items)
 
         route = response.get("route")
@@ -224,6 +227,7 @@ class DashboardPage(QWidget):
             hitl_reply={"request_id": request_id, "approved": approved},
             stream_trace=True,
         )
+        self._trace_already_streamed = False
         self._current_worker.trace_streamed.connect(self._on_trace_streamed)
         self._current_worker.response_ready.connect(self._on_agent_response)
         self._current_worker.error_occurred.connect(self._on_agent_error)

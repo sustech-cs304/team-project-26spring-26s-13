@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     )
     AGENT_RUN_TIMEOUT_SECONDS: int = 300
 
+    # ── Library Room Booking ────────────────────────────
+    LIBRARY_QUERY_TIMEOUT_SECONDS: int = 45
+    LIBRARY_REQUEST_TIMEOUT_SECONDS: int = 8
+    LIBRARY_SCOPE_CONCURRENCY: int = 6
+
     # ── File Storage ────────────────────────────────────
     UPLOAD_DIR: str = "./data/uploads"  # raw uploaded files
     MAX_UPLOAD_SIZE_MB: int = 50
