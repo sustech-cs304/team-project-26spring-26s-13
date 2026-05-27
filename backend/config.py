@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Collections that always get queried regardless of subject routing
     RAG_ALWAYS_QUERY: list[str] = ["other"]
 
+    # ── Email ───────────────────────────────────────────
+    GMAIL_APP_PASSWORD: str = ""  # fasheng087@gmail.com App Password
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

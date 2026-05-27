@@ -3,14 +3,34 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import math
 from pathlib import Path
 import re
 import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QDate, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QTextCharFormat
+from PyQt6.QtCore import (
+    QDate,
+    QEvent,
+    QObject,
+    QPoint,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+)
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QLinearGradient,
+    QPainter,
+    QPen,
+    QRadialGradient,
+    QTextCharFormat,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QCalendarWidget,
@@ -193,11 +213,6 @@ HITL_REQUEST = {
     "reason": {"en": "No reason provided", "zh": "未提供原因"},
 }
 
-# Demo accounts shown on the login page as a convenience hint
-AUTH_DEMO_ACCOUNTS = [
-    {"username": "demo", "password": "demo123"},
-]
-
 
 class ApiWorker(QThread):
     """Run a single blocking API call on a background thread and emit the result."""
@@ -315,6 +330,78 @@ def localized(value, language: str):
     return value
 
 
+class StarfieldBackground(QWidget):
+    """Paint a subtle animated starfield behind the PyQt interface."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._phase = 0.0
+        self._stars: list[tuple[float, float, float, int, float]] = []
+        for index in range(150):
+            x = ((index * 73) % 997) / 997
+            y = ((index * 191) % 991) / 991
+            radius = 0.8 + ((index * 17) % 4) * 0.32
+            alpha = 55 + ((index * 43) % 130)
+            phase = ((index * 29) % 360) * math.pi / 180
+            self._stars.append((x, y, radius, alpha, phase))
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(90)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def _tick(self) -> None:
+        self._phase = (self._phase + 0.055) % (math.pi * 2)
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        width = max(1, self.width())
+        height = max(1, self.height())
+
+        sky = QLinearGradient(0, 0, width, height)
+        sky.setColorAt(0.0, QColor("#020611"))
+        sky.setColorAt(0.45, QColor("#071323"))
+        sky.setColorAt(1.0, QColor("#0b1025"))
+        painter.fillRect(self.rect(), sky)
+
+        for cx, cy, radius, color in (
+            (width * 0.18, height * 0.14, width * 0.42, QColor(34, 211, 238, 32)),
+            (width * 0.75, height * 0.28, width * 0.38, QColor(139, 92, 246, 30)),
+            (width * 0.50, height * 0.86, width * 0.46, QColor(59, 130, 246, 22)),
+        ):
+            nebula = QRadialGradient(cx, cy, radius)
+            nebula.setColorAt(0.0, color)
+            nebula.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(nebula))
+            painter.drawEllipse(
+                int(cx - radius),
+                int(cy - radius),
+                int(radius * 2),
+                int(radius * 2),
+            )
+
+        for x, y, star_radius, alpha, phase in self._stars:
+            twinkle = 0.62 + 0.38 * math.sin(self._phase + phase)
+            star_alpha = max(18, min(210, int(alpha * twinkle)))
+            color = QColor(225, 242, 255, star_alpha)
+            painter.setPen(QPen(color, star_radius))
+            painter.drawPoint(int(x * width), int(y * height))
+
+        painter.setPen(QPen(QColor(34, 211, 238, 18), 1))
+        for index in range(0, 42, 3):
+            first = self._stars[index]
+            second = self._stars[(index + 17) % len(self._stars)]
+            painter.drawLine(
+                int(first[0] * width),
+                int(first[1] * height),
+                int(second[0] * width),
+                int(second[1] * height),
+            )
+
+
 class InfoCard(QFrame):
     def __init__(self, title: str, body: str, object_name: str = "PanelCard") -> None:
         super().__init__()
@@ -423,7 +510,7 @@ class InlineTracePanel(QWidget):
         self._toggle_btn.setText(txt)
 
 
-_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+_SPINNER_FRAMES = ["|", "/", "-", "\\"]
 
 
 class ThinkingIndicator(QWidget):
@@ -2327,7 +2414,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.app_title())
         self.resize(1560, 940)
 
-        root = QWidget()
+        root = StarfieldBackground()
         root.setObjectName("AppRoot")
         self.setCentralWidget(root)
         root_layout = QVBoxLayout(root)
@@ -2693,11 +2780,6 @@ class MainWindow(QMainWindow):
             hero_layout.addWidget(pill)
 
         hero_layout.addStretch(1)
-        demo_hint = QLabel(
-            f"{self.ui('demo_account')}: {AUTH_DEMO_ACCOUNTS[0]['username']} / {AUTH_DEMO_ACCOUNTS[0]['password']}"
-        )
-        demo_hint.setObjectName("HintText")
-        hero_layout.addWidget(demo_hint)
 
         auth_card = QFrame()
         auth_card.setObjectName("AuthCard")
@@ -2757,13 +2839,7 @@ class MainWindow(QMainWindow):
         password_button.setObjectName("PrimaryButton")
         password_button.clicked.connect(self.handle_password_login)
 
-        helper = QLabel(
-            self.ui(
-                "login_helper",
-                username=AUTH_DEMO_ACCOUNTS[0]["username"],
-                password=AUTH_DEMO_ACCOUNTS[0]["password"],
-            )
-        )
+        helper = QLabel(self.ui("login_helper"))
         helper.setObjectName("HintText")
         helper.setWordWrap(True)
 
@@ -2836,11 +2912,8 @@ class MainWindow(QMainWindow):
 
         sidebar = self._build_sidebar()
         center = self._build_center_panel()
-        trace = self._build_trace_panel()
-
         body_layout.addWidget(sidebar, 24)
-        body_layout.addWidget(center, 52)
-        body_layout.addWidget(trace, 24)
+        body_layout.addWidget(center, 76)
         root_layout.addLayout(body_layout)
         return page
 
@@ -2852,33 +2925,27 @@ class MainWindow(QMainWindow):
         title = QLabel(self.app_title())
         title.setObjectName("HomeBrand")
 
-        self.header_user_label = QLabel()
-        self.header_user_label.setObjectName("BadgeLabel")
-        self.backend_mode_label = QLabel()
-        self.backend_mode_label.setObjectName("BadgeLabel")
-
         lang_button = QPushButton(self.ui("lang_button"))
         lang_button.clicked.connect(self.toggle_language)
         settings_button = QPushButton(self.ui("settings_button"))
         settings_button.clicked.connect(self.open_settings_dialog)
-        refresh_schedule_button = QPushButton(self.ui("refresh_schedule"))
-        refresh_schedule_button.clicked.connect(self.refresh_schedule_data)
         logout_button = QPushButton(self.ui("log_out"))
         logout_button.clicked.connect(self.logout)
+        auth_button = self._build_header_hitl_button()
 
         layout.addWidget(title)
         layout.addStretch(1)
-        layout.addWidget(self.backend_mode_label)
-        layout.addWidget(self.header_user_label)
+        layout.addWidget(auth_button)
         layout.addWidget(lang_button)
         layout.addWidget(settings_button)
-        layout.addWidget(refresh_schedule_button)
         layout.addWidget(logout_button)
         return layout
 
     def _build_sidebar(self) -> QFrame:
         frame = QFrame()
         frame.setObjectName("SidebarFrame")
+        frame.setMinimumWidth(300)
+        frame.setMaximumWidth(360)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(16)
@@ -2903,11 +2970,8 @@ class MainWindow(QMainWindow):
         self.workspace_conversation_chip.setObjectName("WorkspaceStat")
         self.workspace_material_chip = QLabel()
         self.workspace_material_chip.setObjectName("WorkspaceStat")
-        self.workspace_trace_chip = QLabel()
-        self.workspace_trace_chip.setObjectName("WorkspaceStat")
         workspace_stats.addWidget(self.workspace_conversation_chip)
         workspace_stats.addWidget(self.workspace_material_chip)
-        workspace_stats.addWidget(self.workspace_trace_chip)
         workspace_stats.addStretch(1)
 
         workspace_layout.addWidget(workspace_title)
@@ -2921,14 +2985,13 @@ class MainWindow(QMainWindow):
         history_layout.setContentsMargins(18, 18, 18, 18)
         history_layout.setSpacing(10)
 
-        history_header = QHBoxLayout()
-        history_header.setSpacing(10)
         history_title = QLabel(self.ui("conversation_history"))
         history_title.setObjectName("SectionTitle")
         new_chat_button = QPushButton(self.ui("new_chat"))
-        new_chat_button.setObjectName("PrimaryButton")
+        new_chat_button.setObjectName("SidebarActionButton")
         new_chat_button.clicked.connect(self.start_new_chat)
         delete_chat_button = QPushButton(self.ui("delete_chat"))
+        delete_chat_button.setObjectName("SidebarActionButton")
         delete_chat_button.clicked.connect(self.delete_current_chat)
         history_hint = QLabel(self.ui("conversation_history_hint"))
         history_hint.setObjectName("MutedText")
@@ -2937,12 +3000,14 @@ class MainWindow(QMainWindow):
         self.history_list.setObjectName("ConversationList")
         self.history_list.currentItemChanged.connect(self.handle_history_selection)
 
-        history_header.addWidget(history_title)
-        history_header.addStretch(1)
-        history_header.addWidget(delete_chat_button)
-        history_header.addWidget(new_chat_button)
-        history_layout.addLayout(history_header)
+        history_actions = QHBoxLayout()
+        history_actions.setSpacing(8)
+        history_actions.addWidget(delete_chat_button)
+        history_actions.addWidget(new_chat_button)
+
+        history_layout.addWidget(history_title)
         history_layout.addWidget(history_hint)
+        history_layout.addLayout(history_actions)
         history_layout.addWidget(self.history_list)
 
         resources_card = QFrame()
@@ -2963,9 +3028,11 @@ class MainWindow(QMainWindow):
         self._load_resource_files()
 
         add_button = QPushButton(self.ui("add_resource"))
+        add_button.setObjectName("SidebarActionButton")
         add_button.clicked.connect(self._add_resource_files)
 
         sync_bb_button = QPushButton(self.ui("sync_blackboard"))
+        sync_bb_button.setObjectName("SidebarActionButton")
         sync_bb_button.clicked.connect(self._sync_blackboard_materials)
 
         resources_buttons = QHBoxLayout()
@@ -2988,8 +3055,8 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("CenterFrame")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(16)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
 
         self.center_tabs = QTabWidget()
         self.chat_tab = self._build_chat_tab()
@@ -3037,6 +3104,7 @@ class MainWindow(QMainWindow):
         self.message_input.setObjectName("ChatComposer")
         self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
         self.message_input.setFixedHeight(80)
+        self.message_input.installEventFilter(self)
         send_button = QPushButton("↑")
         send_button.setObjectName("SendButton")
         send_button.clicked.connect(self.handle_send_message)
@@ -3057,6 +3125,21 @@ class MainWindow(QMainWindow):
         composer_outer.addLayout(action_row)
         layout.addWidget(composer_card)
         return tab
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if (
+            hasattr(self, "message_input")
+            and watched is self.message_input
+            and event.type() == QEvent.Type.KeyPress
+        ):
+            key = event.key()
+            modifiers = event.modifiers()
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                    self.handle_send_message()
+                    return True
+                return False
+        return super().eventFilter(watched, event)
 
     def _build_schedule_tab(self) -> QWidget:
         tab = QWidget()
@@ -3206,44 +3289,13 @@ class MainWindow(QMainWindow):
         self._refresh_schedule_views()
         return tab
 
-    def _build_trace_panel(self) -> QFrame:
-        frame = QFrame()
-        frame.setObjectName("TraceFrame")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
-
-        title = QLabel(self.ui("thought_trace"))
-        title.setObjectName("TitleLabel")
-        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        subtitle = QLabel(self.ui("thought_trace_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
-
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.trace_container = QWidget()
-        self.trace_layout = QVBoxLayout(self.trace_container)
-        self.trace_layout.setContentsMargins(0, 0, 0, 0)
-        self.trace_layout.setSpacing(10)
-        self.trace_layout.addStretch(1)
-        scroll_area.setWidget(self.trace_container)
-
-        approval_hint = InfoCard(
-            self.ui("pending_hitl_title"), self.ui("pending_hitl_body")
-        )
+    def _build_header_hitl_button(self) -> QPushButton:
         open_dialog_button = QPushButton(self.ui("open_authorization_dialog"))
-        open_dialog_button.setObjectName("PrimaryButton")
+        open_dialog_button.setObjectName("HeaderHitlButton")
+        open_dialog_button.setMinimumWidth(210)
+        open_dialog_button.setFixedHeight(32)
         open_dialog_button.clicked.connect(self.open_hitl_dialog)
-
-        layout.addWidget(scroll_area, 1)
-        layout.addWidget(approval_hint)
-        layout.addWidget(open_dialog_button)
-        return frame
+        return open_dialog_button
 
     def _sender_label(self, sender: str) -> str:
         return self.ui("you") if sender == "user" else self.ui("agent")
@@ -3338,6 +3390,11 @@ class MainWindow(QMainWindow):
         self._scroll_chat_to_bottom()
 
     def _load_trace_events(self, events: list[dict[str, str]]) -> None:
+        if not hasattr(self, "trace_layout"):
+            self._attach_inline_trace()
+            self._sync_active_conversation()
+            return
+
         while self.trace_layout.count() > 1:
             item = self.trace_layout.takeAt(0)
             widget = item.widget()
@@ -3615,10 +3672,12 @@ class MainWindow(QMainWindow):
         return date(qdate.year(), qdate.month(), qdate.day())
 
     def _refresh_profile_views(self) -> None:
-        self.header_user_label.setText(
-            self.ui("signed_in_as", name=self.current_user["name"])
-        )
-        self.backend_mode_label.setText(self.backend_status_text())
+        if hasattr(self, "header_user_label"):
+            self.header_user_label.setText(
+                self.ui("signed_in_as", name=self.current_user["name"])
+            )
+        if hasattr(self, "backend_mode_label"):
+            self.backend_mode_label.setText(self.backend_status_text())
         if hasattr(self, "workspace_name_label"):
             self.workspace_name_label.setText(self.current_user["name"])
         if hasattr(self, "workspace_hint_label"):
@@ -3630,10 +3689,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "workspace_material_chip"):
             self.workspace_material_chip.setText(
                 self.ui("workspace_materials", count=len(self.resource_files))
-            )
-        if hasattr(self, "workspace_trace_chip"):
-            self.workspace_trace_chip.setText(
-                self.ui("workspace_trace", count=len(self.trace_events))
             )
 
     def open_settings_dialog(self) -> None:
