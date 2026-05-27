@@ -10,7 +10,17 @@ import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QDate, QEvent, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QDate,
+    QEvent,
+    QObject,
+    QPoint,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -202,6 +212,7 @@ HITL_REQUEST = {
     "risk": {"en": "low", "zh": "低"},
     "reason": {"en": "No reason provided", "zh": "未提供原因"},
 }
+
 
 class ApiWorker(QThread):
     """Run a single blocking API call on a background thread and emit the result."""
