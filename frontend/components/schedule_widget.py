@@ -60,7 +60,6 @@ class ScheduleWidget(QWidget):
         """
         布局：
           QVBoxLayout
-          ├── QPushButton "Refresh Schedule"
           ├── QCalendarWidget（日历，高亮有安排的日期）
           └── QListWidget（选中日期的每日安排）
         """
@@ -84,13 +83,9 @@ class ScheduleWidget(QWidget):
         title.setObjectName("SectionTitle")
         self._summary_label = QLabel()
         self._summary_label.setObjectName("BadgeLabel")
-        refresh_button = QPushButton("刷新日程")
-        refresh_button.setObjectName("PrimaryButton")
-        refresh_button.clicked.connect(self._on_refresh)
         header.addWidget(title)
         header.addWidget(self._summary_label)
         header.addStretch(1)
-        header.addWidget(refresh_button)
 
         body = QVBoxLayout()
         body.setSpacing(12)

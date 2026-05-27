@@ -807,8 +807,8 @@ tr:hover td {{ background:var(--gray-50); }}
         + "".join(
             f"""        <tr>
           <td><code class="fn-name">{c['name']}</code></td>
-          <td style="font-weight:600;color:{_cc_color(100-int(c['rate']*100))}">{c['rate']*100:.1f}%</td>
-          <td><div class="mini-bar-track" style="max-width:250px"><div class="mini-bar-fill" style="width:{max(c['rate']*100,1):.1f}%;background:{_cc_color(100-int(c['rate']*100))}"></div></div></td>
+          <td style="font-weight:600;color:{_cc_color(100 - int(c['rate'] * 100))}">{c['rate'] * 100:.1f}%</td>
+          <td><div class="mini-bar-track" style="max-width:250px"><div class="mini-bar-fill" style="width:{max(c['rate'] * 100, 1):.1f}%;background:{_cc_color(100 - int(c['rate'] * 100))}"></div></div></td>
         </tr>\n"""
             for c in sorted(
                 [c for p in coverage.get("packages", []) for c in p.get("classes", [])],

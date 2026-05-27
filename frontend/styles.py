@@ -294,6 +294,12 @@ QPushButton#SidebarActionButton:hover {
     color: #ffffff;
 }
 
+QPushButton#SidebarActionButton:disabled {
+    background-color: rgba(18, 28, 56, 0.45);
+    border-color: rgba(103, 157, 255, 0.12);
+    color: #4b5d7b;
+}
+
 /* ── Send button (circular arrow) — glowing orb ─────────────────────────── */
 QPushButton#SendButton {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
