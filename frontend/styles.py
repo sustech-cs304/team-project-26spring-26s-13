@@ -261,6 +261,39 @@ QPushButton#PrimaryButton:hover {
         stop:0 #60a5fa, stop:1 #67e8f9);
 }
 
+QPushButton#HeaderHitlButton {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #3b82f6, stop:1 #22d3ee);
+    border: none;
+    border-radius: 10px;
+    color: #050810;
+    font-weight: 800;
+    min-height: 34px;
+    padding: 0 16px;
+}
+
+QPushButton#HeaderHitlButton:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #60a5fa, stop:1 #67e8f9);
+}
+
+QPushButton#SidebarActionButton {
+    background-color: rgba(18, 36, 80, 0.62);
+    border: 1px solid rgba(103, 157, 255, 0.28);
+    border-radius: 10px;
+    color: #dbe7ff;
+    font-size: 12px;
+    font-weight: 700;
+    min-height: 34px;
+    padding: 0 10px;
+}
+
+QPushButton#SidebarActionButton:hover {
+    background-color: rgba(34, 211, 238, 0.15);
+    border-color: rgba(103, 232, 249, 0.45);
+    color: #ffffff;
+}
+
 /* ── Send button (circular arrow) — glowing orb ─────────────────────────── */
 QPushButton#SendButton {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
