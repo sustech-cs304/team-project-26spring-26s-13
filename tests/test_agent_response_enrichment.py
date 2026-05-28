@@ -7,11 +7,18 @@ that turns tool observations into cited answers and UI payloads.
 
 import json
 
-from pydantic_ai.messages import ModelRequest, ToolReturnPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    ToolCallPart,
+    ToolReturnPart,
+)
 
 from backend.agent.core import FinalResponse
 from backend.agent.loop import (
     _build_encyclopedia_payload,
+    _build_llm_user_prompt,
+    _build_trace,
     _build_schedule_data_from_tool_returns,
     _ensure_source_citations,
 )
@@ -133,3 +140,68 @@ def test_build_schedule_data_prefers_proactive_schedule_context():
     assert schedule is not None
     assert [event.source for event in schedule.events] == ["Blackboard", "Local TODO"]
     assert schedule.conflicts[0].title == "OOAD Report"
+
+
+def test_library_prompt_enrichment_keeps_llm_tool_path():
+    prompt = _build_llm_user_prompt("帮我查看一丹图书馆311讨论间今天的预约情况")
+
+    assert "query_library_rooms" in prompt
+    assert "do not call `query_rag`" in prompt
+    assert '"location": "一丹图书馆311讨论间"' in prompt
+    assert '"time_slot": "今天"' in prompt
+    assert '"capacity": 0' in prompt
+
+
+def test_library_prompt_enrichment_uses_empty_time_for_open_window_query():
+    prompt = _build_llm_user_prompt("帮我查看一丹图书馆311讨论间什么时候可预约")
+
+    assert "query_library_rooms" in prompt
+    assert '"location": "一丹图书馆311讨论间"' in prompt
+    assert '"time_slot": ""' in prompt
+
+
+def test_library_trace_is_concise_and_summarized():
+    raw_messages = [
+        ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="query_library_rooms",
+                    args={
+                        "location": "一丹图书馆311讨论间",
+                        "time_slot": "今天",
+                        "capacity": 0,
+                    },
+                    tool_call_id="call_1",
+                )
+            ]
+        ),
+        _tool_return(
+            "query_library_rooms",
+            json.dumps(
+                {
+                    "query_location": "一丹图书馆311讨论间",
+                    "query_time": "2026-05-27",
+                    "query_capacity": None,
+                    "has_available": True,
+                    "rooms": [
+                        {
+                            "room_id": "311",
+                            "room_name": "311（1-3人）",
+                            "location": "一丹三层",
+                            "capacity": 3,
+                            "time_slots": ["21:00-21:15"],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        ),
+    ]
+
+    traces = _build_trace(raw_messages, visible_user_prompt="帮我查一丹311")
+
+    assert len(traces) == 2
+    assert [item.title for item in traces] == ["查询图书馆讨论间", "图书馆查询完成"]
+    assert "一丹图书馆311讨论间" in traces[0].detail
+    assert "找到 1 个" in traces[1].detail
+    assert "room_id" not in traces[1].detail

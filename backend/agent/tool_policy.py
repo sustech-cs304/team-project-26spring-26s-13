@@ -32,6 +32,10 @@ BOOKING_TOOL_NAMES = {
     "book_library_room",
 }
 
+LIBRARY_LOOKUP_TOOL_NAMES = {
+    "query_library_rooms",
+}
+
 _FILE_ACTION_TERMS = {
     "read",
     "open",
@@ -195,6 +199,13 @@ async def prepare_tools_for_prompt(
     - 仅在用户显式请求本地文件操作时，暴露 file_* / batch_rename 工具。
     - 其它请求保留这些占位工具为“不可见”，从而避免误触发 NotImplementedError。
     """
+    if has_library_intent(ctx.prompt):
+        return [
+            tool_def
+            for tool_def in tool_defs
+            if tool_def.name in LIBRARY_LOOKUP_TOOL_NAMES
+        ]
+
     if has_explicit_file_operation_intent(ctx.prompt):
         return tool_defs
 

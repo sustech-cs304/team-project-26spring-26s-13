@@ -1,1 +1,1 @@
-"""Frontend package for the Student Productivity Agent prototype."""
+"""Frontend package for the Student Productivity Agent."""

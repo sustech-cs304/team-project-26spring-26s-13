@@ -1,16 +1,36 @@
-"""PyQt6 desktop Frontend Relevant prototype for the Student Productivity Agent project."""
+"""PyQt6 desktop frontend for the Student Productivity Agent project."""
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import math
 from pathlib import Path
 import re
 import sys
 from typing import Any
 from uuid import uuid4
 
-from PyQt6.QtCore import QDate, QObject, QPoint, QSize, Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QTextCharFormat
+from PyQt6.QtCore import (
+    QDate,
+    QEvent,
+    QObject,
+    QPoint,
+    QSize,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSignal,
+)
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QLinearGradient,
+    QPainter,
+    QPen,
+    QRadialGradient,
+    QTextCharFormat,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QCalendarWidget,
@@ -95,11 +115,11 @@ HOME_SKILLS = [
         },
     },
     {
-        "icon": "TRACE",
-        "title": {"en": "Thought Trace", "zh": "思维追踪"},
+        "icon": "MAIL",
+        "title": {"en": "Email Delivery", "zh": "邮件发送"},
         "detail": {
-            "en": "See observation, planning, and tool calls without flooding the main conversation.",
-            "zh": "把观察、规划和工具调用独立展示，避免主对话区信息过载。",
+            "en": "Send summaries, task results, and exported conversations to the user's SUSTech mailbox.",
+            "zh": "将对话总结、任务结果和导出的会话发送到用户的南科大邮箱。",
         },
     },
     {
@@ -114,8 +134,8 @@ HOME_SKILLS = [
         "icon": "SYNC",
         "title": {"en": "Scheduler", "zh": "日程同步"},
         "detail": {
-            "en": "Combine Blackboard, campus events, and personal TODO items into one dashboard.",
-            "zh": "把 Blackboard、校历事件和个人 TODO 汇总到一个日程仪表盘中。",
+            "en": "Combine Blackboard, campus events, and personal tasks into one dashboard.",
+            "zh": "把 Blackboard、校历事件和个人任务汇总到一个日程仪表盘中。",
         },
     },
     {
@@ -147,37 +167,6 @@ HOME_BANNER = {
     },
 }
 
-AUTH_FEATURES = [
-    {
-        "title": {"en": "Agent Chat", "zh": "智能聊天"},
-        "detail": {
-            "en": "A chat-first workspace for the main planning and execution loop.",
-            "zh": "以聊天为中心的主工作区，用于承载规划与执行流程。",
-        },
-    },
-    {
-        "title": {"en": "Thought Trace", "zh": "思维追踪"},
-        "detail": {
-            "en": "Real-time visibility into observation, reasoning, and tool usage.",
-            "zh": "实时查看观察、推理和工具调用过程。",
-        },
-    },
-    {
-        "title": {"en": "Safe Actions", "zh": "安全操作"},
-        "detail": {
-            "en": "Human-in-the-Loop approval before risky file or schedule changes.",
-            "zh": "在高风险文件或日程修改前要求人工授权。",
-        },
-    },
-    {
-        "title": {"en": "Campus Support", "zh": "校园支持"},
-        "detail": {
-            "en": "Schedule conflict detection and handbook-based campus QA in one place.",
-            "zh": "在同一个界面里完成日程冲突检测和基于手册的校园问答。",
-        },
-    },
-]
-
 PROFILE = {
     "name": {"en": "SUSTech Student", "zh": "南科大学生"},
     "major": {"en": "Software Engineering", "zh": "软件工程"},
@@ -192,11 +181,6 @@ HITL_REQUEST = {
     "risk": {"en": "low", "zh": "低"},
     "reason": {"en": "No reason provided", "zh": "未提供原因"},
 }
-
-# Demo accounts shown on the login page as a convenience hint
-AUTH_DEMO_ACCOUNTS = [
-    {"username": "demo", "password": "demo123"},
-]
 
 
 class ApiWorker(QThread):
@@ -315,6 +299,78 @@ def localized(value, language: str):
     return value
 
 
+class StarfieldBackground(QWidget):
+    """Paint a subtle animated starfield behind the PyQt interface."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._phase = 0.0
+        self._stars: list[tuple[float, float, float, int, float]] = []
+        for index in range(150):
+            x = ((index * 73) % 997) / 997
+            y = ((index * 191) % 991) / 991
+            radius = 0.8 + ((index * 17) % 4) * 0.32
+            alpha = 55 + ((index * 43) % 130)
+            phase = ((index * 29) % 360) * math.pi / 180
+            self._stars.append((x, y, radius, alpha, phase))
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(90)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def _tick(self) -> None:
+        self._phase = (self._phase + 0.055) % (math.pi * 2)
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        width = max(1, self.width())
+        height = max(1, self.height())
+
+        sky = QLinearGradient(0, 0, width, height)
+        sky.setColorAt(0.0, QColor("#020611"))
+        sky.setColorAt(0.45, QColor("#071323"))
+        sky.setColorAt(1.0, QColor("#0b1025"))
+        painter.fillRect(self.rect(), sky)
+
+        for cx, cy, radius, color in (
+            (width * 0.18, height * 0.14, width * 0.42, QColor(34, 211, 238, 32)),
+            (width * 0.75, height * 0.28, width * 0.38, QColor(139, 92, 246, 30)),
+            (width * 0.50, height * 0.86, width * 0.46, QColor(59, 130, 246, 22)),
+        ):
+            nebula = QRadialGradient(cx, cy, radius)
+            nebula.setColorAt(0.0, color)
+            nebula.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(nebula))
+            painter.drawEllipse(
+                int(cx - radius),
+                int(cy - radius),
+                int(radius * 2),
+                int(radius * 2),
+            )
+
+        for x, y, star_radius, alpha, phase in self._stars:
+            twinkle = 0.62 + 0.38 * math.sin(self._phase + phase)
+            star_alpha = max(18, min(210, int(alpha * twinkle)))
+            color = QColor(225, 242, 255, star_alpha)
+            painter.setPen(QPen(color, star_radius))
+            painter.drawPoint(int(x * width), int(y * height))
+
+        painter.setPen(QPen(QColor(34, 211, 238, 18), 1))
+        for index in range(0, 42, 3):
+            first = self._stars[index]
+            second = self._stars[(index + 17) % len(self._stars)]
+            painter.drawLine(
+                int(first[0] * width),
+                int(first[1] * height),
+                int(second[0] * width),
+                int(second[1] * height),
+            )
+
+
 class InfoCard(QFrame):
     def __init__(self, title: str, body: str, object_name: str = "PanelCard") -> None:
         super().__init__()
@@ -423,7 +479,7 @@ class InlineTracePanel(QWidget):
         self._toggle_btn.setText(txt)
 
 
-_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+_SPINNER_FRAMES = ["|", "/", "-", "\\"]
 
 
 class ThinkingIndicator(QWidget):
@@ -615,8 +671,7 @@ class ScheduleResultWidget(QWidget):
                 conflict_layout.addWidget(conflict_detail)
                 layout.addWidget(conflict_card)
 
-        outer.addWidget(card, 0)
-        outer.addStretch(1)
+        outer.addWidget(card, 1)
 
 
 class EncyclopediaResultWidget(QWidget):
@@ -687,8 +742,7 @@ class EncyclopediaResultWidget(QWidget):
                 citation_label.setWordWrap(True)
                 layout.addWidget(citation_label)
 
-        outer.addWidget(card, 0)
-        outer.addStretch(1)
+        outer.addWidget(card, 1)
 
 
 class LibraryResultWidget(QWidget):
@@ -794,8 +848,7 @@ class LibraryResultWidget(QWidget):
             empty_label.setWordWrap(True)
             layout.addWidget(empty_label)
 
-        outer.addWidget(card, 0)
-        outer.addStretch(1)
+        outer.addWidget(card, 1)
 
 
 class TraceItem(QFrame):
@@ -1077,7 +1130,8 @@ class MainWindow(QMainWindow):
         self.response_stream_timer = QTimer(self)
         self.response_stream_timer.setInterval(45)
         self.response_stream_timer.timeout.connect(self._advance_response_stream)
-        self._active_workers: list[ApiWorker] = []
+        self._active_workers: list[QThread] = []
+        self.active_agent_worker: AgentStreamWorker | None = None
 
         self._reset_dynamic_state()
         self._build_root()
@@ -1114,6 +1168,14 @@ class MainWindow(QMainWindow):
         if self.api_client.enabled and self.api_client.base_url:
             return self.ui("backend_mode_rest", host=self.api_client.base_url)
         return self.ui("backend_disconnected_title")
+
+    def _is_authenticated(self) -> bool:
+        return bool(self.current_username and self.api_client.authenticated)
+
+    def _header_account_text(self) -> str:
+        if self._is_authenticated():
+            return self.ui("signed_in_as", name=self.current_user["name"])
+        return self.ui("not_signed_in")
 
     def _new_session_id(self) -> str:
         return f"sess_{uuid4().hex[:12]}"
@@ -1217,6 +1279,7 @@ class MainWindow(QMainWindow):
         self.response_stream_state = None
         self.pending_hitl_request = state.get("pending_hitl_request")
         self._sync_active_conversation()
+        self._refresh_generation_controls()
         if (
             open_dialog
             and self.pending_hitl_request
@@ -1249,6 +1312,40 @@ class MainWindow(QMainWindow):
         self._load_chat_messages(self.chat_messages)
         self._load_trace_events(self.trace_events)
         self._finalize_response_stream(open_dialog=open_dialog)
+
+    def _agent_response_active(self) -> bool:
+        return self.active_agent_worker is not None or bool(self.response_stream_state)
+
+    def _refresh_generation_controls(self) -> None:
+        if not hasattr(self, "send_button"):
+            return
+        if self._agent_response_active():
+            self.send_button.setText("x")
+            self.send_button.setToolTip(self.ui("cancel_generation_tooltip"))
+            return
+        self.send_button.setText("↑")
+        self.send_button.setToolTip(self.ui("send"))
+
+    def _cancel_agent_generation(self) -> None:
+        if self.response_stream_state:
+            self.response_stream_timer.stop()
+            self.response_stream_state = None
+            self._sync_active_conversation()
+        worker = self.active_agent_worker
+        self.active_agent_worker = None
+        if worker is not None and worker.isRunning():
+            worker.requestInterruption()
+            worker.terminate()
+            worker.wait(1000)
+        if worker in self._active_workers:
+            self._active_workers.remove(worker)
+        self._remove_thinking_indicator()
+        self.chat_messages.append(
+            self._create_text_message("agent", self.ui("generation_cancelled"))
+        )
+        self._load_chat_messages(self.chat_messages)
+        self._sync_active_conversation()
+        self._refresh_generation_controls()
 
     def _advance_response_stream(self) -> None:
         if not self.response_stream_state:
@@ -1519,8 +1616,34 @@ class MainWindow(QMainWindow):
             "messages_loaded": messages_loaded,
         }
 
+    @staticmethod
+    def _clean_optional_text(value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        return "" if text.lower() == "none" else text
+
+    def _conversation_has_user_content(self, conversation: dict[str, Any]) -> bool:
+        for item in conversation.get("messages", []):
+            if item.get("sender") == "user" and str(item.get("text", "")).strip():
+                return True
+        return False
+
+    def _conversation_is_visible(self, conversation: dict[str, Any]) -> bool:
+        return any(
+            (
+                self._conversation_has_user_content(conversation),
+                bool(conversation.get("trace")),
+                bool(self._clean_optional_text(conversation.get("title"))),
+                bool(self._clean_optional_text(conversation.get("remote_updated_at"))),
+            )
+        )
+
+    def _conversation_is_deletable(self, conversation: dict[str, Any] | None) -> bool:
+        return bool(conversation and self._conversation_is_visible(conversation))
+
     def _derive_conversation_title(self, conversation: dict[str, Any]) -> str:
-        title = str(conversation.get("title", "")).strip()
+        title = self._clean_optional_text(conversation.get("title"))
         if title:
             return title[:32] + ("..." if len(title) > 32 else "")
         for item in conversation["messages"]:
@@ -1530,7 +1653,7 @@ class MainWindow(QMainWindow):
         return self.ui("new_chat")
 
     def _conversation_meta(self, conversation: dict[str, Any]) -> str:
-        updated_at = str(conversation.get("remote_updated_at", "")).strip()
+        updated_at = self._clean_optional_text(conversation.get("remote_updated_at"))
         if updated_at:
             return self.ui(
                 "conversation_meta_remote",
@@ -1636,7 +1759,7 @@ class MainWindow(QMainWindow):
                 not conversation.get("messages_loaded", True)
                 and self.api_client.enabled
                 and self.api_client.authenticated
-                and str(conversation.get("remote_updated_at", "")).strip()
+                and self._clean_optional_text(conversation.get("remote_updated_at"))
             ):
                 self._load_remote_conversation(session_id)
             break
@@ -1649,8 +1772,8 @@ class MainWindow(QMainWindow):
                 if isinstance(messages, list)
                 else []
             )
-            updated_at = str(payload.get("updated_at", "")).strip()
-            title = str(payload.get("title", "")).strip()
+            updated_at = self._clean_optional_text(payload.get("updated_at"))
+            title = self._clean_optional_text(payload.get("title"))
 
             for conversation in self.conversations:
                 if conversation["session_id"] != session_id:
@@ -1797,7 +1920,7 @@ class MainWindow(QMainWindow):
         return {
             "title": title,
             "time": schedule_time,
-            "source": self.local({"en": "Local TODO", "zh": "本地计划"}),
+            "source": self.local({"en": "Local Plan", "zh": "本地计划"}),
             "detail": self._extract_reply_schedule_detail(plain_text),
         }
 
@@ -2288,9 +2411,11 @@ class MainWindow(QMainWindow):
                 session_id = str(item.get("session_id", "")).strip()
                 if not session_id:
                     continue
-                title = str(item.get("title", "")).strip()
-                preview = str(item.get("preview", "")).strip()
-                updated_at = str(item.get("updated_at", "")).strip()
+                title = self._clean_optional_text(item.get("title"))
+                preview = self._clean_optional_text(item.get("preview"))
+                updated_at = self._clean_optional_text(item.get("updated_at"))
+                if not (title or preview or updated_at):
+                    continue
                 conversation = existing.get(session_id)
                 if conversation is None:
                     conversation = self._create_conversation(
@@ -2327,7 +2452,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.app_title())
         self.resize(1560, 940)
 
-        root = QWidget()
+        root = StarfieldBackground()
         root.setObjectName("AppRoot")
         self.setCentralWidget(root)
         root_layout = QVBoxLayout(root)
@@ -2408,13 +2533,18 @@ class MainWindow(QMainWindow):
         self._sync_active_conversation()
         self.history_list.blockSignals(True)
         self.history_list.clear()
-        if not self.conversations:
-            QListWidgetItem(self.ui("empty_history"), self.history_list)
+        visible_conversations = [
+            item for item in self.conversations if self._conversation_is_visible(item)
+        ]
+        if not visible_conversations:
+            item = QListWidgetItem(self.ui("empty_history"), self.history_list)
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.history_list.blockSignals(False)
+            self._refresh_history_actions()
             return
 
-        selected_row = 0
-        for index, conversation in enumerate(self.conversations):
+        selected_row = -1
+        for index, conversation in enumerate(visible_conversations):
             title = self._derive_conversation_title(conversation)
             item = QListWidgetItem(
                 f"{title}\n{self._conversation_meta(conversation)}", self.history_list
@@ -2425,9 +2555,20 @@ class MainWindow(QMainWindow):
             if conversation["session_id"] == self.active_conversation_id:
                 selected_row = index
 
-        self.history_list.setCurrentRow(selected_row)
+        if selected_row >= 0:
+            self.history_list.setCurrentRow(selected_row)
+        else:
+            self.history_list.clearSelection()
         self.history_list.blockSignals(False)
+        self._refresh_history_actions()
         self._refresh_profile_views()
+
+    def _refresh_history_actions(self) -> None:
+        if not hasattr(self, "delete_chat_button"):
+            return
+        self.delete_chat_button.setEnabled(
+            self._conversation_is_deletable(self._active_conversation())
+        )
 
     def handle_history_selection(
         self, current: QListWidgetItem | None, _previous: QListWidgetItem | None
@@ -2566,7 +2707,7 @@ class MainWindow(QMainWindow):
         hero_buttons.setSpacing(10)
         start_button = QPushButton(self.ui("start_now"))
         start_button.setObjectName("PrimaryButton")
-        start_button.clicked.connect(lambda: self._show_auth(0))
+        start_button.clicked.connect(self._show_dashboard)
         create_button = QPushButton(self.ui("create_account"))
         create_button.clicked.connect(lambda: self._show_auth(1))
         hero_buttons.addWidget(start_button)
@@ -2677,27 +2818,21 @@ class MainWindow(QMainWindow):
         hero_layout.addWidget(title)
         hero_layout.addWidget(body)
 
-        for item in AUTH_FEATURES:
-            pill = QFrame()
-            pill.setObjectName("FeaturePill")
-            pill_layout = QVBoxLayout(pill)
-            pill_layout.setContentsMargins(16, 14, 16, 14)
-            pill_layout.setSpacing(6)
-            pill_title = QLabel(self.local(item["title"]))
-            pill_title.setObjectName("SectionTitle")
-            pill_detail = QLabel(self.local(item["detail"]))
-            pill_detail.setObjectName("MutedText")
-            pill_detail.setWordWrap(True)
-            pill_layout.addWidget(pill_title)
-            pill_layout.addWidget(pill_detail)
-            hero_layout.addWidget(pill)
+        summary_card = QFrame()
+        summary_card.setObjectName("FeaturePill")
+        summary_layout = QVBoxLayout(summary_card)
+        summary_layout.setContentsMargins(18, 16, 18, 16)
+        summary_layout.setSpacing(8)
+        summary_title = QLabel(self.ui("auth_capabilities_title"))
+        summary_title.setObjectName("SectionTitle")
+        summary_body = QLabel(self.ui("auth_capabilities_body"))
+        summary_body.setObjectName("BodyText")
+        summary_body.setWordWrap(True)
+        summary_layout.addWidget(summary_title)
+        summary_layout.addWidget(summary_body)
+        hero_layout.addWidget(summary_card)
 
         hero_layout.addStretch(1)
-        demo_hint = QLabel(
-            f"{self.ui('demo_account')}: {AUTH_DEMO_ACCOUNTS[0]['username']} / {AUTH_DEMO_ACCOUNTS[0]['password']}"
-        )
-        demo_hint.setObjectName("HintText")
-        hero_layout.addWidget(demo_hint)
 
         auth_card = QFrame()
         auth_card.setObjectName("AuthCard")
@@ -2715,10 +2850,6 @@ class MainWindow(QMainWindow):
         self.auth_tabs.addTab(self._build_login_tab(), self.ui("login"))
         self.auth_tabs.addTab(self._build_register_tab(), self.ui("register"))
 
-        footer = QLabel(self.ui("auth_footer"))
-        footer.setObjectName("AuthFooter")
-        footer.setWordWrap(True)
-
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(10)
         back_home_button = QPushButton(self.ui("back_home"))
@@ -2732,7 +2863,6 @@ class MainWindow(QMainWindow):
         auth_layout.addWidget(auth_title)
         auth_layout.addWidget(auth_subtitle)
         auth_layout.addWidget(self.auth_tabs, 1)
-        auth_layout.addWidget(footer)
         auth_layout.addLayout(bottom_row)
 
         layout.addWidget(hero, 6)
@@ -2757,20 +2887,10 @@ class MainWindow(QMainWindow):
         password_button.setObjectName("PrimaryButton")
         password_button.clicked.connect(self.handle_password_login)
 
-        helper = QLabel(
-            self.ui(
-                "login_helper",
-                username=AUTH_DEMO_ACCOUNTS[0]["username"],
-                password=AUTH_DEMO_ACCOUNTS[0]["password"],
-            )
-        )
-        helper.setObjectName("HintText")
-        helper.setWordWrap(True)
-
         layout.addWidget(self.login_username_input)
         layout.addWidget(self.login_password_input)
         layout.addWidget(password_button)
-        layout.addWidget(helper)
+        layout.addStretch(1)
         return tab
 
     def _build_register_tab(self) -> QWidget:
@@ -2801,17 +2921,13 @@ class MainWindow(QMainWindow):
         register_button.setObjectName("PrimaryButton")
         register_button.clicked.connect(self.handle_register)
 
-        helper = QLabel(self.ui("register_helper"))
-        helper.setObjectName("HintText")
-        helper.setWordWrap(True)
-
         layout.addWidget(self.register_username_input)
         layout.addWidget(self.register_display_name_input)
         layout.addWidget(self.register_major_input)
         layout.addWidget(self.register_password_input)
         layout.addWidget(self.register_confirm_input)
         layout.addWidget(register_button)
-        layout.addWidget(helper)
+        layout.addStretch(1)
         return tab
 
     def _build_dashboard_page(self) -> QWidget:
@@ -2836,11 +2952,8 @@ class MainWindow(QMainWindow):
 
         sidebar = self._build_sidebar()
         center = self._build_center_panel()
-        trace = self._build_trace_panel()
-
         body_layout.addWidget(sidebar, 24)
-        body_layout.addWidget(center, 52)
-        body_layout.addWidget(trace, 24)
+        body_layout.addWidget(center, 76)
         root_layout.addLayout(body_layout)
         return page
 
@@ -2852,68 +2965,37 @@ class MainWindow(QMainWindow):
         title = QLabel(self.app_title())
         title.setObjectName("HomeBrand")
 
-        self.header_user_label = QLabel()
-        self.header_user_label.setObjectName("BadgeLabel")
-        self.backend_mode_label = QLabel()
-        self.backend_mode_label.setObjectName("BadgeLabel")
-
         lang_button = QPushButton(self.ui("lang_button"))
         lang_button.clicked.connect(self.toggle_language)
         settings_button = QPushButton(self.ui("settings_button"))
         settings_button.clicked.connect(self.open_settings_dialog)
-        refresh_schedule_button = QPushButton(self.ui("refresh_schedule"))
-        refresh_schedule_button.clicked.connect(self.refresh_schedule_data)
+        account_button = QPushButton(self._header_account_text())
+        account_button.setObjectName("HeaderAccountButton")
+        account_button.clicked.connect(self._handle_header_account)
+        self.header_account_button = account_button
         logout_button = QPushButton(self.ui("log_out"))
         logout_button.clicked.connect(self.logout)
+        logout_button.setVisible(self._is_authenticated())
+        self.logout_button = logout_button
+        auth_button = self._build_header_hitl_button()
 
         layout.addWidget(title)
         layout.addStretch(1)
-        layout.addWidget(self.backend_mode_label)
-        layout.addWidget(self.header_user_label)
+        layout.addWidget(auth_button)
+        layout.addWidget(account_button)
         layout.addWidget(lang_button)
         layout.addWidget(settings_button)
-        layout.addWidget(refresh_schedule_button)
         layout.addWidget(logout_button)
         return layout
 
     def _build_sidebar(self) -> QFrame:
         frame = QFrame()
         frame.setObjectName("SidebarFrame")
+        frame.setMinimumWidth(300)
+        frame.setMaximumWidth(360)
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(16)
-
-        workspace_card = QFrame()
-        workspace_card.setObjectName("WorkspaceCard")
-        workspace_layout = QVBoxLayout(workspace_card)
-        workspace_layout.setContentsMargins(18, 18, 18, 18)
-        workspace_layout.setSpacing(8)
-
-        workspace_title = QLabel(self.ui("workspace_title"))
-        workspace_title.setObjectName("CardTitle")
-        self.workspace_name_label = QLabel()
-        self.workspace_name_label.setObjectName("WorkspaceName")
-        self.workspace_hint_label = QLabel()
-        self.workspace_hint_label.setObjectName("BodyText")
-        self.workspace_hint_label.setWordWrap(True)
-
-        workspace_stats = QHBoxLayout()
-        workspace_stats.setSpacing(8)
-        self.workspace_conversation_chip = QLabel()
-        self.workspace_conversation_chip.setObjectName("WorkspaceStat")
-        self.workspace_material_chip = QLabel()
-        self.workspace_material_chip.setObjectName("WorkspaceStat")
-        self.workspace_trace_chip = QLabel()
-        self.workspace_trace_chip.setObjectName("WorkspaceStat")
-        workspace_stats.addWidget(self.workspace_conversation_chip)
-        workspace_stats.addWidget(self.workspace_material_chip)
-        workspace_stats.addWidget(self.workspace_trace_chip)
-        workspace_stats.addStretch(1)
-
-        workspace_layout.addWidget(workspace_title)
-        workspace_layout.addWidget(self.workspace_name_label)
-        workspace_layout.addWidget(self.workspace_hint_label)
-        workspace_layout.addLayout(workspace_stats)
 
         history_card = QFrame()
         history_card.setObjectName("PanelCard")
@@ -2921,15 +3003,15 @@ class MainWindow(QMainWindow):
         history_layout.setContentsMargins(18, 18, 18, 18)
         history_layout.setSpacing(10)
 
-        history_header = QHBoxLayout()
-        history_header.setSpacing(10)
         history_title = QLabel(self.ui("conversation_history"))
         history_title.setObjectName("SectionTitle")
         new_chat_button = QPushButton(self.ui("new_chat"))
-        new_chat_button.setObjectName("PrimaryButton")
+        new_chat_button.setObjectName("SidebarActionButton")
         new_chat_button.clicked.connect(self.start_new_chat)
         delete_chat_button = QPushButton(self.ui("delete_chat"))
+        delete_chat_button.setObjectName("SidebarActionButton")
         delete_chat_button.clicked.connect(self.delete_current_chat)
+        self.delete_chat_button = delete_chat_button
         history_hint = QLabel(self.ui("conversation_history_hint"))
         history_hint.setObjectName("MutedText")
         history_hint.setWordWrap(True)
@@ -2937,12 +3019,14 @@ class MainWindow(QMainWindow):
         self.history_list.setObjectName("ConversationList")
         self.history_list.currentItemChanged.connect(self.handle_history_selection)
 
-        history_header.addWidget(history_title)
-        history_header.addStretch(1)
-        history_header.addWidget(delete_chat_button)
-        history_header.addWidget(new_chat_button)
-        history_layout.addLayout(history_header)
+        history_actions = QHBoxLayout()
+        history_actions.setSpacing(8)
+        history_actions.addWidget(delete_chat_button)
+        history_actions.addWidget(new_chat_button)
+
+        history_layout.addWidget(history_title)
         history_layout.addWidget(history_hint)
+        history_layout.addLayout(history_actions)
         history_layout.addWidget(self.history_list)
 
         resources_card = QFrame()
@@ -2963,13 +3047,15 @@ class MainWindow(QMainWindow):
         self._load_resource_files()
 
         add_button = QPushButton(self.ui("add_resource"))
+        add_button.setObjectName("SidebarActionButton")
         add_button.clicked.connect(self._add_resource_files)
 
         sync_bb_button = QPushButton(self.ui("sync_blackboard"))
+        sync_bb_button.setObjectName("SidebarActionButton")
         sync_bb_button.clicked.connect(self._sync_blackboard_materials)
 
-        resources_buttons = QHBoxLayout()
-        resources_buttons.setSpacing(10)
+        resources_buttons = QVBoxLayout()
+        resources_buttons.setSpacing(8)
         resources_buttons.addWidget(add_button)
         resources_buttons.addWidget(sync_bb_button)
 
@@ -2978,7 +3064,6 @@ class MainWindow(QMainWindow):
         resources_layout.addWidget(self.resource_list)
         resources_layout.addLayout(resources_buttons)
 
-        layout.addWidget(workspace_card)
         layout.addWidget(history_card, 1)
         layout.addWidget(resources_card, 1)
         self._refresh_conversation_list()
@@ -2988,8 +3073,8 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("CenterFrame")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(16)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
 
         self.center_tabs = QTabWidget()
         self.chat_tab = self._build_chat_tab()
@@ -3037,9 +3122,11 @@ class MainWindow(QMainWindow):
         self.message_input.setObjectName("ChatComposer")
         self.message_input.setPlaceholderText(self._message_placeholder_for_mode())
         self.message_input.setFixedHeight(80)
+        self.message_input.installEventFilter(self)
         send_button = QPushButton("↑")
         send_button.setObjectName("SendButton")
-        send_button.clicked.connect(self.handle_send_message)
+        send_button.setToolTip(self.ui("send"))
+        send_button.clicked.connect(self.handle_send_or_cancel)
         self.send_button = send_button
         input_row.addWidget(self.message_input, 1)
         input_row.addWidget(send_button, 0, Qt.AlignmentFlag.AlignBottom)
@@ -3056,7 +3143,23 @@ class MainWindow(QMainWindow):
         composer_outer.addLayout(input_row)
         composer_outer.addLayout(action_row)
         layout.addWidget(composer_card)
+        self._refresh_generation_controls()
         return tab
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if (
+            hasattr(self, "message_input")
+            and watched is self.message_input
+            and event.type() == QEvent.Type.KeyPress
+        ):
+            key = event.key()
+            modifiers = event.modifiers()
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if modifiers & Qt.KeyboardModifier.ShiftModifier:
+                    self.handle_send_or_cancel()
+                    return True
+                return False
+        return super().eventFilter(watched, event)
 
     def _build_schedule_tab(self) -> QWidget:
         tab = QWidget()
@@ -3085,12 +3188,8 @@ class MainWindow(QMainWindow):
         title_row.setSpacing(10)
         title = QLabel(self.ui("schedule_title"))
         title.setObjectName("SectionTitle")
-        refresh_button = QPushButton(self.ui("refresh_schedule"))
-        refresh_button.setObjectName("PrimaryButton")
-        refresh_button.clicked.connect(self.refresh_schedule_data)
         title_row.addWidget(title)
         title_row.addStretch(1)
-        title_row.addWidget(refresh_button)
 
         body = QLabel(self.ui("calendar_hint"))
         body.setObjectName("MutedText")
@@ -3206,44 +3305,13 @@ class MainWindow(QMainWindow):
         self._refresh_schedule_views()
         return tab
 
-    def _build_trace_panel(self) -> QFrame:
-        frame = QFrame()
-        frame.setObjectName("TraceFrame")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
-
-        title = QLabel(self.ui("thought_trace"))
-        title.setObjectName("TitleLabel")
-        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        subtitle = QLabel(self.ui("thought_trace_subtitle"))
-        subtitle.setObjectName("SubtitleLabel")
-        subtitle.setWordWrap(True)
-
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.trace_container = QWidget()
-        self.trace_layout = QVBoxLayout(self.trace_container)
-        self.trace_layout.setContentsMargins(0, 0, 0, 0)
-        self.trace_layout.setSpacing(10)
-        self.trace_layout.addStretch(1)
-        scroll_area.setWidget(self.trace_container)
-
-        approval_hint = InfoCard(
-            self.ui("pending_hitl_title"), self.ui("pending_hitl_body")
-        )
+    def _build_header_hitl_button(self) -> QPushButton:
         open_dialog_button = QPushButton(self.ui("open_authorization_dialog"))
-        open_dialog_button.setObjectName("PrimaryButton")
+        open_dialog_button.setObjectName("HeaderHitlButton")
+        open_dialog_button.setMinimumWidth(210)
+        open_dialog_button.setFixedHeight(32)
         open_dialog_button.clicked.connect(self.open_hitl_dialog)
-
-        layout.addWidget(scroll_area, 1)
-        layout.addWidget(approval_hint)
-        layout.addWidget(open_dialog_button)
-        return frame
+        return open_dialog_button
 
     def _sender_label(self, sender: str) -> str:
         return self.ui("you") if sender == "user" else self.ui("agent")
@@ -3338,6 +3406,11 @@ class MainWindow(QMainWindow):
         self._scroll_chat_to_bottom()
 
     def _load_trace_events(self, events: list[dict[str, str]]) -> None:
+        if not hasattr(self, "trace_layout"):
+            self._attach_inline_trace()
+            self._sync_active_conversation()
+            return
+
         while self.trace_layout.count() > 1:
             item = self.trace_layout.takeAt(0)
             widget = item.widget()
@@ -3615,26 +3688,16 @@ class MainWindow(QMainWindow):
         return date(qdate.year(), qdate.month(), qdate.day())
 
     def _refresh_profile_views(self) -> None:
-        self.header_user_label.setText(
-            self.ui("signed_in_as", name=self.current_user["name"])
-        )
-        self.backend_mode_label.setText(self.backend_status_text())
-        if hasattr(self, "workspace_name_label"):
-            self.workspace_name_label.setText(self.current_user["name"])
-        if hasattr(self, "workspace_hint_label"):
-            self.workspace_hint_label.setText(self.ui("workspace_hint"))
-        if hasattr(self, "workspace_conversation_chip"):
-            self.workspace_conversation_chip.setText(
-                self.ui("workspace_conversations", count=len(self.conversations))
+        if hasattr(self, "header_user_label"):
+            self.header_user_label.setText(
+                self.ui("signed_in_as", name=self.current_user["name"])
             )
-        if hasattr(self, "workspace_material_chip"):
-            self.workspace_material_chip.setText(
-                self.ui("workspace_materials", count=len(self.resource_files))
-            )
-        if hasattr(self, "workspace_trace_chip"):
-            self.workspace_trace_chip.setText(
-                self.ui("workspace_trace", count=len(self.trace_events))
-            )
+        if hasattr(self, "header_account_button"):
+            self.header_account_button.setText(self._header_account_text())
+        if hasattr(self, "logout_button"):
+            self.logout_button.setVisible(self._is_authenticated())
+        if hasattr(self, "backend_mode_label"):
+            self.backend_mode_label.setText(self.backend_status_text())
 
     def open_settings_dialog(self) -> None:
         dialog = SettingsDialog(
@@ -3746,9 +3809,53 @@ class MainWindow(QMainWindow):
     def _show_home(self) -> None:
         self.stack.setCurrentWidget(self.home_page)
 
+    def _show_dashboard(self) -> None:
+        self.stack.setCurrentWidget(self.dashboard_page)
+        self._refresh_profile_views()
+
     def _show_auth(self, tab_index: int = 0) -> None:
+        self._open_auth_dialog(tab_index)
+
+    def _handle_header_account(self) -> None:
+        if self._is_authenticated():
+            return
+        self._open_auth_dialog(0)
+
+    def _open_auth_dialog(self, tab_index: int = 0) -> None:
+        dialog = QDialog(self)
+        dialog.setObjectName("AuthDialog")
+        dialog.setWindowTitle(self.ui("welcome_back"))
+        dialog.setModal(True)
+        dialog.resize(520, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(22, 22, 22, 22)
+        dialog_layout.setSpacing(14)
+
+        auth_card = QFrame(dialog)
+        auth_card.setObjectName("AuthCard")
+        auth_layout = QVBoxLayout(auth_card)
+        auth_layout.setContentsMargins(24, 24, 24, 24)
+        auth_layout.setSpacing(14)
+
+        auth_title = QLabel(self.ui("welcome_back"))
+        auth_title.setObjectName("AuthTitle")
+        auth_subtitle = QLabel(self.ui("auth_subtitle"))
+        auth_subtitle.setObjectName("HeroBody")
+        auth_subtitle.setWordWrap(True)
+
+        self.auth_tabs = QTabWidget()
+        self.auth_tabs.addTab(self._build_login_tab(), self.ui("login"))
+        self.auth_tabs.addTab(self._build_register_tab(), self.ui("register"))
         self.auth_tabs.setCurrentIndex(tab_index)
-        self.stack.setCurrentWidget(self.auth_page)
+
+        auth_layout.addWidget(auth_title)
+        auth_layout.addWidget(auth_subtitle)
+        auth_layout.addWidget(self.auth_tabs, 1)
+        dialog_layout.addWidget(auth_card, 1)
+
+        self.auth_dialog = dialog
+        dialog.finished.connect(lambda _: setattr(self, "auth_dialog", None))
+        dialog.exec()
 
     def _complete_login(
         self,
@@ -3767,6 +3874,9 @@ class MainWindow(QMainWindow):
             }
         else:
             self.remote_profile = None
+        auth_dialog = getattr(self, "auth_dialog", None)
+        if isinstance(auth_dialog, QDialog):
+            auth_dialog.accept()
         self._reset_dynamic_state()
         self._build_root()
         self.stack.setCurrentWidget(self.dashboard_page)
@@ -3999,8 +4109,11 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self._active_workers.append(worker)
+        self.active_agent_worker = worker
 
         def _on_trace(data: dict) -> None:
+            if self.active_agent_worker is not worker:
+                return
             phase = str(data.get("phase", "Observation"))
             title = str(data.get("title", ""))
             detail = str(data.get("detail", ""))
@@ -4008,13 +4121,21 @@ class MainWindow(QMainWindow):
             self._append_trace(phase, title, detail, status)
 
         def _on_done(response):
+            if self.active_agent_worker is not worker:
+                return
+            self.active_agent_worker = None
+            self._remove_thinking_indicator()
             self._apply_agent_response(
                 response,
                 auto_open_hitl=_auto_open_hitl,
                 trace_already_streamed=True,
             )
+            self._refresh_generation_controls()
 
         def _on_error(err):
+            if self.active_agent_worker is not worker:
+                return
+            self.active_agent_worker = None
             self._remove_thinking_indicator()
             self._append_trace(
                 self.local({"en": "Observation", "zh": "观察"}),
@@ -4022,6 +4143,7 @@ class MainWindow(QMainWindow):
                 self.ui("trace_backend_unavailable_detail", error=err),
                 "pending",
             )
+            self._refresh_generation_controls()
 
         worker.trace_streamed.connect(_on_trace)
         worker.finished.connect(_on_done)
@@ -4151,7 +4273,8 @@ class MainWindow(QMainWindow):
     def delete_current_chat(self) -> None:
         self._flush_response_stream(open_dialog=False)
         conversation = self._active_conversation()
-        if conversation is None:
+        if not self._conversation_is_deletable(conversation):
+            self._refresh_history_actions()
             return
 
         result = QMessageBox.question(
@@ -4167,10 +4290,10 @@ class MainWindow(QMainWindow):
             item.get("sender") == "user" for item in conversation.get("messages", [])
         )
         should_delete_remote = should_delete_remote or bool(
-            str(conversation.get("remote_updated_at", "")).strip()
+            self._clean_optional_text(conversation.get("remote_updated_at"))
         )
         should_delete_remote = should_delete_remote or bool(
-            str(conversation.get("title", "")).strip()
+            self._clean_optional_text(conversation.get("title"))
         )
 
         if (
@@ -4181,12 +4304,13 @@ class MainWindow(QMainWindow):
             try:
                 self.api_client.delete_session(session_id)
             except BackendApiError as exc:
-                QMessageBox.warning(
-                    self,
-                    self.ui("delete_chat_failed_title"),
-                    self.ui("delete_chat_failed_body", details=str(exc)),
-                )
-                return
+                if "HTTP 404" not in str(exc):
+                    QMessageBox.warning(
+                        self,
+                        self.ui("delete_chat_failed_title"),
+                        self.ui("delete_chat_failed_body", details=str(exc)),
+                    )
+                    return
 
         self.conversations = [
             item for item in self.conversations if item["session_id"] != session_id
@@ -4215,8 +4339,17 @@ class MainWindow(QMainWindow):
         self._build_root()
         self._show_home()
 
+    def handle_send_or_cancel(self) -> None:
+        if self._agent_response_active():
+            self._cancel_agent_generation()
+            return
+        self.handle_send_message()
+
     def handle_send_message(self) -> None:
         self._flush_response_stream(open_dialog=False)
+        if not self._is_authenticated():
+            self._open_auth_dialog(0)
+            return
         text = self.message_input.toPlainText().strip()
         if not text:
             return
@@ -4228,6 +4361,7 @@ class MainWindow(QMainWindow):
         if self._run_remote_agent(message=text, attachments=attachments):
             self.message_input.clear()
             self._show_thinking_indicator()
+            self._refresh_generation_controls()
             return
 
         QMessageBox.warning(

@@ -52,7 +52,7 @@ from backend.agent.tools.os_automation import execute_approved_hitl_operation
 from backend.agent.core import AgentDeps, agent, FinalResponse
 from backend.agent.prompt import build_hitl_continuation_prompt
 from backend.agent.router import determine_route
-from backend.agent.tool_policy import normalize_route_for_prompt
+from backend.agent.tool_policy import has_library_intent, normalize_route_for_prompt
 from backend.agent.validators import ResponseValidationContext, detect_alignment_issue
 import traceback
 
@@ -87,7 +87,7 @@ async def run_agent(
             phase="Observation",
             title="读取用户目标",
             detail="Agent 收到请求，开始构建上下文与依赖。",
-            status="running",
+            status="done",
             timestamp=datetime.now(timezone.utc),
         )
     )
@@ -231,6 +231,8 @@ async def run_agent(
             tool_args=hitl_context.tool_args,
         )
 
+    agent_user_prompt = _build_llm_user_prompt(user_prompt)
+
     # 读取最近历史消息并注入 message_history，避免多轮对话丢失上下文。
     history_stmt = (
         select(ChatMessage)
@@ -258,8 +260,8 @@ async def run_agent(
             TraceItem(
                 phase="Reasoning",
                 title="规划工具调用",
-                detail="LLM 正在执行 goal-to-tool 推理并决定是否调用工具。",
-                status="running",
+                detail="LLM 正在判断本轮是否需要调用工具。",
+                status="done",
                 timestamp=datetime.now(timezone.utc),
             )
         )
@@ -269,10 +271,12 @@ async def run_agent(
         print(f"base_url={settings.DEEPSEEK_BASE_URL}")
         print(f"has_llm_api_key={bool(llm_api_key)}")
         print(f"user_prompt={user_prompt!r}")
+        if agent_user_prompt != user_prompt:
+            print("library_tool_hint=enabled")
 
         result = await asyncio.wait_for(
             agent.run(
-                user_prompt,
+                agent_user_prompt,
                 deps=deps,
                 model=dynamic_model,
                 message_history=message_history,
@@ -288,11 +292,11 @@ async def run_agent(
         final_data: FinalResponse = getattr(result, "data", None) or result.output
         print(f"final_data_type={type(final_data)}")
         print(f"final_data={final_data!r}")
-        raw_messages = result.all_messages()
-        print("=== got raw_messages ===")
+        raw_messages = result.new_messages()
+        print("=== got new raw_messages ===")
         print(f"raw_messages_count={len(raw_messages)}")
 
-        for item in _build_trace(raw_messages):
+        for item in _build_trace(raw_messages, visible_user_prompt=user_prompt):
             await emit_trace(item)
         print("=== trace built ===")
 
@@ -513,7 +517,169 @@ async def run_agent(
         )
 
 
-def _build_trace(raw_messages: list) -> list[TraceItem]:
+def _extract_library_capacity(text: str) -> int:
+    match = re.search(r"(\d{1,2})\s*(?:人|位|座|person|people|seat)", text or "", re.I)
+    return int(match.group(1)) if match else 0
+
+
+def _extract_library_time_slot(text: str) -> str:
+    raw = text or ""
+    lowered = raw.lower()
+    parts: list[str] = []
+
+    date_match = re.search(r"20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}", raw)
+    if date_match:
+        parts.append(date_match.group(0))
+    elif "后天" in raw:
+        parts.append("后天")
+    elif "明天" in raw or "tomorrow" in lowered:
+        parts.append("明天")
+    elif "今天" in raw or "今日" in raw or "today" in lowered:
+        parts.append("今天")
+    else:
+        weekday_match = re.search(r"(?:周|星期|礼拜)[一二三四五六日天1-7]", raw)
+        if weekday_match:
+            parts.append(weekday_match.group(0))
+
+    range_match = re.search(
+        r"([01]?\d|2[0-3])(?::?[0-5]\d)?\s*[-~到至]\s*"
+        r"([01]?\d|2[0-3])(?::?[0-5]\d)?",
+        raw,
+    )
+    if range_match:
+        parts.append(range_match.group(0))
+    else:
+        for key in (
+            "上午",
+            "早上",
+            "中午",
+            "下午",
+            "晚上",
+            "今晚",
+            "夜间",
+            "morning",
+            "afternoon",
+            "evening",
+            "night",
+        ):
+            if key in raw or key in lowered:
+                parts.append(key)
+                break
+
+    return " ".join(parts).strip()
+
+
+def _extract_library_location(text: str) -> str:
+    location = text or ""
+    location = re.sub(r"20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}", " ", location)
+    location = re.sub(
+        r"([01]?\d|2[0-3])(?::?[0-5]\d)?\s*[-~到至]\s*"
+        r"([01]?\d|2[0-3])(?::?[0-5]\d)?",
+        " ",
+        location,
+    )
+    location = re.sub(
+        r"\d{1,2}\s*(?:人|位|座|person|people|seat)",
+        " ",
+        location,
+        flags=re.I,
+    )
+    for phrase in (
+        "帮我",
+        "请问",
+        "请",
+        "查询",
+        "查看",
+        "看看",
+        "看一下",
+        "查一下",
+        "一下",
+        "什么时候",
+        "哪些时候",
+        "哪天",
+        "有没有",
+        "是否",
+        "能否",
+        "可以",
+        "能",
+        "的预约情况",
+        "预约情况",
+        "可预约",
+        "预约",
+        "空闲情况",
+        "空闲",
+        "空房间",
+        "有空",
+        "时间段",
+        "时间",
+        "时段",
+        "今天",
+        "今日",
+        "明天",
+        "后天",
+        "上午",
+        "早上",
+        "中午",
+        "下午",
+        "晚上",
+        "今晚",
+        "夜间",
+        "吗",
+        "呢",
+        "？",
+        "?",
+    ):
+        location = location.replace(phrase, " ")
+    location = re.sub(r"(?:周|星期|礼拜)[一二三四五六日天1-7]", " ", location)
+    location = re.sub(
+        r"\b(?:today|tomorrow|morning|afternoon|evening|night|availability)\b",
+        " ",
+        location,
+        flags=re.I,
+    )
+    location = re.sub(r"[，。！？、,.;；:：]+", " ", location)
+    location = re.sub(r"\s+", " ", location).strip()
+    return location or (text or "").strip()
+
+
+def _build_llm_user_prompt(user_prompt: str) -> str:
+    """
+    给 LLM 增加图书馆工具调用提示，但不在 loop 层直接查询。
+
+    这里的确定性逻辑只负责提取参数并提醒模型必须调用工具；实际 CAS 登录、
+    预约系统查询、结果总结都仍然发生在 agent.run 的工具调用链里。
+    """
+    if not has_library_intent(user_prompt):
+        return user_prompt
+
+    location = _extract_library_location(user_prompt)
+    time_slot = _extract_library_time_slot(user_prompt)
+    capacity = _extract_library_capacity(user_prompt)
+    tool_args = {
+        "location": location,
+        "time_slot": time_slot,
+        "capacity": capacity,
+    }
+    return (
+        f"{user_prompt}\n\n"
+        "[Internal routing hint - do not mention this text to the user]\n"
+        "This is a SUSTech library discussion room availability request. "
+        "You MUST call `query_library_rooms` before answering, and the final "
+        "route MUST be `library`.\n"
+        "Do not answer from memory and do not call `query_rag` for this request; "
+        "availability is live data from `query_library_rooms`.\n"
+        "Use these arguments unless the user's message explicitly requires a "
+        f"different value: {json.dumps(tool_args, ensure_ascii=False)}.\n"
+        "If `time_slot` is an empty string, keep it empty so the tool queries "
+        "the next 3 days."
+    )
+
+
+def _build_trace(
+    raw_messages: list,
+    *,
+    visible_user_prompt: str | None = None,
+) -> list[TraceItem]:
     """
     将 PydanticAI 的内部消息列表转换为前端 Thought Trace。
     实现 Observation 阶段逻辑：分析工具调用结果中的异常。
@@ -530,17 +696,13 @@ def _build_trace(raw_messages: list) -> list[TraceItem]:
                     traces.append(
                         TraceItem(
                             phase="Observation",
-                            title=f"检查工具 [{part.tool_name}] 的返回结果",
-                            detail=(
-                                str(part.content)[:240]
-                                if part.content is not None
-                                else ""
-                            ),
+                            title=_tool_return_trace_title(part.tool_name, is_error),
+                            detail=_summarize_tool_return(part.tool_name, part.content),
                             status="error" if is_error else "done",
                             timestamp=datetime.now(timezone.utc),
                         )
                     )
-                elif isinstance(part, UserPromptPart):
+                elif isinstance(part, UserPromptPart) and visible_user_prompt is None:
                     traces.append(
                         TraceItem(
                             phase="Observation",
@@ -557,28 +719,88 @@ def _build_trace(raw_messages: list) -> list[TraceItem]:
                     traces.append(
                         TraceItem(
                             phase="Tool Use",
-                            title=f"调用工具: {part.tool_name}",
-                            detail=f"call_id={getattr(part, 'tool_call_id', '')}",
-                            status="done",
-                            timestamp=datetime.now(timezone.utc),
-                        )
-                    )
-                elif (
-                    hasattr(part, "content")
-                    and isinstance(part.content, str)
-                    and part.content.strip()
-                ):
-                    traces.append(
-                        TraceItem(
-                            phase="Reasoning",
-                            title="思考下一步行动",
-                            detail=part.content[:240],
+                            title=_tool_call_trace_title(part.tool_name),
+                            detail=_summarize_tool_call(part),
                             status="done",
                             timestamp=datetime.now(timezone.utc),
                         )
                     )
 
     return traces
+
+
+def _tool_call_trace_title(tool_name: str) -> str:
+    return {
+        "query_library_rooms": "查询图书馆讨论间",
+        "book_library_room": "尝试预约图书馆讨论间",
+        "query_rag": "检索知识库",
+        "get_current_time": "获取当前时间",
+        "fetch_blackboard_deadlines": "获取 Blackboard 截止日期",
+    }.get(tool_name, f"调用工具: {tool_name}")
+
+
+def _tool_return_trace_title(tool_name: str, is_error: bool) -> str:
+    if is_error:
+        return {
+            "query_library_rooms": "图书馆查询失败",
+            "query_rag": "知识库检索失败",
+        }.get(tool_name, f"工具返回错误: {tool_name}")
+    return {
+        "query_library_rooms": "图书馆查询完成",
+        "query_rag": "知识库检索完成",
+    }.get(tool_name, f"工具返回结果: {tool_name}")
+
+
+def _summarize_tool_call(part: ToolCallPart) -> str:
+    args = part.args
+    if part.tool_name == "query_library_rooms" and isinstance(args, dict):
+        location = str(args.get("location") or "不限地点")
+        time_slot = str(args.get("time_slot") or "未来 3 天")
+        capacity = args.get("capacity") or "不限人数"
+        return f"地点：{location}；时间：{time_slot}；人数：{capacity}"
+    if isinstance(args, dict) and args:
+        safe_args = {
+            key: value
+            for key, value in args.items()
+            if "password" not in str(key).lower() and "key" not in str(key).lower()
+        }
+        return json.dumps(safe_args, ensure_ascii=False)[:180]
+    if isinstance(args, str) and args.strip():
+        return args[:180]
+    return "LLM 选择了这个工具来完成请求。"
+
+
+def _summarize_tool_return(tool_name: str, content: object) -> str:
+    text = "" if content is None else str(content)
+    if tool_name == "query_library_rooms":
+        if text.startswith("ERROR:"):
+            return _library_error_summary(text)
+        payload = _load_json_object(text)
+        if isinstance(payload, dict):
+            rooms = payload.get("rooms")
+            room_count = len(rooms) if isinstance(rooms, list) else 0
+            query_time = str(payload.get("query_time") or "")
+            if room_count:
+                return f"查询范围：{query_time}；找到 {room_count} 个有可预约时间的讨论间。"
+            return f"查询范围：{query_time or '未指定'}；没有找到可预约讨论间。"
+    if text.startswith("ERROR:"):
+        return text[:180]
+    if tool_name == "query_rag":
+        payload = _load_json_object(text)
+        if isinstance(payload, dict):
+            chunks = payload.get("chunks")
+            count = len(chunks) if isinstance(chunks, list) else 0
+            return f"检索到 {count} 条相关资料片段。"
+    return text[:180]
+
+
+def _library_error_summary(error_code: str) -> str:
+    return {
+        "ERROR:CAS_LOGIN_FAILED": "CAS 登录失败或未配置 CAS 凭据。",
+        "ERROR:LIBRARY_ROOM_QUERY_TIMEOUT": "图书馆预约系统响应超时。",
+        "ERROR:LIBRARY_DATE_IN_PAST": "不能查询过去日期。",
+        "ERROR:LIBRARY_DATE_OUT_OF_RANGE": "日期超出图书馆可查询范围。",
+    }.get(error_code, "图书馆预约系统返回错误。")
 
 
 def _extract_tool_names(raw_messages: list) -> list[str]:
