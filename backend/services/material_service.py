@@ -781,6 +781,7 @@ async def _create_material_from_bytes(
     file_name: str,
     content_type: str,
     file_bytes: bytes,
+    is_public: bool = False,
 ) -> MaterialInfo:
     normalized_type = _normalize_content_type(file_name, content_type)
     if normalized_type not in ALLOWED_MIME_TYPES:
@@ -827,6 +828,7 @@ async def _create_material_from_bytes(
         subject_type="other",
         file_hash=file_hash,
         vectorized=False,
+        is_public=is_public,
     )
     db.add(material)
     await db.commit()
@@ -881,7 +883,13 @@ async def _create_material_from_bytes(
                 subject_type,
             )
             await asyncio.to_thread(
-                add_chunks, subject_type, str(file_id), material.file_name, chunks
+                add_chunks,
+                subject_type,
+                str(file_id),
+                material.file_name,
+                chunks,
+                str(user.user_id),
+                is_public,
             )
             logger.info(
                 "material: embedding_done file_name=%s chunks=%d",

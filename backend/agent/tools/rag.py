@@ -18,7 +18,7 @@ from pydantic_ai import RunContext
 from backend.agent.core import AgentDeps, agent
 from backend.services import rag_service
 from backend.database import chromadb as chromadb_module
-from backend.database.chromadb import SubjectType
+from backend.database.chromadb import SubjectType, filter_chunks_by_user
 
 
 def infer_subject_type(text: str) -> SubjectType:
@@ -172,6 +172,9 @@ async def query_rag(
             if results:
                 unique_files = len({r["file_id"] for r in results})
                 mode = "single_file" if unique_files <= 2 else "multi_file"
+                results = filter_chunks_by_user(
+                    results, str(ctx.deps.user.user_id)
+                )
                 return json.dumps(
                     {
                         "chunks": _format_chunks(results),
@@ -206,6 +209,7 @@ async def query_rag(
                 results = []
 
     mode = "fallback" if not results else "multi_file"
+    results = filter_chunks_by_user(results, str(ctx.deps.user.user_id))
     return json.dumps(
         {
             "chunks": _format_chunks(results),

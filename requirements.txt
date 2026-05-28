@@ -10,6 +10,7 @@ sqlalchemy>=2.0.0
 asyncpg>=0.29.0              # async PostgreSQL driver
 alembic>=1.13.0              # DB migrations
 chromadb>=0.5.0              # vector DB
+sentence-transformers       # multilingual embeddings (chromadb)
 
 # File handling
 python-multipart>=0.0.9     # multipart upload in FastAPI
