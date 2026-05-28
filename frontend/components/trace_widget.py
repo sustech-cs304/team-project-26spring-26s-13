@@ -1,6 +1,6 @@
 """
 Frontend Relevant/components/trace_widget.py
-Thought Trace 面板：实时展示 Agent 的推理步骤。
+Agent trace component: displays streamed execution steps.
 """
 
 from PyQt6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QVBoxLayout, Q
 
 class TraceWidget(QWidget):
     """
-    右侧 Thought Trace 面板，展示 Agent 每个推理步骤的 phase、title、detail 和 status。
+    展示 Agent 每个执行步骤的 phase、title、detail 和 status。
     每次 Agent 响应返回时整体刷新（非流式，当前版本）。
     """
 
@@ -20,11 +20,11 @@ class TraceWidget(QWidget):
         """
         布局：
           QVBoxLayout
-          ├── QLabel "Thought Trace"（标题）
+          ├── QLabel "Agent Trace"（标题）
           └── QListWidget（trace 步骤列表，只读）
         """
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Thought Trace"))
+        layout.addWidget(QLabel("Agent Trace"))
         self._list = QListWidget(self)
         self._list.setAlternatingRowColors(True)
         layout.addWidget(self._list)

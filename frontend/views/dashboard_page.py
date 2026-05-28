@@ -1,6 +1,6 @@
 """
 Frontend Relevant/views/dashboard_page.py
-主界面：三栏布局（左侧边栏 / 中间主区 / 右侧 Trace 面板）。
+主界面：两栏布局（左侧边栏 / 中间主区）。
 负责协调所有子组件，处理 AgentWorker 返回的数据并分发给对应组件。
 """
 
@@ -16,13 +16,12 @@ from frontend.components.hitl_dialog import HITLDialog
 from frontend.components.library_widget import LibraryWidget
 from frontend.components.materials_widget import MaterialsWidget
 from frontend.components.schedule_widget import ScheduleWidget
-from frontend.components.trace_widget import TraceWidget
 from frontend.workers.agent_worker import AgentWorker
 
 
 class DashboardPage(QWidget):
     """
-    三栏主界面。
+    主界面。
 
     布局（QSplitter）：
       ├── 左栏（LeftPanel）:    用户卡片 + 材料列表（MaterialsWidget）
@@ -30,7 +29,6 @@ class DashboardPage(QWidget):
       │   ├── Tab "Chat":       ChatWidget
       │   ├── Tab "Schedule":   ScheduleWidget
       │   └── Tab "Encyclopedia": EncyclopediaWidget
-      └── 右栏（RightPanel）:   TraceWidget
     """
 
     def __init__(
@@ -41,12 +39,11 @@ class DashboardPage(QWidget):
         self._session_id = f"sess_{uuid.uuid4().hex[:8]}"
         self._current_worker: AgentWorker | None = None
         self._display_name = display_name
-        self._trace_already_streamed = False
         self._setup_ui()
         self._load_bootstrap()
 
     def _setup_ui(self) -> None:
-        """初始化三栏 QSplitter 布局，实例化所有子组件。"""
+        """初始化两栏 QSplitter 布局，实例化所有子组件。"""
 
         def _safe_make(factory):
             try:
@@ -59,7 +56,6 @@ class DashboardPage(QWidget):
         self.schedule_widget = _safe_make(ScheduleWidget)
         self.encyclopedia_widget = _safe_make(EncyclopediaWidget)
         self.library_widget = _safe_make(LibraryWidget)
-        self.trace_widget = _safe_make(TraceWidget)
 
         if hasattr(self.chat_widget, "message_submitted"):
             self.chat_widget.message_submitted.connect(self.send_message)
@@ -73,10 +69,8 @@ class DashboardPage(QWidget):
         splitter = QSplitter(self)
         splitter.addWidget(self.materials_widget)
         splitter.addWidget(self.center_tabs)
-        splitter.addWidget(self.trace_widget)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 3)
-        splitter.setStretchFactor(2, 2)
 
         layout = QHBoxLayout(self)
         layout.addWidget(splitter)
@@ -117,10 +111,6 @@ class DashboardPage(QWidget):
         """
         if hasattr(self.chat_widget, "set_input_enabled"):
             self.chat_widget.set_input_enabled(False)
-        if hasattr(self.trace_widget, "clear"):
-            self.trace_widget.clear()
-        self._trace_already_streamed = False
-
         self._current_worker = AgentWorker(
             session_id=self._session_id,
             user_id=self._user_id,
@@ -135,9 +125,7 @@ class DashboardPage(QWidget):
 
     @pyqtSlot(dict)
     def _on_trace_streamed(self, trace_item: dict) -> None:
-        self._trace_already_streamed = True
-        if hasattr(self.trace_widget, "append_trace"):
-            self.trace_widget.append_trace(trace_item)
+        _ = trace_item
 
     @pyqtSlot(dict)
     def _on_agent_response(self, response: dict) -> None:
@@ -146,7 +134,6 @@ class DashboardPage(QWidget):
 
         分发规则：
           - assistant_message → ChatWidget.add_message()
-          - trace             → TraceWidget.update_trace()
           - route == "scheduler"    → 切换到 Schedule tab
           - route == "encyclopedia" → 切换到 Encyclopedia tab
           - route == "library"      → 切换到 Library tab
@@ -163,10 +150,6 @@ class DashboardPage(QWidget):
             content = str(assistant.get("content", "")).strip()
             if content and hasattr(self.chat_widget, "add_message"):
                 self.chat_widget.add_message("assistant", content)
-
-        trace_items = response.get("trace", [])
-        if not self._trace_already_streamed and isinstance(trace_items, list):
-            self.trace_widget.update_trace(trace_items)
 
         route = response.get("route")
         if route == "scheduler":
@@ -227,7 +210,6 @@ class DashboardPage(QWidget):
             hitl_reply={"request_id": request_id, "approved": approved},
             stream_trace=True,
         )
-        self._trace_already_streamed = False
         self._current_worker.trace_streamed.connect(self._on_trace_streamed)
         self._current_worker.response_ready.connect(self._on_agent_response)
         self._current_worker.error_occurred.connect(self._on_agent_error)

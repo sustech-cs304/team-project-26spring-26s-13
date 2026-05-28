@@ -24,7 +24,7 @@ class AgentWorker(QThread):
     # 成功时 emit，携带完整的 AgentResponse dict
     response_ready = pyqtSignal(dict)
 
-    # 流式推送 trace item，供右侧 Thought Trace 实时更新
+    # 流式推送 trace item，供界面展示执行步骤
     trace_streamed = pyqtSignal(dict)
 
     # 失败时 emit，携带错误描述字符串

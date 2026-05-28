@@ -222,12 +222,12 @@ def _tis_dump_test5(
         if r_term is not None:
             lines.append(f"term.status={r_term.status_code}")
             lines.append(f"term.url={str(r_term.url)}")
-            lines.append(f"term.content_type={r_term.headers.get('content-type','')}")
+            lines.append(f"term.content_type={r_term.headers.get('content-type', '')}")
 
         if r_kb is not None:
             lines.append(f"kb.status={r_kb.status_code}")
             lines.append(f"kb.url={str(r_kb.url)}")
-            lines.append(f"kb.content_type={r_kb.headers.get('content-type','')}")
+            lines.append(f"kb.content_type={r_kb.headers.get('content-type', '')}")
 
         if isinstance(kb_payload, dict):
             lines.append(
