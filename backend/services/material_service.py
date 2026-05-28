@@ -4,6 +4,7 @@ backend/services/material_service.py
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
@@ -431,12 +432,17 @@ async def _run_blackboard_sync_job(
             return
 
         try:
+
+            async def _fetch_progress(processed: int, total: int) -> None:
+                await _update(processed=processed, total=total)
+
             bb_materials, bb_skipped = await fetch_blackboard_course_materials(
                 cas_account,
                 cas_password,
                 course_keyword=course_keyword,
                 keyword=keyword,
                 limit=limit,
+                progress_callback=_fetch_progress,
             )
         except asyncio.CancelledError:
             await _update(
@@ -489,69 +495,82 @@ async def _run_blackboard_sync_job(
         skipped_large_count = 0
         skipped_unsupported_names: list[str] = []
         failed_names: list[str] = []
-        for item in bb_materials:
-            async with _BB_SYNC_JOBS_LOCK:
-                job = _BB_SYNC_JOBS.get(job_id)
-                if job is None:
-                    return
-                if job.cancel_requested:
-                    job.status = "cancelled"
-                    job.stage = "cancelled"
-                    job.finished_at = datetime.now(timezone.utc)
-                    job.message = "cancelled"
-                    return
-                current_skipped_existing = job.skipped_existing
-                current_skipped_unsupported = job.skipped_unsupported
-                current_failed = job.failed
-                current_added = job.added
-                current_skipped_large = job.skipped_large
 
-            processed += 1
-            if item.file_name in existing_names:
-                stale = existing_records.get(item.file_name)
-                if stale is not None:
-                    disk_path = Path(stale.file_path)
-                    if not disk_path.exists():
-                        logger.warning(
-                            "material: missing_on_disk deleting_stale "
-                            "file_name=%s file_id=%s path=%s *** TERMINAL: WILL RE-DOWNLOAD ***",
-                            item.file_name,
-                            stale.file_id,
-                            disk_path,
-                        )
-                        await db.delete(stale)
-                        await db.flush()
-                        existing_names.discard(item.file_name)
-                    elif stale.file_hash:
-                        fb_for_hash = item.file_bytes
-                        tmp = getattr(item, "_tmp_path", "") or ""
-                        if not fb_for_hash and tmp:
-                            try:
-                                hp = Path(tmp)
-                                if hp.exists():
-                                    fb_for_hash = hp.read_bytes()
-                            except Exception:
-                                pass
-                        if fb_for_hash:
-                            new_hash = hashlib.sha256(fb_for_hash).hexdigest()
-                            if new_hash == stale.file_hash:
+        def _cancel_check() -> bool:
+            job = _BB_SYNC_JOBS.get(job_id)
+            return job is not None and job.cancel_requested
+
+        try:
+            for item in bb_materials:
+                async with _BB_SYNC_JOBS_LOCK:
+                    job = _BB_SYNC_JOBS.get(job_id)
+                    if job is None:
+                        return
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.stage = "cancelled"
+                        job.finished_at = datetime.now(timezone.utc)
+                        job.message = "cancelled"
+                        return
+                    current_skipped_existing = job.skipped_existing
+                    current_skipped_unsupported = job.skipped_unsupported
+                    current_failed = job.failed
+                    current_added = job.added
+                    current_skipped_large = job.skipped_large
+
+                processed += 1
+                if item.file_name in existing_names:
+                    stale = existing_records.get(item.file_name)
+                    if stale is not None:
+                        disk_path = Path(stale.file_path)
+                        if not disk_path.exists():
+                            logger.warning(
+                                "material: missing_on_disk deleting_stale "
+                                "file_name=%s file_id=%s path=%s *** TERMINAL: WILL RE-DOWNLOAD ***",
+                                item.file_name,
+                                stale.file_id,
+                                disk_path,
+                            )
+                            await db.delete(stale)
+                            await db.flush()
+                            existing_names.discard(item.file_name)
+                        elif stale.file_hash:
+                            fb_for_hash = item.file_bytes
+                            tmp = getattr(item, "_tmp_path", "") or ""
+                            if not fb_for_hash and tmp:
+                                try:
+                                    hp = Path(tmp)
+                                    if hp.exists():
+                                        fb_for_hash = hp.read_bytes()
+                                except Exception:
+                                    pass
+                            if fb_for_hash:
+                                new_hash = hashlib.sha256(fb_for_hash).hexdigest()
+                                if new_hash == stale.file_hash:
+                                    await _update(
+                                        processed=processed,
+                                        skipped_existing=current_skipped_existing + 1,
+                                        message=item.file_name,
+                                    )
+                                    continue
+                                else:
+                                    logger.info(
+                                        "material: hash_changed overwriting "
+                                        "file_name=%s old_hash=%s new_hash=%s",
+                                        item.file_name,
+                                        stale.file_hash,
+                                        new_hash,
+                                    )
+                                    await db.delete(stale)
+                                    await db.flush()
+                                    existing_names.discard(item.file_name)
+                            else:
                                 await _update(
                                     processed=processed,
                                     skipped_existing=current_skipped_existing + 1,
                                     message=item.file_name,
                                 )
                                 continue
-                            else:
-                                logger.info(
-                                    "material: hash_changed overwriting "
-                                    "file_name=%s old_hash=%s new_hash=%s",
-                                    item.file_name,
-                                    stale.file_hash,
-                                    new_hash,
-                                )
-                                await db.delete(stale)
-                                await db.flush()
-                                existing_names.discard(item.file_name)
                         else:
                             await _update(
                                 processed=processed,
@@ -566,30 +585,65 @@ async def _run_blackboard_sync_job(
                             message=item.file_name,
                         )
                         continue
-                else:
+
+                try:
+                    fb = item.file_bytes
+                    tmp = getattr(item, "_tmp_path", "") or ""
+                    if not fb and tmp:
+                        try:
+                            tmp_path = Path(tmp)
+                            if tmp_path.exists():
+                                fb = tmp_path.read_bytes()
+                                tmp_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    if not fb:
+                        logger.warning(
+                            "material: empty_bytes file_name=%s course=%s",
+                            item.file_name,
+                            item.course_id,
+                        )
+                        failed_names.append(item.file_name)
+                        await _update(
+                            processed=processed,
+                            failed=current_failed + 1,
+                            message=item.file_name,
+                        )
+                        continue
+                    logger.info(
+                        "material: processing [%d/%d] file_name=%s size=%d course=%s",
+                        processed,
+                        len(bb_materials),
+                        item.file_name,
+                        len(fb) if fb else 0,
+                        item.course_id,
+                    )
+                    info = await _create_material_from_bytes(
+                        db=db,
+                        user=user,
+                        file_name=item.file_name,
+                        content_type=item.file_type,
+                        file_bytes=fb,
+                        cancel_check=_cancel_check,
+                    )
+                except ValueError:
+                    skipped_unsupported_names.append(item.file_name)
                     await _update(
                         processed=processed,
-                        skipped_existing=current_skipped_existing + 1,
+                        skipped_unsupported=current_skipped_unsupported + 1,
                         message=item.file_name,
                     )
                     continue
-
-            try:
-                fb = item.file_bytes
-                tmp = getattr(item, "_tmp_path", "") or ""
-                if not fb and tmp:
+                except Exception:
                     try:
-                        tmp_path = Path(tmp)
-                        if tmp_path.exists():
-                            fb = tmp_path.read_bytes()
-                            tmp_path.unlink(missing_ok=True)
+                        await db.rollback()
                     except Exception:
                         pass
-                if not fb:
-                    logger.warning(
-                        "material: empty_bytes file_name=%s course=%s",
+                    logger.exception(
+                        "material: import_failed file_name=%s course=%s trace=%s",
                         item.file_name,
-                        item.course_id,
+                        getattr(item, "course_id", "?"),
+                        get_trace_id(),
                     )
                     failed_names.append(item.file_name)
                     await _update(
@@ -598,61 +652,29 @@ async def _run_blackboard_sync_job(
                         message=item.file_name,
                     )
                     continue
+
+                existing_names.add(info.file_name)
+                await _update(
+                    processed=processed,
+                    added=current_added + 1,
+                    message=info.file_name,
+                )
                 logger.info(
-                    "material: processing [%d/%d] file_name=%s size=%d course=%s",
+                    "material: file_done [%d/%d] file_name=%s",
                     processed,
                     len(bb_materials),
                     item.file_name,
-                    len(fb) if fb else 0,
-                    item.course_id,
                 )
-                info = await _create_material_from_bytes(
-                    db=db,
-                    user=user,
-                    file_name=item.file_name,
-                    content_type=item.file_type,
-                    file_bytes=fb,
-                )
-            except ValueError:
-                skipped_unsupported_names.append(item.file_name)
-                await _update(
-                    processed=processed,
-                    skipped_unsupported=current_skipped_unsupported + 1,
-                    message=item.file_name,
-                )
-                continue
-            except Exception:
-                try:
-                    await db.rollback()
-                except Exception:
-                    pass
-                logger.exception(
-                    "material: import_failed file_name=%s course=%s trace=%s",
-                    item.file_name,
-                    getattr(item, "course_id", "?"),
-                    get_trace_id(),
-                )
-                failed_names.append(item.file_name)
-                await _update(
-                    processed=processed,
-                    failed=current_failed + 1,
-                    message=item.file_name,
-                )
-                continue
+                gc.collect()
 
-            existing_names.add(info.file_name)
+        except asyncio.CancelledError:
             await _update(
-                processed=processed,
-                added=current_added + 1,
-                message=info.file_name,
+                status="cancelled",
+                stage="cancelled",
+                finished_at=datetime.now(timezone.utc),
+                message="cancelled",
             )
-            logger.info(
-                "material: file_done [%d/%d] file_name=%s",
-                processed,
-                len(bb_materials),
-                item.file_name,
-            )
-            gc.collect()
+            return
 
         done_parts = ["done"]
         if bb_skipped:
@@ -782,6 +804,7 @@ async def _create_material_from_bytes(
     content_type: str,
     file_bytes: bytes,
     is_public: bool = False,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> MaterialInfo:
     normalized_type = _normalize_content_type(file_name, content_type)
     if normalized_type not in ALLOWED_MIME_TYPES:
@@ -846,6 +869,9 @@ async def _create_material_from_bytes(
         chunks = _chunk_text(parsed.text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
         logger.info("material: chunked file_name=%s chunks=%d", file_name, len(chunks))
 
+        if cancel_check is not None and cancel_check():
+            raise asyncio.CancelledError("job cancelled during processing")
+
         subject_type: SubjectType = "other"
         try:
             api_key = (
@@ -876,6 +902,8 @@ async def _create_material_from_bytes(
             )
 
         if chunks:
+            if cancel_check is not None and cancel_check():
+                raise asyncio.CancelledError("job cancelled before embedding")
             logger.info(
                 "material: embedding_start file_name=%s chunks=%d subject=%s",
                 file_name,
