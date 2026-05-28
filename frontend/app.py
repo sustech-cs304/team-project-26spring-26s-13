@@ -1169,6 +1169,14 @@ class MainWindow(QMainWindow):
             return self.ui("backend_mode_rest", host=self.api_client.base_url)
         return self.ui("backend_disconnected_title")
 
+    def _is_authenticated(self) -> bool:
+        return bool(self.current_username and self.api_client.authenticated)
+
+    def _header_account_text(self) -> str:
+        if self._is_authenticated():
+            return self.ui("signed_in_as", name=self.current_user["name"])
+        return self.ui("not_signed_in")
+
     def _new_session_id(self) -> str:
         return f"sess_{uuid4().hex[:12]}"
 
@@ -2699,7 +2707,7 @@ class MainWindow(QMainWindow):
         hero_buttons.setSpacing(10)
         start_button = QPushButton(self.ui("start_now"))
         start_button.setObjectName("PrimaryButton")
-        start_button.clicked.connect(lambda: self._show_auth(0))
+        start_button.clicked.connect(self._show_dashboard)
         create_button = QPushButton(self.ui("create_account"))
         create_button.clicked.connect(lambda: self._show_auth(1))
         hero_buttons.addWidget(start_button)
@@ -2961,13 +2969,20 @@ class MainWindow(QMainWindow):
         lang_button.clicked.connect(self.toggle_language)
         settings_button = QPushButton(self.ui("settings_button"))
         settings_button.clicked.connect(self.open_settings_dialog)
+        account_button = QPushButton(self._header_account_text())
+        account_button.setObjectName("HeaderAccountButton")
+        account_button.clicked.connect(self._handle_header_account)
+        self.header_account_button = account_button
         logout_button = QPushButton(self.ui("log_out"))
         logout_button.clicked.connect(self.logout)
+        logout_button.setVisible(self._is_authenticated())
+        self.logout_button = logout_button
         auth_button = self._build_header_hitl_button()
 
         layout.addWidget(title)
         layout.addStretch(1)
         layout.addWidget(auth_button)
+        layout.addWidget(account_button)
         layout.addWidget(lang_button)
         layout.addWidget(settings_button)
         layout.addWidget(logout_button)
@@ -3677,6 +3692,10 @@ class MainWindow(QMainWindow):
             self.header_user_label.setText(
                 self.ui("signed_in_as", name=self.current_user["name"])
             )
+        if hasattr(self, "header_account_button"):
+            self.header_account_button.setText(self._header_account_text())
+        if hasattr(self, "logout_button"):
+            self.logout_button.setVisible(self._is_authenticated())
         if hasattr(self, "backend_mode_label"):
             self.backend_mode_label.setText(self.backend_status_text())
 
@@ -3790,9 +3809,53 @@ class MainWindow(QMainWindow):
     def _show_home(self) -> None:
         self.stack.setCurrentWidget(self.home_page)
 
+    def _show_dashboard(self) -> None:
+        self.stack.setCurrentWidget(self.dashboard_page)
+        self._refresh_profile_views()
+
     def _show_auth(self, tab_index: int = 0) -> None:
+        self._open_auth_dialog(tab_index)
+
+    def _handle_header_account(self) -> None:
+        if self._is_authenticated():
+            return
+        self._open_auth_dialog(0)
+
+    def _open_auth_dialog(self, tab_index: int = 0) -> None:
+        dialog = QDialog(self)
+        dialog.setObjectName("AuthDialog")
+        dialog.setWindowTitle(self.ui("welcome_back"))
+        dialog.setModal(True)
+        dialog.resize(520, 560)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_layout.setContentsMargins(22, 22, 22, 22)
+        dialog_layout.setSpacing(14)
+
+        auth_card = QFrame(dialog)
+        auth_card.setObjectName("AuthCard")
+        auth_layout = QVBoxLayout(auth_card)
+        auth_layout.setContentsMargins(24, 24, 24, 24)
+        auth_layout.setSpacing(14)
+
+        auth_title = QLabel(self.ui("welcome_back"))
+        auth_title.setObjectName("AuthTitle")
+        auth_subtitle = QLabel(self.ui("auth_subtitle"))
+        auth_subtitle.setObjectName("HeroBody")
+        auth_subtitle.setWordWrap(True)
+
+        self.auth_tabs = QTabWidget()
+        self.auth_tabs.addTab(self._build_login_tab(), self.ui("login"))
+        self.auth_tabs.addTab(self._build_register_tab(), self.ui("register"))
         self.auth_tabs.setCurrentIndex(tab_index)
-        self.stack.setCurrentWidget(self.auth_page)
+
+        auth_layout.addWidget(auth_title)
+        auth_layout.addWidget(auth_subtitle)
+        auth_layout.addWidget(self.auth_tabs, 1)
+        dialog_layout.addWidget(auth_card, 1)
+
+        self.auth_dialog = dialog
+        dialog.finished.connect(lambda _: setattr(self, "auth_dialog", None))
+        dialog.exec()
 
     def _complete_login(
         self,
@@ -3811,6 +3874,9 @@ class MainWindow(QMainWindow):
             }
         else:
             self.remote_profile = None
+        auth_dialog = getattr(self, "auth_dialog", None)
+        if isinstance(auth_dialog, QDialog):
+            auth_dialog.accept()
         self._reset_dynamic_state()
         self._build_root()
         self.stack.setCurrentWidget(self.dashboard_page)
@@ -4281,6 +4347,9 @@ class MainWindow(QMainWindow):
 
     def handle_send_message(self) -> None:
         self._flush_response_stream(open_dialog=False)
+        if not self._is_authenticated():
+            self._open_auth_dialog(0)
+            return
         text = self.message_input.toPlainText().strip()
         if not text:
             return
