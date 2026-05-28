@@ -111,6 +111,10 @@ QFrame#AuthHeroFrame, QFrame#AuthCard {
     border-radius: 18px;
 }
 
+QDialog#AuthDialog {
+    background-color: #050810;
+}
+
 QFrame#AgentResultCard, QFrame#ResultSubCard {
     background-color: rgba(17, 24, 51, 0.85);
     border: 1px solid rgba(99, 132, 255, 0.14);
@@ -275,6 +279,22 @@ QPushButton#HeaderHitlButton {
 QPushButton#HeaderHitlButton:hover {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #60a5fa, stop:1 #67e8f9);
+}
+
+QPushButton#HeaderAccountButton {
+    background-color: rgba(18, 36, 80, 0.62);
+    border: 1px solid rgba(103, 157, 255, 0.28);
+    border-radius: 10px;
+    color: #dbe7ff;
+    font-weight: 700;
+    min-height: 34px;
+    padding: 0 16px;
+}
+
+QPushButton#HeaderAccountButton:hover {
+    background-color: rgba(34, 211, 238, 0.12);
+    border-color: rgba(34, 211, 238, 0.4);
+    color: #ffffff;
 }
 
 QPushButton#SidebarActionButton {
