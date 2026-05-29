@@ -200,6 +200,7 @@ class Material(Base):
     )
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vectorized: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

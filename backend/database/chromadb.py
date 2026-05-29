@@ -38,7 +38,9 @@ Collection 命名规则："{subject_type}"
 from typing import Literal
 
 import chromadb
+import os
 from chromadb import Collection
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 from backend.config import settings
 
@@ -92,6 +94,18 @@ ALL_SUBJECT_TYPES: list[SubjectType] = [
 # ── Client singleton ──────────────────────────────────────────────────────────
 
 _client: chromadb.ClientAPI | None = None
+_embedding_function: SentenceTransformerEmbeddingFunction | None = None
+
+
+def _get_embedding_function() -> SentenceTransformerEmbeddingFunction:
+    global _embedding_function
+    if _embedding_function is None:
+        if not os.environ.get("HF_ENDPOINT"):
+            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+        _embedding_function = SentenceTransformerEmbeddingFunction(
+            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        )
+    return _embedding_function
 
 
 def get_chroma_client() -> chromadb.ClientAPI:
@@ -120,7 +134,10 @@ def get_collection(subject_type: SubjectType) -> Collection:
     client = get_chroma_client()
     # chromadb>=1.5 要求 collection 名称至少 3 个字符
     name = f"sub_{subject_type}"
-    return client.get_or_create_collection(name=name)
+    return client.get_or_create_collection(
+        name=name,
+        embedding_function=_get_embedding_function(),
+    )
 
 
 # ── Write Operations ──────────────────────────────────────────────────────────
@@ -131,6 +148,8 @@ def add_chunks(
     file_id: str,
     file_name: str,
     chunks: list[str],
+    user_id: str = "",
+    is_public: bool = False,
 ) -> None:
     """
     将文件的所有文本 chunk 写入对应 Collection。
@@ -154,10 +173,36 @@ def add_chunks(
             "file_name": file_name,
             "chunk_index": i,
             "subject_type": subject_type,
+            "user_id": user_id,
+            "is_public": is_public,
         }
         for i in range(len(chunks))
     ]
     collection.add(ids=ids, documents=chunks, metadatas=metadatas)
+
+
+def filter_chunks_by_user(
+    chunks: list[dict],
+    current_user_id: str,
+) -> list[dict]:
+    """
+    按用户隔离过滤向量检索结果。
+
+    规则：
+      - user_id 未设置（旧数据）→ 放行（向后兼容）
+      - is_public=True → 放行（公有知识库）
+      - user_id == current_user_id → 放行（用户私有）
+      - 其余 → 丢弃
+    """
+    if not current_user_id:
+        return chunks
+    filtered: list[dict] = []
+    for ch in chunks:
+        uid = ch.get("user_id", "")
+        is_public = ch.get("is_public", False)
+        if not uid or is_public or uid == current_user_id:
+            filtered.append(ch)
+    return filtered
 
 
 def delete_file_chunks(file_id: str, subject_type: SubjectType) -> None:
@@ -236,6 +281,8 @@ def query_collections(
                     "file_name": meta.get("file_name", ""),
                     "chunk_index": meta.get("chunk_index", 0),
                     "subject_type": meta.get("subject_type", st),
+                    "user_id": meta.get("user_id", ""),
+                    "is_public": meta.get("is_public", False),
                     "distance": dist,
                 }
             )
@@ -285,6 +332,8 @@ def query_collections_by_file_ids(
                     "file_name": meta.get("file_name", ""),
                     "chunk_index": meta.get("chunk_index", 0),
                     "subject_type": meta.get("subject_type", ""),
+                    "user_id": meta.get("user_id", ""),
+                    "is_public": meta.get("is_public", False),
                     "distance": dist,
                 }
             )
@@ -351,6 +400,8 @@ def keyword_search(
                     "file_name": meta.get("file_name", ""),
                     "chunk_index": meta.get("chunk_index", 0),
                     "subject_type": meta.get("subject_type", st),
+                    "user_id": meta.get("user_id", ""),
+                    "is_public": meta.get("is_public", False),
                     "distance": 0.0,
                 }
             )

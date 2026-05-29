@@ -338,6 +338,7 @@ CREATE DATABASE "software-engineering";
       subject_type VARCHAR(32) NOT NULL DEFAULT 'other',
       file_hash VARCHAR(64),
       vectorized BOOLEAN NOT NULL DEFAULT FALSE,
+      is_public BOOLEAN NOT NULL DEFAULT FALSE,
       uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
 

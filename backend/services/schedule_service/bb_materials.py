@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 import gc
@@ -1126,6 +1127,7 @@ async def fetch_blackboard_course_materials(
     course_keyword: str | None = None,
     keyword: str | None = None,
     limit: int | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> tuple[list[BlackboardMaterial], list[BlackboardMaterial]]:
     _ensure_file_logging()
     logger.debug("bb.materials: enter account=%s trace=%s", cas_account, get_trace_id())
@@ -1657,6 +1659,13 @@ async def fetch_blackboard_course_materials(
                     len(skipped),
                     _batch_elapsed,
                 )
+                if progress_callback is not None:
+                    try:
+                        result = progress_callback(len(deduped), len(material_pages))
+                        if asyncio.iscoroutine(result):
+                            asyncio.ensure_future(result)
+                    except Exception:
+                        pass
 
             materials = sorted(
                 deduped.values(),
