@@ -25,7 +25,13 @@ from backend.agent.loop import (
 
 
 def _tool_return(tool_name: str, content: str) -> ModelRequest:
-    return ModelRequest(parts=[ToolReturnPart(tool_name=tool_name, content=content, tool_call_id=f"tc_{tool_name}")])
+    return ModelRequest(
+        parts=[
+            ToolReturnPart(
+                tool_name=tool_name, content=content, tool_call_id=f"tc_{tool_name}"
+            )
+        ]
+    )
 
 
 def test_ensure_source_citations_appends_rag_sources_to_final_answer():
