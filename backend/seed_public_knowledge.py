@@ -73,7 +73,7 @@ def _list_public_files() -> list[Path]:
 
 
 async def seed_public_knowledge(clear: bool = False) -> int:
-    print(f"=== 公有知识库播种 ===\n")
+    print("=== 公有知识库播种 ===\n")
     print(f"目录: {PUBLIC_DIR}")
     files = _list_public_files()
     if not files:
@@ -92,7 +92,7 @@ async def seed_public_knowledge(clear: bool = False) -> int:
     if clear:
         print("清除旧索引...")
         async with AsyncSessionLocal() as db:
-            stmt = select(Material).where(Material.is_public == True)
+            stmt = select(Material).where(Material.is_public.is_(True))
             result = await db.execute(stmt)
             for m in result.scalars().all():
                 delete_file_chunks(str(m.file_id), m.subject_type)
@@ -129,7 +129,7 @@ async def seed_public_knowledge(clear: bool = False) -> int:
                 print(f"  ✅ 已播种: {fp.name} → {info.subject_type}")
                 seeded += 1
             else:
-                print(f"  ⚠️ 跳过（可能不支持）")
+                print("  ⚠️ 跳过（可能不支持）")
         except Exception as e:
             print(f"  ❌ 失败: {e}")
 
