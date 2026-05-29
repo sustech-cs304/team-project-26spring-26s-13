@@ -58,6 +58,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PyQt6 import sip
 
 try:
     from .api_client import BackendApiClient, BackendApiError
@@ -1164,6 +1165,20 @@ class MainWindow(QMainWindow):
 
     def app_title(self) -> str:
         return self.local(APP_TITLE)
+
+    def _live_widget(self, name: str):
+        widget = getattr(self, name, None)
+        if widget is None or sip.isdeleted(widget):
+            return None
+        return widget
+
+    def _live_line_text(self, name: str) -> str:
+        widget = self._live_widget(name)
+        return widget.text() if widget is not None else ""
+
+    def _live_plain_text(self, name: str) -> str:
+        widget = self._live_widget(name)
+        return widget.toPlainText() if widget is not None else ""
 
     def backend_status_text(self) -> str:
         if self.api_client.enabled and self.api_client.base_url:
@@ -2590,53 +2605,32 @@ class MainWindow(QMainWindow):
             if hasattr(self, "stack")
             else "HomePage"
         )
-        auth_tab_index = (
-            self.auth_tabs.currentIndex() if hasattr(self, "auth_tabs") else 0
-        )
-        login_username = (
-            self.login_username_input.text()
-            if hasattr(self, "login_username_input")
-            else ""
-        )
-        register_username = (
-            self.register_username_input.text()
-            if hasattr(self, "register_username_input")
-            else ""
-        )
-        register_display_name = (
-            self.register_display_name_input.text()
-            if hasattr(self, "register_display_name_input")
-            else ""
-        )
-        register_major = (
-            self.register_major_input.text()
-            if hasattr(self, "register_major_input")
-            else ""
-        )
-
-        chat_message = (
-            self.message_input.toPlainText()
-            if hasattr(self, "message_input") and self.message_input is not None
-            else ""
-        )
+        auth_tabs = self._live_widget("auth_tabs")
+        auth_tab_index = auth_tabs.currentIndex() if auth_tabs is not None else 0
+        login_username = self._live_line_text("login_username_input")
+        register_username = self._live_line_text("register_username_input")
+        register_display_name = self._live_line_text("register_display_name_input")
+        register_major = self._live_line_text("register_major_input")
+        chat_message = self._live_plain_text("message_input")
 
         self.language = "zh" if self.language == "en" else "en"
         self._reset_dynamic_state()
         self._build_root()
 
-        self.login_username_input.setText(login_username)
-        self.register_username_input.setText(register_username)
-        self.register_display_name_input.setText(register_display_name)
-        self.register_major_input.setText(register_major)
+        if login_input := self._live_widget("login_username_input"):
+            login_input.setText(login_username)
+        if register_input := self._live_widget("register_username_input"):
+            register_input.setText(register_username)
+        if display_name_input := self._live_widget("register_display_name_input"):
+            display_name_input.setText(register_display_name)
+        if major_input := self._live_widget("register_major_input"):
+            major_input.setText(register_major)
 
         if current_page == "DashboardPage":
             self.stack.setCurrentWidget(self.dashboard_page)
-            if (
-                hasattr(self, "message_input")
-                and self.message_input is not None
-                and chat_message
-            ):
-                self.message_input.setPlainText(chat_message)
+            message_input = self._live_widget("message_input")
+            if message_input is not None and chat_message:
+                message_input.setPlainText(chat_message)
             if self.current_username and self.api_client.authenticated:
                 self.sync_bootstrap_data(record_trace=False)
         elif current_page == "AuthPage":
