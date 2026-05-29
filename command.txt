@@ -1,5 +1,8 @@
 Package the application into a runnable artifact command:
 
+docker-compose down       # 停止并移除容器
+docker-compose up --build -d # 重新构建镜像并在后台启动
+
 docker compose up -d      # 启动
 
 http://localhost:8000/health (status ok)

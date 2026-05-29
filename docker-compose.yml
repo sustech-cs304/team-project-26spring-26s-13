@@ -31,8 +31,8 @@ services:
       - D:/docker-data/spa/uploads:/app/data/uploads
     environment:
       POSTGRES_DSN: postgresql+asyncpg://postgres:spa_password@db:5432/software-engineering
-      SECRET_KEY: change-this-to-a-random-secret
-      FERNET_KEY: change-this-to-a-fernet-key
+      SECRET_KEY: 5a42be1f711bdc24dd93ff7a90177bc48c4ad3e6cd02a1cd975f066a062c4395
+      FERNET_KEY: H9ozfRxBhnThglDlWltWxGlr-6J5SR2-zyGkdb7IdoQ=
       DEEPSEEK_BASE_URL: https://api.deepseek.com
       DEEPSEEK_MODEL: deepseek-chat
       DEEPSEEK_API_KEY: sk-c2e38c30d8e440f49eb2cf815e985c5f
