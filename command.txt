@@ -1,4 +1,11 @@
 Package the application into a runnable artifact command:
 
 docker compose up -d      # 启动
+
+http://localhost:8000/health (status ok)
+
 docker compose down       # 停止
+
+# 其他命令
+docker-compose logs backend  # 查看后端日志
+docker-compose restart       # 重启
