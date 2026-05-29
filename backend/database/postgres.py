@@ -26,7 +26,12 @@ from backend.config import settings
 
 # ── Engine & Session ─────────────────────────────────────────────────────────
 
-engine = create_async_engine(settings.POSTGRES_DSN, echo=False)
+engine = create_async_engine(
+    settings.POSTGRES_DSN,
+    echo=False,
+    pool_pre_ping=True,
+    connect_args={"command_timeout": 10},
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

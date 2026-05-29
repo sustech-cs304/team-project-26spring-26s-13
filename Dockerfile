@@ -24,6 +24,7 @@ RUN mkdir -p /app/data/workspace /app/data/chromadb /app/data/uploads
 
 # Configure environment
 ENV PYTHONUNBUFFERED=1
+ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 EXPOSE 8000
 

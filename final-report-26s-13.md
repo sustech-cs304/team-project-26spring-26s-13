@@ -91,8 +91,7 @@ We use a custom metrics script ([`scripts/generate_metrics.py`](https://github.c
 - **JSON Output:** `reports/metrics.json`
 - **HTML Report:** `reports/metrics.html` (viewable in any browser)
 
-<!-- TODO: Add screenshot of metrics.html -->
-![Metrics HTML Report](screenshots/metrics-report.png)
+![Metrics HTML Report](Guideline/screenshots/metrics-report.png)
 *Screenshot: Open `reports/metrics.html` in your browser to view the full metrics dashboard.*
 
 ---
@@ -139,8 +138,7 @@ Our project implements a **dual CI/CD pipeline** using both **GitHub Actions** a
 - Docker image built and pushed to Docker Hub on `main`/`master` only
 - Manual trigger supported via `workflow_dispatch`
 
-<!-- TODO: Add screenshot of GitHub Actions successful run -->
-![GitHub Actions Successful Run](screenshots/github-actions-success.png)
+![GitHub Actions Successful Run](Guideline/screenshots/github-actions-success.png)
 *Screenshot: Go to your GitHub repo → Actions tab → click the latest successful workflow run. Show the green checkmark and all steps expanded.*
 
 ### 2.4 Jenkins Configuration
@@ -156,8 +154,7 @@ Our project implements a **dual CI/CD pipeline** using both **GitHub Actions** a
 - Docker Hub credentials managed via Jenkins credential store (`Docker-Hub`)
 - Docker image tagged with both `latest` and `$BUILD_NUMBER`
 
-<!-- TODO: Add screenshot of Jenkins successful build -->
-![Jenkins Successful Build](screenshots/jenkins-success.png)
+![Jenkins Successful Build](Guideline/screenshots/jenkins-success.png)
 *Screenshot: Go to your Jenkins dashboard → click the latest successful build. Show all stages green.*
 
 ### 2.5 Artifacts & Reports Generated
@@ -181,72 +178,10 @@ Our project implements a **dual CI/CD pipeline** using both **GitHub Actions** a
 - **Exposed port:** 8000
 - **Dockerfile:** [`Dockerfile`](https://github.com/sustech-cs304/team-project-26spring-26s-13/blob/main/Dockerfile)
 
-<!-- TODO: Add screenshot of Docker Hub repository -->
-![Docker Hub](screenshots/docker-hub.png)
+![Docker Hub](Guideline/screenshots/docker-hub.png)
 *Screenshot: Go to https://hub.docker.com/r/kabukimonosakura/student-productivity-agent → show the Tags tab with `latest` and other tags.*
 
 ---
-
-## Part III. Project Features Summary
-
-The Student Productivity Agent provides the following **8 distinct and meaningful features**:
-
-### Feature 1: Multi-Source Scheduler
-Automatically scrapes scheduling data from the SUSTech Academic Calendar and Blackboard deadlines, detects time conflicts with personal tasks, and suggests optimized study calendars.
-
-### Feature 2: Batch Blackboard Material Crawler & RAG Ingestion
-CAS-authenticated BFS crawling of all enrolled Blackboard courses, parallel downloading with current-semester filtering, followed by automatic LLM-based subject classification, semantic chunking, and ChromaDB vector embedding.
-
-### Feature 3: Campus Encyclopedia (RAG-based Q&A)
-An intelligent QA system answering campus-related queries using Retrieval-Augmented Generation over official SUSTech documents stored in ChromaDB with subject-based sharding across 21 collections.
-
-### Feature 4: Library Discussion Room Query
-Queries available discussion rooms in the SUSTech Library by location, time slot, and capacity, returning real-time availability for planning group study sessions.
-
-### Feature 5: Study Copilot
-Processes uploaded or local academic materials (PDFs, PPTs, Markdown notes), extracts key concepts, generates concise study summaries, and creates customized practice quizzes.
-
-### Feature 6: Email Service
-Sends emails with Markdown attachments and conversation summaries to users' SUSTech email addresses. Supports attaching original files from the knowledge base with zip compression.
-
-### Feature 7: Personal Task Management
-The Agent extracts task information from conversations and stores it in PostgreSQL. Tasks are used for schedule conflict detection and can be managed through natural language commands.
-
-### Feature 8: System-Level OS Automation
-Executes file system operations via natural language commands within an isolated user workspace. All write operations require Human-in-the-Loop (HITL) approval through a dedicated authorization dialog, with full audit logging.
-
-### Non-functional Highlights
-
-- **Security:** All sensitive credentials (CAS passwords, API keys) are encrypted at rest with Fernet. The frontend never directly accesses the database.
-- **Non-blocking UX:** Heavy reasoning and web scraping run on the backend; PyQt6 frontend uses `QThread` workers to keep the UI responsive.
-- **HITL Safety:** Destructive OS operations are intercepted and require explicit user approval before execution.
-- **Streaming:** Agent responses support real-time streaming for progressive display.
-- **Internationalization:** UI supports both English and Chinese.
-
----
-
-## Appendix: How to Reproduce
-
-### Run the pipeline locally
-
-```bash
-# Install dependencies
-pip install -r requirements.txt -r requirements-dev.txt
-pip install lizard
-
-# Lint
-black --check .
-flake8 .
-
-# Test with coverage
-python -m pytest tests/ --cov=backend --cov-report=html:reports/coverage-html --junitxml=reports/junit.xml -v
-
-# Generate metrics
-python scripts/generate_metrics.py
-
-# Build Docker image
-docker build -t student-productivity-agent .
-```
 
 ### View the reports
 

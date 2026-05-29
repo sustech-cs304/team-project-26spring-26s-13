@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: spa_password
+      POSTGRES_DB: software-engineering
+    ports:
+      - "5432:5432"
+    volumes:
+      - D:/docker-data/spa/pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d software-engineering"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    image: kabukimonosakura/student-productivity-agent:latest
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - D:/docker-data/spa/chromadb:/app/data/chromadb
+      - D:/docker-data/spa/uploads:/app/data/uploads
+    environment:
+      POSTGRES_DSN: postgresql+asyncpg://postgres:spa_password@db:5432/software-engineering
+      SECRET_KEY: change-this-to-a-random-secret
+      FERNET_KEY: change-this-to-a-fernet-key
+      DEEPSEEK_BASE_URL: https://api.deepseek.com
+      DEEPSEEK_MODEL: deepseek-chat
+      DEEPSEEK_API_KEY: your-deepseek-api-key
+      PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python

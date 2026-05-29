@@ -1,0 +1,4 @@
+Package the application into a runnable artifact command:
+
+docker compose up -d      # 启动
+docker compose down       # 停止
