@@ -3,6 +3,13 @@ backend/main.py
 FastAPI 应用入口。注册所有路由，配置 CORS（允许 PyQt6 客户端跨域调用）。
 """
 
+import os
+
+# PaddlePaddle 2.6.x requires protobuf<=3.20.2, but opentelemetry>=1.39 needs
+# protobuf>=4.x.  Setting this env var lets paddle coexist with a newer protobuf
+# by using the pure-Python parsing path instead of the compiled C extension.
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

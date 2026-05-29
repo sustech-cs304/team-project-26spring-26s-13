@@ -22,7 +22,6 @@ The proposed system is an Autonomous AI Agent designed to assist SUSTech student
 6. **System-Level OS Automation**
    - Executes operating system-level automation scripts via natural language commands.
    - Capable of performing file manipulation tasks (e.g., reading, creating, deleting, and batch renaming messy lab files to a specific format).
-
 7. **Email Service**
    - Supports dialogue summary and specific tasks and sends email to users' email-box.
    - Supports sending related attachments under zip compression maintaining the original file name.
