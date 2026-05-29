@@ -16,7 +16,7 @@ from pydantic_ai import RunContext
 from backend.agent.core import AgentDeps, agent
 from backend.agent.tools.base import safe_tool
 from backend.schemas.agent import ScheduleData, ScheduleEvent, ScheduleConflict
-from backend.services import material_service, schedule_service
+from backend.services import material_service, schedule_service, task_service
 from backend.services.schedule_service.academic_calendar_provider import (
     get_calendar_overrides,
 )
@@ -397,6 +397,64 @@ async def sync_blackboard_materials(
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+async def _auto_persist_courses(
+    ctx: RunContext[AgentDeps],
+    payload: list[dict[str, object]],
+) -> None:
+    from datetime import datetime as _dt, timedelta, timezone as _tz
+
+    now = _dt.now(_tz.utc)
+    cutoff = now + timedelta(days=60)
+
+    tasks: list[dict] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        date_s = str(item.get("date") or "").strip()
+        start_t = str(item.get("start_time") or "").strip()
+        if not date_s or not start_t:
+            continue
+        try:
+            start_dt = _dt.strptime(
+                f"{date_s}T{start_t}:00", "%Y-%m-%dT%H:%M:%S"
+            ).replace(tzinfo=_tz.utc)
+        except ValueError:
+            continue
+        if start_dt < now or start_dt > cutoff:
+            continue
+        end_t = str(item.get("end_time") or "").strip()
+        end_dt = None
+        if end_t:
+            try:
+                end_dt = _dt.strptime(
+                    f"{date_s}T{end_t}:00", "%Y-%m-%dT%H:%M:%S"
+                ).replace(tzinfo=_tz.utc)
+            except ValueError:
+                pass
+        course = str(item.get("course") or "").strip()
+        instructor = str(item.get("instructor") or "").strip()
+        title = f"{course} - {instructor}" if instructor else course
+        location = str(item.get("location") or "").strip()
+        description = str(item.get("course_id") or "").strip()
+
+        tasks.append(
+            {
+                "title": title,
+                "start_time": start_dt,
+                "end_time": end_dt,
+                "location": location,
+                "description": description,
+            }
+        )
+
+    if tasks:
+        await task_service.upsert_course_tasks(
+            db=ctx.deps.db,
+            user_id=ctx.deps.user.user_id,
+            tasks=tasks,
+        )
+
+
 @agent.tool
 @safe_tool
 async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
@@ -426,6 +484,15 @@ async def fetch_course_schedule(ctx: RunContext[AgentDeps]) -> str:
         return "ERROR:ACADEMIC_SYSTEM_UNREACHABLE"
     except Exception:
         return "ERROR:ACADEMIC_SYSTEM_UNREACHABLE"
+
+    try:
+        await _auto_persist_courses(ctx, payload)
+    except Exception:
+        try:
+            await ctx.deps.db.rollback()
+        except Exception:
+            pass
+
     return json.dumps(payload, ensure_ascii=False)
 
 

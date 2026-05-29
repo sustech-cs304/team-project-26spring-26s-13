@@ -101,3 +101,42 @@ async def delete_task(
     await db.delete(task)
     await db.commit()
     return True
+
+
+async def upsert_course_tasks(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    tasks: list[dict],
+) -> int:
+    existing_keys: set[tuple[str, datetime]] = set()
+    stmt = select(PersonalTask.title, PersonalTask.start_time).where(
+        PersonalTask.user_id == user_id,
+        PersonalTask.source == "course_schedule",
+    )
+    result = await db.execute(stmt)
+    for row in result:
+        existing_keys.add((row[0], row[1]))
+
+    added = 0
+    for t in tasks:
+        key = (t["title"], t["start_time"])
+        if key in existing_keys:
+            continue
+        task = PersonalTask(
+            task_id=uuid.uuid4(),
+            user_id=user_id,
+            title=t["title"],
+            start_time=t["start_time"],
+            end_time=t.get("end_time"),
+            location=t.get("location"),
+            description=t.get("description"),
+            source="course_schedule",
+            is_done=False,
+        )
+        db.add(task)
+        existing_keys.add(key)
+        added += 1
+
+    if added:
+        await db.flush()
+    return added

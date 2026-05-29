@@ -241,6 +241,7 @@ class PersonalTask(Base):
     )
     location: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(32), default="user", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

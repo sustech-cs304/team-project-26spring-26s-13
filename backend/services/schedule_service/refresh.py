@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import InvalidToken
 
@@ -10,6 +11,12 @@ from .conflicts import detect_overlaps_with_personal_payload
 from .fetch_bb import fetch_blackboard
 from .fetch_tis import fetch_course_schedule
 from .log_utils import _ensure_file_logging
+
+_CST = ZoneInfo("Asia/Shanghai")
+
+
+def _fmt_iso(dt) -> str:
+    return dt.astimezone(_CST).isoformat()
 
 
 async def refresh(db, user) -> ScheduleData:
@@ -47,8 +54,8 @@ async def refresh(db, user) -> ScheduleData:
                 personal_tasks.append(
                     {
                         "title": t.title,
-                        "start_at": t.start_time.isoformat(),
-                        "end_at": end_at.isoformat(),
+                        "start_at": _fmt_iso(t.start_time),
+                        "end_at": _fmt_iso(end_at),
                         "location": t.location,
                     }
                 )
