@@ -37,6 +37,12 @@ def _parse_dt(s: str) -> datetime:
     raise ValueError(f"无法解析时间字符串：{s!r}")
 
 
+def _fmt_dt(dt: datetime) -> str:
+    from zoneinfo import ZoneInfo
+
+    return dt.astimezone(ZoneInfo("Asia/Shanghai")).isoformat()
+
+
 @agent.tool
 async def save_personal_task(
     ctx: RunContext[AgentDeps],
@@ -142,10 +148,11 @@ async def list_personal_tasks(
                 {
                     "task_id": str(t.task_id),
                     "title": t.title,
-                    "start_time": t.start_time.isoformat(),
-                    "end_time": t.end_time.isoformat() if t.end_time else None,
+                    "start_time": _fmt_dt(t.start_time),
+                    "end_time": _fmt_dt(t.end_time) if t.end_time else None,
                     "location": t.location,
                     "description": t.description,
+                    "source": t.source,
                 }
                 for t in tasks
             ],

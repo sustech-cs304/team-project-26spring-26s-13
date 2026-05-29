@@ -246,10 +246,11 @@ python run.py lint      # 使用 flake8 检查代码
 > "(在教务系统上)查阅我这学期有哪些课？"
 
 ### 日程模式
-增删改查事务信息，识别事务冲突：
+增删改查事务信息，识别事务冲突。教务系统课程在首次爬取后自动持久化至个人事务表，与自定义 Task 一同展示：
 
 > "我明天8：00到10：00考软件工程，请记录事务"
 > "这周我有事务时间冲突吗？"
+> "我之后一周有什么任务？"（自动合并课程与个人事务）
 
 ### 校园问答模式
 询问校园政策相关问题：
@@ -361,7 +362,7 @@ team-project-26spring-26s-13/
 │   │   ├── rag_service.py           # 学科剪枝 + 上下文格式化
 │   │   ├── audit_service.py         # OS 操作审计日志
 │   │   ├── dashboard_service.py     # Bootstrap 数据组装
-│   │   ├── task_service.py          # 个人事务 CRUD
+│   │   ├── task_service.py          # 个人事务 CRUD + 课程批量写入
 │   │   ├── library_room_service/    # 图书馆讨论间查询
 │   │   │   ├── auth.py              # 图书馆 CAS 认证
 │   │   │   ├── fetch.py             # 房间空闲查询
@@ -554,6 +555,7 @@ docker build -t student-productivity-agent .
 ## 已知问题与限制
 
 - **Alembic 异步兼容性**：`alembic upgrade head` 因 asyncpg 驱动兼容问题可能无法正常建表，建议手动执行 SQL 建表。
+- **时区处理**：PostgreSQL `TIMESTAMPTZ` 自动以 UTC 存储时间，所有读取输出已统一转换为 `Asia/Shanghai (UTC+8)` 后呈现。
 - **LLM 输出不确定性**：Agent 回复可能因 LLM 的非确定性而在不同运行间产生差异。
 - **Blackboard 爬虫脆弱性**：爬虫依赖南科大 Blackboard 的 HTML 结构，学期间可能发生变化。
 - **OS 自动化仅支持 Windows**：文件自动化功能针对 Windows 设计，未在 macOS/Linux 上测试。
