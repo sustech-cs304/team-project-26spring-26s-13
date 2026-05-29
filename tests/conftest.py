@@ -19,6 +19,9 @@ import os
 os.environ.setdefault("POSTGRES_DSN", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest")
 os.environ.setdefault("FERNET_KEY", "dmFsaWRiYXNlNjRlbmNvZGVkZmVybmV0a2V5MDAwMDA=")
+os.environ.setdefault(
+    "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python"
+)  # paddlepaddle + opentelemetry coexistence
 
 # ─── Teach SQLite compiler to handle PostgreSQL-specific column types ──────────
 # The ORM models use postgresql.JSONB and postgresql.UUID which SQLite doesn't
