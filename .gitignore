@@ -18,7 +18,9 @@ build/
 *.env.local
 
 # Data & uploads (local only)
-data/
+/data/**
+!/data/campus_handbook/
+!/data/campus_handbook/**
 uploads/
 
 # conda/venv
