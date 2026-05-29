@@ -153,7 +153,11 @@ team-project-26spring-26s-13/
 │   │       ├── scheduler.py         # Epic 3：Blackboard/教务爬取工具
 │   │       ├── rag.py               # Epic 4：RAG 检索工具
 │   │       ├── study_copilot.py     # Epic 5：摘要/练习题生成工具
-│   │       └── os_automation.py     # Epic 6：文件系统工具（含 HITL）
+│   │       ├── os_automation.py     # Epic 6：文件系统工具（含 HITL）
+│   │       ├── personal_tasks.py    # 个人事务管理工具
+│   │       ├── library_room.py      # 图书馆讨论间查询工具
+│   │       ├── email.py             # 邮件发送工具
+│   │       └── time_utils.py        # 时间解析工具
 │   │
 │   ├── services/                    # 业务逻辑层
 │   │   ├── auth_service.py          # 注册/登录/JWT 签发（已实现）
@@ -162,6 +166,7 @@ team-project-26spring-26s-13/
 │   │   ├── rag_service.py           # RAG 学科剪枝 + 上下文格式化
 │   │   ├── dashboard_service.py     # Bootstrap 数据组装
 │   │   ├── audit_service.py         # OS 操作审计日志
+│   │   ├── task_service.py          # 个人事务 CRUD + 课程批量写入
 │   │   └── schedule_service/        # 日程爬取与冲突检测（拆包）
 │   │       ├── fetch_bb.py          # Blackboard CAS 登录 + DDL 爬取（~834 行）
 │   │       ├── fetch_tis.py         # 教务系统课表爬取（~558 行）
@@ -351,6 +356,7 @@ CREATE DATABASE "software-engineering";
       end_time TIMESTAMPTZ,
       location VARCHAR(256),
       is_done BOOLEAN NOT NULL DEFAULT FALSE,
+      source VARCHAR(32) NOT NULL DEFAULT 'user',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
 
@@ -477,7 +483,7 @@ python run.py lint     # 用 flake8 检查代码
 
 ## 7. 数据库概览
 
-### PostgreSQL（5 张表）
+### PostgreSQL（6 张表）
 
 | 表名 | 用途 | 关键字段 |
 |------|------|----------|
@@ -485,6 +491,7 @@ python run.py lint     # 用 flake8 检查代码
 | `chat_sessions` | 对话会话 | `session_id`, `user_id`, `updated_at` |
 | `chat_messages` | 对话消息 | `message_id`, `session_id`, `role`, `content` |
 | `materials` | 上传教材 | `file_id`, `subject_type`, `vectorized`, `file_path` |
+| `personal_tasks` | 个人事务与教务课程 | `task_id`, `user_id`, `title`, `start_time`, `source`（`user`/`course_schedule`） |
 | `audit_logs` | OS 操作审计 | `action_type`, `target_path`, `hitl_required`, `hitl_approved` |
 
 > **安全约定**：`cas_password_encrypted` 和 `llm_api_key_encrypted` 必须通过 `backend/utils/crypto.py` 的 `encrypt()`/`decrypt()` 读写，禁止明文存储。

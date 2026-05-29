@@ -1167,6 +1167,8 @@ def _personal_tasks_schedule_data(raw: str | None) -> ScheduleData | None:
             continue
         end_time = str(item.get("end_time") or "").strip()
         time_label = f"{start_time}~{end_time}" if end_time else start_time
+        source_raw = str(item.get("source") or "user")
+        source_label = "教务系统" if source_raw == "course_schedule" else "Local TODO"
         detail_parts = []
         if item.get("location"):
             detail_parts.append(f"地点：{item['location']}")
@@ -1177,11 +1179,60 @@ def _personal_tasks_schedule_data(raw: str | None) -> ScheduleData | None:
                 event_id=str(item.get("task_id") or f"personal_task_{idx}"),
                 title=title,
                 time=time_label,
-                source="Local TODO",
+                source=source_label,
                 detail="；".join(detail_parts),
             )
         )
     return ScheduleData(events=events, conflicts=[]) if events else None
+
+
+def _course_schedule_events(raw: str | None) -> list[ScheduleEvent]:
+    payload = _load_json_object(raw)
+    if not isinstance(payload, list):
+        return []
+
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+    now = _dt.now(_tz.utc).date()
+    cutoff = now + _td(days=14)
+
+    events: list[ScheduleEvent] = []
+    seen: set[tuple[str, str, str]] = set()
+    for idx, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            continue
+        course = str(item.get("course") or item.get("course_id") or "").strip()
+        date_s = str(item.get("date") or "").strip()
+        start_time = str(item.get("start_time") or "").strip()
+        end_time = str(item.get("end_time") or "").strip()
+        if not course or not date_s or not start_time:
+            continue
+        try:
+            event_date = _dt.fromisoformat(date_s).date()
+        except ValueError:
+            continue
+        if event_date < now or event_date > cutoff:
+            continue
+        key = (course, date_s, start_time)
+        if key in seen:
+            continue
+        seen.add(key)
+        detail_parts = []
+        if item.get("location"):
+            detail_parts.append(f"地点：{item['location']}")
+        if item.get("instructor"):
+            detail_parts.append(f"教师：{item['instructor']}")
+        time_label = f"{date_s}T{start_time}:00~{date_s}T{end_time}:00"
+        events.append(
+            ScheduleEvent(
+                event_id=f"course_schedule_{idx}",
+                title=course,
+                time=time_label,
+                source="教务系统",
+                detail="；".join(detail_parts),
+            )
+        )
+    return events
 
 
 def _courses_on_date_schedule_data(raw: str | None) -> ScheduleData | None:
@@ -1236,8 +1287,27 @@ def _build_schedule_data_from_tool_returns(
 
     personal_raw = _extract_tool_return_content(raw_messages, "list_personal_tasks")
     personal_data = _personal_tasks_schedule_data(personal_raw)
-    if personal_data is not None:
-        return personal_data
+
+    course_schedule_raw = _extract_tool_return_content(
+        raw_messages, "fetch_course_schedule"
+    )
+    course_events = _course_schedule_events(course_schedule_raw)
+
+    if personal_data or course_events:
+        existing_keys: set[tuple[str, str]] = set()
+        if personal_data:
+            for e in personal_data.events:
+                date_part = e.time[:10] if len(e.time) >= 10 else e.time
+                existing_keys.add((e.title, date_part))
+        deduped_courses = [
+            e
+            for e in course_events
+            if (e.title, e.time[:10] if len(e.time) >= 10 else e.time)
+            not in existing_keys
+        ]
+        combined = (personal_data.events if personal_data else []) + deduped_courses
+        combined.sort(key=lambda e: e.time)
+        return ScheduleData(events=combined, conflicts=[])
 
     courses_raw = _extract_tool_return_content(raw_messages, "fetch_courses_on_date")
     courses_data = _courses_on_date_schedule_data(courses_raw)
