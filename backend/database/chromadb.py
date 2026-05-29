@@ -40,8 +40,7 @@ from typing import Literal
 import chromadb
 import os
 from chromadb import Collection
-from chromadb.utils.embedding_functions import \
-    SentenceTransformerEmbeddingFunction
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 from backend.config import settings
 
@@ -395,15 +394,15 @@ def keyword_search(
         for doc, meta in zip(docs, metas):
             meta = meta or {}
             out.append(
-                    {
-                        "text": doc,
-                        "file_id": meta.get("file_id", ""),
-                        "file_name": meta.get("file_name", ""),
-                        "chunk_index": meta.get("chunk_index", 0),
-                        "subject_type": meta.get("subject_type", st),
-                        "user_id": meta.get("user_id", ""),
-                        "is_public": meta.get("is_public", False),
-                        "distance": 0.0,
-                    }
-                )
+                {
+                    "text": doc,
+                    "file_id": meta.get("file_id", ""),
+                    "file_name": meta.get("file_name", ""),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "subject_type": meta.get("subject_type", st),
+                    "user_id": meta.get("user_id", ""),
+                    "is_public": meta.get("is_public", False),
+                    "distance": 0.0,
+                }
+            )
     return out

@@ -111,7 +111,9 @@ async def seed_public_knowledge(clear: bool = False) -> int:
             ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ".doc": "application/msword",
         }
-        content_type = content_type_map.get(fp.suffix.lower(), "application/octet-stream")
+        content_type = content_type_map.get(
+            fp.suffix.lower(), "application/octet-stream"
+        )
 
         try:
             async with AsyncSessionLocal() as db:
