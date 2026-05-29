@@ -18,13 +18,9 @@ build/
 *.env.local
 
 # Data & uploads (local only)
-data/*
-!data/campus_handbook/
-data/campus_handbook/*
-!data/campus_handbook/*.pdf
-!data/campus_handbook/*.txt
-!data/campus_handbook/*.docx
-!data/campus_handbook/*.doc
+/data/**
+!/data/campus_handbook/
+!/data/campus_handbook/**
 uploads/
 
 # conda/venv
