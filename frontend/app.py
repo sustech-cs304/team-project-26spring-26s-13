@@ -1136,6 +1136,7 @@ class MainWindow(QMainWindow):
         self._reset_dynamic_state()
         self._build_root()
         self._show_home()
+        QTimer.singleShot(250, self._open_startup_auth_dialog)
 
     def _configure_platform_window_behavior(self) -> None:
         if sys.platform != "darwin":
@@ -2642,6 +2643,8 @@ class MainWindow(QMainWindow):
             self._show_auth(auth_tab_index)
         else:
             self._show_home()
+            if not self._is_authenticated():
+                QTimer.singleShot(250, self._open_startup_auth_dialog)
 
     def _build_home_page(self) -> QWidget:
         page = QWidget()
@@ -2853,7 +2856,7 @@ class MainWindow(QMainWindow):
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(10)
         back_home_button = QPushButton(self.ui("back_home"))
-        back_home_button.clicked.connect(self._show_home)
+        back_home_button.clicked.connect(self._show_dashboard)
         lang_button = QPushButton(self.ui("lang_button"))
         lang_button.clicked.connect(self.toggle_language)
         bottom_row.addWidget(back_home_button)
@@ -3811,10 +3814,19 @@ class MainWindow(QMainWindow):
 
     def _show_dashboard(self) -> None:
         self.stack.setCurrentWidget(self.dashboard_page)
+        if hasattr(self, "center_tabs") and hasattr(self, "chat_tab"):
+            self.center_tabs.setCurrentWidget(self.chat_tab)
         self._refresh_profile_views()
 
     def _show_auth(self, tab_index: int = 0) -> None:
         self._open_auth_dialog(tab_index)
+
+    def _open_startup_auth_dialog(self) -> None:
+        if self._is_authenticated():
+            return
+        if hasattr(self, "stack") and self.stack.currentWidget() is not self.home_page:
+            return
+        self._open_auth_dialog(0)
 
     def _handle_header_account(self) -> None:
         if self._is_authenticated():
@@ -3879,7 +3891,7 @@ class MainWindow(QMainWindow):
             auth_dialog.accept()
         self._reset_dynamic_state()
         self._build_root()
-        self.stack.setCurrentWidget(self.dashboard_page)
+        self._show_dashboard()
         self.sync_bootstrap_data(record_trace=True)
 
     def sync_bootstrap_data(self, record_trace: bool) -> None:
@@ -4338,6 +4350,7 @@ class MainWindow(QMainWindow):
         self._reset_dynamic_state()
         self._build_root()
         self._show_home()
+        QTimer.singleShot(250, self._open_startup_auth_dialog)
 
     def handle_send_or_cancel(self) -> None:
         if self._agent_response_active():
