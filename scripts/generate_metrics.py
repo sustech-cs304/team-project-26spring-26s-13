@@ -128,9 +128,7 @@ def count_dependencies():
         "total_installed": len(installed),
         "dependencies": sorted(declared),
         "installed_packages": sorted(installed.keys()),
-        "installed_with_versions": {
-            k: installed[k] for k in sorted(installed.keys())
-        },
+        "installed_with_versions": {k: installed[k] for k in sorted(installed.keys())},
     }
 
 
@@ -558,7 +556,13 @@ def generate_html_report(metrics, junit, coverage):
     dist = cc.get("distribution", {})
     max_dist = max(dist.values()) if dist else 1
     dist_bars = ""
-    for level in ["1-5 Simple", "6-10 Moderate", "11-20 Complex", "21-50 High", "51+ Critical"]:
+    for level in [
+        "1-5 Simple",
+        "6-10 Moderate",
+        "11-20 Complex",
+        "21-50 High",
+        "51+ Critical",
+    ]:
         count = dist.get(level, 0)
         if max_dist == 0:
             pct = 0
@@ -605,27 +609,58 @@ def generate_html_report(metrics, junit, coverage):
     # ── Dependency categories ──
     dep_categories = {
         "Backend Framework": [
-            "fastapi", "uvicorn[standard]", "pydantic", "pydantic-settings", "pydantic-ai",
+            "fastapi",
+            "uvicorn[standard]",
+            "pydantic",
+            "pydantic-settings",
+            "pydantic-ai",
         ],
         "Database": ["sqlalchemy", "asyncpg", "alembic", "chromadb", "aiosqlite"],
         "Document Parsing": [
-            "pymupdf", "python-docx", "python-pptx", "paddleocr", "paddlepaddle", "numpy", "pillow",
+            "pymupdf",
+            "python-docx",
+            "python-pptx",
+            "paddleocr",
+            "paddlepaddle",
+            "numpy",
+            "pillow",
         ],
         "Web Scraping": ["httpx", "aiohttp", "beautifulsoup4", "selenium"],
-        "Security": ["cryptography", "passlib[bcrypt]", "bcrypt", "python-jose[cryptography]"],
+        "Security": [
+            "cryptography",
+            "passlib[bcrypt]",
+            "bcrypt",
+            "python-jose[cryptography]",
+        ],
         "Frontend": ["pyqt6", "requests"],
         "Testing & QA": [
-            "pytest", "pytest-asyncio", "pytest-cov", "pytest-mock", "black", "flake8", "lizard",
+            "pytest",
+            "pytest-asyncio",
+            "pytest-cov",
+            "pytest-mock",
+            "black",
+            "flake8",
+            "lizard",
         ],
         "Observability": [
-            "logfire", "opentelemetry-api", "opentelemetry-sdk", "opentelemetry-proto",
+            "logfire",
+            "opentelemetry-api",
+            "opentelemetry-sdk",
+            "opentelemetry-proto",
         ],
         "Other": ["python-multipart", "aioresponses", "responses", "python-dotenv"],
     }
     dep_grid = ""
     colors = [
-        "#3498db", "#2ecc71", "#9b59b6", "#e67e22",
-        "#1abc9c", "#e74c3c", "#f1c40f", "#8b5cf6", "#95a5a6",
+        "#3498db",
+        "#2ecc71",
+        "#9b59b6",
+        "#e67e22",
+        "#1abc9c",
+        "#e74c3c",
+        "#f1c40f",
+        "#8b5cf6",
+        "#95a5a6",
     ]
     for i, (cat, pkgs) in enumerate(dep_categories.items()):
         col = colors[i % len(colors)]

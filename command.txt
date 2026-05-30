@@ -7,6 +7,8 @@ docker compose up -d      # 启动
 
 http://localhost:8000/health (status ok)
 
+python frontend/app.py    # 本地跑前端
+
 docker compose down       # 停止
 
 # 其他命令
