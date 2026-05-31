@@ -3,6 +3,10 @@ Package the application into a runnable artifact command:
 docker-compose down       # 停止并移除容器
 docker-compose up --build -d # 重新构建镜像并在后台启动
 
+# 关于 docker-compose up --build -d 命令:
+# 不加 --build → 直接拉取 Docker Hub 上的镜像
+# 加 --build → 忽略远程镜像，本地重新构建
+
 docker compose up -d      # 启动
 
 http://localhost:8000/health (status ok)

@@ -17,6 +17,10 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+# PaddlePaddle 2.6.x protobuf<=3.20.2 conflicts with opentelemetry protobuf>=5.
+# Must be set before importing any package that transitively imports paddle/protobuf.
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select

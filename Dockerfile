@@ -12,7 +12,8 @@ RUN apt-get update && \
 
 # Copy and install Python dependencies first (Docker layer caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --no-deps paddleocr==2.7.3 paddlepaddle==2.6.2
 
 # Copy application code
 COPY backend/ backend/
