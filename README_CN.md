@@ -167,15 +167,13 @@ FERNET_KEY=your_fernet_key_here
 SECRET_KEY=your_jwt_secret_here
 
 # DeepSeek API（可选，用户也可在 GUI 设置中填写）
+# 可替换为你自己的大模型提供商（如智谱：https://open.bigmodel.cn/api/paas/v4/）
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_API_KEY=your_deepseek_api_key
 
-# 邮件服务（可选，用于发送邮件）
-SPA_SMTP_HOST=smtp.gmail.com
-SPA_SMTP_PORT=587
-SPA_SMTP_USER=your_email@gmail.com
-SPA_SMTP_PASSWORD=your_app_password
+# 邮件服务（Gmail SMTP；需要应用专用密码）
+GMAIL_APP_PASSWORD=your_gmail_app_password
 ```
 
 生成 Fernet Key：

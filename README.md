@@ -161,15 +161,13 @@ FERNET_KEY=your_fernet_key_here
 SECRET_KEY=your_jwt_secret_here
 
 # DeepSeek API (optional; users can also configure via GUI)
+# Change to your own provider (e.g. https://open.bigmodel.cn/api/paas/v4/ for Zhipu GLM)
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_API_KEY=your_deepseek_api_key
 
-# Email service (optional; for sending emails)
-SPA_SMTP_HOST=smtp.gmail.com
-SPA_SMTP_PORT=587
-SPA_SMTP_USER=your_email@gmail.com
-SPA_SMTP_PASSWORD=your_app_password
+# Email service (Gmail SMTP; requires an App Password)
+GMAIL_APP_PASSWORD=your_gmail_app_password
 ```
 
 Generate a Fernet key:
